@@ -1,0 +1,8 @@
+cairn:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # DuckDB file, relative to the process CWD (repo root). Gitignored.
+      path: "{{ env_var('CAIRN_DUCKDB', 'cairn.duckdb') }}"
+      threads: 4

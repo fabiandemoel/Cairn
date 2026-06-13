@@ -1,0 +1,20 @@
+version: 2
+
+seeds:
+  - name: sector_mapping_cbs
+    description: >
+      Maps each CBS 85669NED climate-sector category to a NACE Rev.2 section.
+      All 52 source categories are listed. `aggregate = true` marks CBS
+      totals/subtotals and IPCC bunker memo items, which are excluded from the
+      mart's sector sum to avoid double counting. Leaf categories that cannot be
+      attributed to a single NACE section have a NULL nace_section and a note.
+    columns:
+      - name: cbs_category_code
+        description: CBS climate-sector code (primary key).
+        tests:
+          - unique
+          - not_null
+      - name: aggregate
+        description: True for CBS totals/subtotals and bunker memo items.
+        tests:
+          - not_null
