@@ -15,6 +15,7 @@ sector: "how do your emissions compare to the sector average?"
 - [Local quickstart](#local-quickstart)
 - [Reproducibility](#reproducibility)
 - [Source quirks](#source-quirks)
+- [References & methodology](#references--methodology)
 - [R2 setup](#r2-setup)
 - [Branch protection](#branch-protection)
 
@@ -160,12 +161,22 @@ auditable rather than hidden.
   The `assert_national_total_reconciles` test guards this (<0.5% drift).
 - **Bunkers are excluded.** `Afzet voor bunkers` (international aviation and
   shipping) are IPCC memo items **outside** the national total. They are flagged
-  `aggregate = true` and excluded, matching CBS's own national-total definition.
+  `aggregate = true` and excluded, matching the national-total definition in the
+  [2006 IPCC Guidelines](https://www.ipcc.ch/report/2006-ipcc-guidelines-for-national-greenhouse-gas-inventories/)
+  that the table follows (reported via the Dutch
+  [UNFCCC National Inventory](https://unfccc.int/ghg-inventories-annex-i-parties/2025)).
 - **Provisional years lack the full breakdown.** The latest year (2025,
   `Voorlopig`) publishes the national total but not yet the detailed sector
   split, so its leaf sum is far below the total. The mart restricts to
   `period_status = 'Definitief'` (final figures), which also suits CSRD
   auditability.
+- **The SBI → NACE mapping is well-founded.** The stationary categories carry
+  Dutch [SBI 2008](https://www.cbs.nl/nl-nl/onze-diensten/methoden/classificaties/activiteiten/sbi-2008-standaard-bedrijfsindeling-2008)
+  codes, whose first four digits are by construction equal to
+  [NACE Rev.2](https://ec.europa.eu/eurostat/web/nace) (Regulation
+  [(EC) No 1893/2006](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32006R1893)).
+  So mapping each SBI category to its NACE **section** letter is a documented
+  classification crosswalk, not a guess.
 - **Not everything maps to a NACE section.** Households, land use (LULUCF),
   on-road/rail/water/air transport (classified by vehicle type, not operator
   sector), and the CBS `G-U Dienstverlening` aggregate (which spans many NACE
@@ -176,6 +187,47 @@ auditable rather than hidden.
 - **Units.** The source measure is `miljard kg CO2-equivalent` (billion kg =
   megatonnes); columns are named `*_mt_co2eq`. CBS rounds to 0.1 Mt, which is
   why reconciliation tolerates small (<0.5%) drift.
+
+## References & methodology
+
+The data, the methodology and the classification logic are all grounded in
+public, authoritative sources.
+
+**Source data & emission methodology**
+
+- CBS StatLine table `85669NED`, *Emissies van broeikasgassen berekend volgens
+  IPCC-voorschriften* —
+  [dataset](https://opendata.cbs.nl/statline/#/CBS/nl/dataset/85669NED) ·
+  [OData v4 API](https://datasets.cbs.nl/odata/v1/CBS/85669NED) ·
+  [CBS Dossier Broeikasgassen](https://www.cbs.nl/nl-nl/dossier/dossier-broeikasgassen).
+- [2006 IPCC Guidelines for National Greenhouse Gas Inventories](https://www.ipcc.ch/report/2006-ipcc-guidelines-for-national-greenhouse-gas-inventories/)
+  ([IPCC-NGGIP](https://www.ipcc-nggip.iges.or.jp/)) — the accounting framework
+  (sector scope, national-total definition, bunkers as memo items) the table
+  implements.
+- [Netherlands UNFCCC National Inventory submission](https://unfccc.int/ghg-inventories-annex-i-parties/2025)
+  and [RIVM Emissieregistratie](https://www.emissieregistratie.nl/) — the
+  upstream inventory and emission factors behind the CBS figures.
+- [CBS method note: maand- en kwartaalraming broeikasgasemissies conform IPCC](https://www.cbs.nl/nl-nl/maatwerk/2020/37/maand-en-kwartaalraming-broeikasgasemissies-conform-ipcc).
+
+**Classification (the sector mapping)**
+
+- [NACE Rev.2](https://ec.europa.eu/eurostat/web/nace), Regulation
+  [(EC) No 1893/2006](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32006R1893)
+  — the benchmark's target sector classification.
+- [SBI 2008](https://www.cbs.nl/nl-nl/onze-diensten/methoden/classificaties/activiteiten/sbi-2008-standaard-bedrijfsindeling-2008)
+  — CBS's activity classification; its first four digits equal NACE Rev.2, which
+  is what makes the CBS-category → NACE-section crosswalk defensible.
+
+**Sector framing & intended use**
+
+- [Klimaatakkoord](https://www.klimaatakkoord.nl/) and its
+  [sectortafels](https://www.klimaatakkoord.nl/organisatie/hoe-het-klimaatakkoord-tot-stand-kwam/sectortafels)
+  ([Rijksoverheid](https://www.rijksoverheid.nl/documenten/2019/06/28/klimaatakkoord))
+  — the six climate sectors used by CBS for this table.
+- [CSRD (Directive (EU) 2022/2464)](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022L2464)
+  and the climate standard
+  [ESRS E1 (Delegated Regulation (EU) 2023/2772)](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772)
+  — the disclosure context Cairn's benchmarks are ultimately built to serve.
 
 ## R2 setup
 

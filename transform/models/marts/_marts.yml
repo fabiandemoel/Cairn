@@ -24,6 +24,13 @@ models:
         CO2-equivalent" = megatonnes; figures are rounded by CBS to 0.1 Mt.
         (4) Bunkers are IPCC memo items outside the national total and are
         excluded.
+      references:
+        source_table: https://opendata.cbs.nl/statline/#/CBS/nl/dataset/85669NED
+        emission_methodology: https://www.ipcc.ch/report/2006-ipcc-guidelines-for-national-greenhouse-gas-inventories/
+        nl_inventory: https://unfccc.int/ghg-inventories-annex-i-parties/2025
+        nace_rev2: https://ec.europa.eu/eurostat/web/nace
+        sbi_2008: https://www.cbs.nl/nl-nl/onze-diensten/methoden/classificaties/activiteiten/sbi-2008-standaard-bedrijfsindeling-2008
+        disclosure_context_esrs_e1: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
     columns:
       - name: sector_year_key
         description: Surrogate natural key (nace_section|year).
