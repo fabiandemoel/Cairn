@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# dbt
+transform/target/
+transform/dbt_packages/
+transform/logs/
+
+# DuckDB / local data
+*.duckdb
+*.duckdb.wal
+.localstack/
+
+# Secrets / env
+.env
