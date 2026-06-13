@@ -8,6 +8,10 @@ sector: "how do your emissions compare to the sector average?"
 > manifest-based versioning, tests, CI). No agent automation, EEA/ETS, Evidence
 > site, or CSRD export yet.
 
+> **Maintainers & agents**: see [`CLAUDE.md`](CLAUDE.md) for the upkeep routine
+> (handling new CBS releases, refreshing fixtures, the classification migration
+> ahead) and the architecture invariants that must not be broken.
+
 ## Contents
 
 - [What Cairn is](#what-cairn-is)
