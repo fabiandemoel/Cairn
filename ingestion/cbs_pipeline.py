@@ -37,6 +37,7 @@ from ingestion.manifest import (
     add_snapshot,
     compute_sha256,
     load_manifest,
+    r2_client,
     save_manifest,
 )
 
@@ -83,13 +84,18 @@ def _periods_covered(con: duckdb.DuckDBPyConnection, dataset: str) -> list[str]:
 
 
 def _export_parquets(con: duckdb.DuckDBPyConnection, dataset: str, out_dir: Path) -> None:
-    """Export each loaded dlt table to a clean single parquet (no _dlt columns)."""
+    """Export each loaded dlt table to a clean single parquet (no _dlt columns).
+
+    Rows are ordered deterministically (observations by ``id``, code tables by
+    ``index``) so a re-ingest of unchanged source data yields stable output.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     for entity_set, filename in EXPORTS.items():
         table = f"{dataset}.{entity_set.lower()}"
         dest = out_dir / filename
+        order_col = "id" if entity_set == "Observations" else "index"
         con.sql(
-            f"COPY (SELECT * EXCLUDE (_dlt_load_id, _dlt_id) FROM {table}) "
+            f"COPY (SELECT * EXCLUDE (_dlt_load_id, _dlt_id) FROM {table} ORDER BY {order_col}) "
             f"TO '{dest.as_posix()}' (FORMAT PARQUET)"
         )
 
@@ -110,15 +116,8 @@ def _place_offline(release_dir: Path, table: str, release: str) -> str:
 
 def _place_r2(release_dir: Path, table: str, release: str) -> str:
     """Upload the release dir to R2 and return an r2:// URL for data.parquet."""
-    import boto3
-
     bucket = os.environ["R2_BUCKET"]
-    client = boto3.client(
-        "s3",
-        endpoint_url=os.environ["R2_ENDPOINT"],
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
-    )
+    client = r2_client()
     prefix = f"{SOURCE}/{table}/{release}"
     for file in sorted(release_dir.iterdir()):
         client.upload_file(str(file), bucket, f"{prefix}/{file.name}")

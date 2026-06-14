@@ -123,20 +123,36 @@ def _resolve_local_path(storage_url: str) -> Path | None:
     return Path(parsed.path)
 
 
-def _download_r2(storage_url: str, dest: Path) -> None:
-    """Download an ``r2://bucket/key`` object to ``dest`` using boto3."""
-    import boto3
+def r2_client():
+    """Build a boto3 S3 client for Cloudflare R2 from the ``R2_*`` env vars.
 
-    parsed = urlparse(storage_url)
-    bucket = parsed.netloc
-    key = parsed.path.lstrip("/")
-    client = boto3.client(
+    Cloudflare R2 rejects the flexible-checksum integrity headers that botocore
+    enables by default (since botocore 1.36), returning ``400 Bad Request`` on
+    PutObject/HeadObject/GetObject. Setting both checksum modes to
+    ``when_required`` disables that, and ``region_name="auto"`` matches R2.
+    """
+    import boto3
+    from botocore.config import Config
+
+    return boto3.client(
         "s3",
         endpoint_url=os.environ["R2_ENDPOINT"],
         aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+        region_name="auto",
+        config=Config(
+            request_checksum_calculation="when_required",
+            response_checksum_validation="when_required",
+        ),
     )
-    client.download_file(bucket, key, str(dest))
+
+
+def _download_r2(storage_url: str, dest: Path) -> None:
+    """Download an ``r2://bucket/key`` object to ``dest`` using boto3."""
+    parsed = urlparse(storage_url)
+    bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+    r2_client().download_file(bucket, key, str(dest))
 
 
 def verify_snapshot(snapshot: Snapshot, *, work_dir: str | Path | None = None) -> bool:

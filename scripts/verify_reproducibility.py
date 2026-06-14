@@ -26,7 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from ingestion.manifest import Snapshot, compute_sha256, load_manifest  # noqa: E402
+from ingestion.manifest import Snapshot, compute_sha256, load_manifest, r2_client  # noqa: E402
 
 DEFAULT_MANIFEST = REPO_ROOT / "sources" / "cbs" / "manifest.yml"
 R2_ENV = ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY")
@@ -65,16 +65,9 @@ def _fetch_release_dir(snapshot: Snapshot, dest: Path) -> Path:
         return dest
 
     # r2://bucket/cbs/<table>/<release>/data.parquet -> download the whole prefix
-    import boto3
-
     bucket = parsed.netloc
     prefix = parsed.path.lstrip("/").rsplit("/", 1)[0]
-    client = boto3.client(
-        "s3",
-        endpoint_url=os.environ["R2_ENDPOINT"],
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
-    )
+    client = r2_client()
     for name in RELEASE_FILES:
         client.download_file(bucket, f"{prefix}/{name}", str(dest / name))
     return dest
@@ -109,6 +102,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     manifest = load_manifest(args.manifest)
+    if not manifest.snapshots:
+        print(f"Manifest {manifest.source}/{manifest.dataset} pins no snapshots yet.")
+        print("  Nothing to verify. Run an ingest (with R2 creds) to pin one. Skipping.")
+        return 0
     snapshot = _select(manifest, args.release)
     scheme = urlparse(snapshot.storage_url).scheme
     print(f"Verifying {manifest.source}/{manifest.dataset} release {snapshot.release}")
