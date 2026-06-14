@@ -37,6 +37,7 @@ from ingestion.manifest import (
     add_snapshot,
     compute_sha256,
     load_manifest,
+    r2_client,
     save_manifest,
 )
 
@@ -115,15 +116,8 @@ def _place_offline(release_dir: Path, table: str, release: str) -> str:
 
 def _place_r2(release_dir: Path, table: str, release: str) -> str:
     """Upload the release dir to R2 and return an r2:// URL for data.parquet."""
-    import boto3
-
     bucket = os.environ["R2_BUCKET"]
-    client = boto3.client(
-        "s3",
-        endpoint_url=os.environ["R2_ENDPOINT"],
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
-    )
+    client = r2_client()
     prefix = f"{SOURCE}/{table}/{release}"
     for file in sorted(release_dir.iterdir()):
         client.upload_file(str(file), bucket, f"{prefix}/{file.name}")
