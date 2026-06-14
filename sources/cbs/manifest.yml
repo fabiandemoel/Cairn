@@ -1,8 +1,11 @@
-# Append-only pin of record for CBS source snapshots. Populated by
-# `ingestion.cbs_pipeline` on each real ingest (final, unconditional step).
-# No snapshots are pinned yet: run the pipeline with R2 credentials to ingest
-# the current release, upload the immutable raw file, and append the first
-# snapshot here. See README "R2 setup".
 source: cbs
 dataset: 85669NED
-snapshots: []
+snapshots:
+- release: '2026-03-11'
+  ingested_at: '2026-06-14T13:17:28.429930Z'
+  storage_url: r2://cairn-raw/cbs/85669NED/2026-03-11/data.parquet
+  sha256: 49e1de6dbf1b111ea114353b9e751e760a5bc7f21338dafa039d152d0c4aebe7
+  row_count: 9116
+  periods_covered:
+  - '1990'
+  - '2025'
