@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: stg_cbs__emissions
+    description: >
+      Typed, decoded 1:1 view of the raw CBS 85669NED observations
+      (greenhouse-gas emissions per climate sector, IPCC, annual). Dimension
+      codes are decoded to labels; one row per (category, gas, period).
+    columns:
+      - name: observation_key
+        description: Surrogate natural key (category|gas|period).
+        tests:
+          - unique
+          - not_null
+      - name: cbs_category_code
+        description: CBS climate-sector code.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('sector_mapping_cbs')
+              field: cbs_category_code
+      - name: gas_code
+        description: CBS emission-to-air (gas) code.
+        tests:
+          - not_null
+      - name: period_code
+        description: CBS period code (e.g. 1990JJ00).
+        tests:
+          - not_null
+      - name: year
+        description: Calendar year parsed from the period label.
+        tests:
+          - not_null

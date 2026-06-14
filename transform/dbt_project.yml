@@ -1,0 +1,33 @@
+name: cairn
+version: "1.0.0"
+config-version: 2
+
+profile: cairn
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+require-dbt-version: ">=1.8.0"
+
+# raw_dir points at the directory holding a snapshot's parquet files
+# (data.parquet + dim_*.parquet). Default is the committed CI fixture; override
+# with `--vars '{raw_dir: <path>}'` to build against a downloaded R2 snapshot.
+# Paths are resolved by DuckDB relative to the process CWD (the repo root).
+vars:
+  raw_dir: "tests/fixtures/85669NED/2026-03-11"
+
+models:
+  cairn:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+
+seeds:
+  cairn:
+    sector_mapping_cbs:
+      +column_types:
+        aggregate: boolean

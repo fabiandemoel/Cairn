@@ -1,0 +1,53 @@
+cbs_category_code,cbs_category_label,nace_section,nace_label,aggregate,notes
+T001616,Totaal klimaatsectoren,,,true,Grand total of all climate sectors (national total). CBS subtotal; excluded from sector sum.
+A025447,Stationaire bronnen; totaal,,,true,Subtotal: all stationary sources. CBS subtotal; excluded from sector sum.
+A050124,Elektriciteit,D,"Electricity, gas, steam and air conditioning supply",false,Power generation.
+A050123,Industrie,,,true,Subtotal: Industry (sum of its SBI subsectors). CBS subtotal; excluded from sector sum.
+305800,06 Winning van aardolie en aardgas,B,Mining and quarrying,false,SBI 06 crude petroleum & natural gas extraction.
+348000,E Waterbedrijven en afvalbeheer,E,Water supply; sewerage and waste management,false,SBI E water companies & waste management.
+320300,192 Aardolie-industrie,C,Manufacturing,false,SBI 192 petroleum (refining) industry.
+E007211,Cokesfabrieken,C,Manufacturing,false,Coke ovens.
+307610,"10-12 Voedings-, genotmiddelenindustrie",C,Manufacturing,false,"SBI 10-12 food, beverages and tobacco."
+312505,"13-15 Textiel-, kleding-, lederindustrie",C,Manufacturing,false,"SBI 13-15 textiles, clothing and leather."
+315800,16 Houtindustrie,C,Manufacturing,false,SBI 16 wood industry.
+317100,17 Papierindustrie,C,Manufacturing,false,SBI 17 paper industry.
+318600,18 Grafische industrie,C,Manufacturing,false,SBI 18 printing industry.
+320800,201 Basischemie,C,Manufacturing,false,SBI 201 basic chemicals.
+800046,"Overige chemie, farmaceutische industrie",C,Manufacturing,false,Other chemicals and pharmaceuticals.
+324600,23 Bouwmaterialenindustrie,C,Manufacturing,false,SBI 23 building materials industry.
+328100,24 Basismetaalindustrie,C,Manufacturing,false,SBI 24 basic metals industry.
+800049,25-28 Metaalprod.- en machine-industrie,C,Manufacturing,false,SBI 25-28 metal products and machinery.
+339205,29-30 Transportmiddelenindustrie,C,Manufacturing,false,SBI 29-30 transport equipment industry.
+800050,"22, 31-32 Overige industrie",C,Manufacturing,false,"SBI 22, 31-32 other manufacturing."
+350000,F Bouwnijverheid,F,Construction,false,SBI F construction (stationary sources).
+301100,01 Landbouw (stationaire bronnen),A,"Agriculture, forestry and fishing",false,SBI 01 agriculture (stationary sources).
+A050127,Gebouwde omgeving,,,true,Subtotal: Built environment (households + services). CBS subtotal; excluded from sector sum.
+1050010,Particulier huishouden,,,false,Private households (final energy consumption); not an economic NACE sector.
+300008,G-U Dienstverlening,,,false,"CBS aggregates all services (NACE G-U) into one category; spans multiple NACE sections, not attributable to one."
+A052138,Landgebruik,,,false,"LULUCF (land use, land-use change and forestry); outside the NACE economic activity classification."
+A025421,Mobiele bronnen; totaal,,,true,Subtotal: all mobile sources. CBS subtotal; excluded from sector sum.
+A025422,Vervoer,,,true,Subtotal: transport (road/rail/water/air). CBS subtotal; excluded from sector sum.
+A025424,Wegverkeer; totaal,,,true,Subtotal: total road transport. CBS subtotal; excluded from sector sum.
+A048112,Wegverkeer; personenauto's,,,false,"Passenger cars; predominantly household use, not attributable to a single NACE sector."
+A052486,Wegverkeer; motorfietsen,,,false,"Motorcycles; predominantly household use, not attributable to a single NACE sector."
+A052487,Wegverkeer; lichte bedrijfsvoertuigen,,,false,"Light commercial road vehicles; own-account transport spread across all sectors, not attributable to one."
+A052488,Wegverkeer; zware bedrijfsvoertuigen,,,false,"Heavy commercial road vehicles; freight spread across many sectors, not attributable to one."
+A052489,Wegverkeer; bussen,,,false,"Buses; mixed public/passenger transport, not attributable to a single NACE sector."
+A025423,Railverkeer,,,false,"Rail transport; mixed passenger/freight, not cleanly attributable to one NACE section."
+A025426,Binnenvaart; totaal,,,true,Subtotal: total inland shipping. CBS subtotal; excluded from sector sum.
+A048114,Binnenvaart; personenvervoer,,,false,"Inland shipping (passengers); mixed, not attributable to a single NACE section."
+A048115,Binnenvaart; vrachtververvoer,,,false,"Inland shipping (freight); mixed operators, not attributable to a single NACE section."
+A048116,Binnenvaart; recreatievervoer,,,false,"Inland shipping (recreation); household use, not an economic NACE sector."
+A025428,Luchtvaart,,,false,"Domestic aviation; mixed, not attributable to a single NACE section."
+A025429,Overige mobiele bronnen; totaal,,,true,Subtotal: other mobile sources. CBS subtotal; excluded from sector sum.
+A048119,Mobiele werktuigen; totaal,,,true,Subtotal: total mobile machinery. CBS subtotal; excluded from sector sum.
+A025430,Mobiele werktuigen; landbouw,A,"Agriculture, forestry and fishing",false,Mobile machinery used in agriculture.
+A048120,Mobiele werktuigen; bouwnijverheid,F,Construction,false,Mobile machinery used in construction.
+A052490,Mobiele werktuigen; industrie,C,Manufacturing,false,Mobile machinery used in industry.
+A052491,Mobiele werktuigen; diensten,,,false,"Mobile machinery in services; maps to the CBS G-U services aggregate, not one NACE section."
+A025433,Mobiele werktuigen; overige sectoren,,,false,Mobile machinery in other/unspecified sectors; not attributable.
+A025431,Visserij,A,"Agriculture, forestry and fishing",false,Fishing (NACE division 03).
+A025432,Defensie-activiteiten,,,false,"Defence activities (NACE O84.22); public administration, no commercial peer set for benchmarking."
+E007203,Afzet voor bunkers,,,true,"Bunkers (international aviation + shipping); IPCC memo item, outside the national total. Excluded."
+A052482,Afzet voor bunkers; luchtvaart,,,true,"Bunkers, aviation; IPCC memo item, outside the national total. Excluded."
+A052483,Afzet voor bunkers; scheepvaart,,,true,"Bunkers, shipping; IPCC memo item, outside the national total. Excluded."

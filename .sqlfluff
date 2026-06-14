@@ -2,6 +2,14 @@
 dialect = duckdb
 templater = jinja
 max_line_length = 100
+# RF04: allow natural column names (year, label, code, status).
+# ST06: don't enforce wildcard/simple-before-calculation column ordering.
+# ST07: USING joins are idiomatic and readable here.
+# ST09: don't enforce join-condition table ordering.
+exclude_rules = RF04, ST06, ST07, ST09
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
 
 [sqlfluff:indentation]
 tab_space_size = 4

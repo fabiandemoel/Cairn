@@ -4,31 +4,147 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Weekly reproducibility check against the real manifest + R2 (Mon 05:00 UTC)
+    - cron: "0 5 * * 1"
+
+env:
+  DBT_PROFILES_DIR: transform
 
 jobs:
   lint:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --locked --all-groups
+      - name: ruff check
+        run: uv run ruff check .
+      - name: ruff format check
+        run: uv run ruff format --check .
+      - name: sqlfluff lint
+        run: uv run sqlfluff lint transform/models transform/tests
 
+  test:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --locked --all-groups
+      - name: pytest
+        run: uv run pytest -q
+
+  dbt-build:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --locked --all-groups
+      - name: dbt build (fixture)
+        run: uv run dbt build --project-dir transform
+
+  benchmark-diff:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          path: pr
+      - name: Checkout main (baseline)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: base
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
 
+      - name: Build PR mart
+        working-directory: pr
+        run: |
+          uv sync --locked --all-groups
+          CAIRN_DUCKDB="$RUNNER_TEMP/pr.duckdb" uv run dbt build --project-dir transform
+          uv run python scripts/export_mart.py "$RUNNER_TEMP/pr.duckdb" "$RUNNER_TEMP/new.parquet"
+
+      - name: Build baseline mart from the same fixture
+        id: baseline
+        run: |
+          if [ ! -f base/transform/dbt_project.yml ]; then
+            echo "no_baseline=true" >> "$GITHUB_OUTPUT"
+            echo "Baseline (main) has no dbt project yet; skipping diff."
+            exit 0
+          fi
+          FIXTURE_ABS="$GITHUB_WORKSPACE/pr/tests/fixtures/85669NED/2026-03-11"
+          cd base
+          uv sync --locked --all-groups
+          CAIRN_DUCKDB="$RUNNER_TEMP/base.duckdb" uv run dbt build \
+            --project-dir transform --vars "{raw_dir: $FIXTURE_ABS}"
+          uv run python scripts/export_mart.py "$RUNNER_TEMP/base.duckdb" "$RUNNER_TEMP/old.parquet"
+
+      - name: Render benchmark diff
+        run: |
+          if [ "${{ steps.baseline.outputs.no_baseline }}" = "true" ]; then
+            printf '### Benchmark diff\n\n_Baseline `main` has no mart yet; nothing to compare._\n' \
+              > "$RUNNER_TEMP/diff.md"
+          else
+            cd pr
+            uv run python scripts/benchmark_diff.py \
+              "$RUNNER_TEMP/old.parquet" "$RUNNER_TEMP/new.parquet" -o "$RUNNER_TEMP/diff.md"
+          fi
+
+      - name: Find existing diff comment
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "Benchmark diff"
+      - name: Post benchmark diff comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body-path: ${{ runner.temp }}/diff.md
+          edit-mode: replace
+
+  reproducibility:
+    # Manual (workflow_dispatch) and weekly (schedule). Verifies the real
+    # manifest snapshot against R2; skips gracefully when secrets are absent.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
       - name: Install dependencies
         run: uv sync --locked --all-groups
-
-      - name: ruff check
-        run: uv run ruff check .
-
-      - name: ruff format check
-        run: uv run ruff format --check .
-
-      - name: sqlfluff lint
-        run: |
-          if [ -d transform/models ] || [ -d transform/tests ]; then
-            uv run sqlfluff lint transform/models transform/tests
-          else
-            echo "No dbt SQL yet, skipping sqlfluff."
-          fi
+      - name: Verify reproducibility
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: uv run python scripts/verify_reproducibility.py

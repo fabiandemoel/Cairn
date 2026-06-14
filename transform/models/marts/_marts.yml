@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: benchmark_sector_emissions
+    description: >
+      Greenhouse-gas emissions (total GHG in CO2-equivalent, megatonnes) per
+      NACE section and year, with each sector's share of the national total.
+      Final (Definitief) CBS years only.
+    meta:
+      source_manifest: sources/cbs/manifest.yml
+      source_dataset: "85669NED"
+      methodology: >
+        Headline gas T001372 (total greenhouse gases, CO2-eq). Only leaf
+        climate-sector categories (seed aggregate = false) are summed, so the
+        national total is partitioned exactly once. CBS source categories are
+        mapped to NACE sections via the version-controlled seed
+        sector_mapping_cbs; categories that cannot be attributed to a single
+        NACE section are bucketed as 'UNMAPPED' but still counted.
+      known_limitations: >
+        (1) Provisional years are excluded, so the latest year may lag.
+        (2) ~30-35% of national emissions land in UNMAPPED (households, land
+        use, transport, the CBS G-U services aggregate) because CBS does not
+        attribute them to a single NACE section. (3) Unit is "miljard kg
+        CO2-equivalent" = megatonnes; figures are rounded by CBS to 0.1 Mt.
+        (4) Bunkers are IPCC memo items outside the national total and are
+        excluded.
+      references:
+        source_table: https://opendata.cbs.nl/statline/#/CBS/nl/dataset/85669NED
+        emission_methodology: https://www.ipcc.ch/report/2006-ipcc-guidelines-for-national-greenhouse-gas-inventories/
+        nl_inventory: https://unfccc.int/ghg-inventories-annex-i-parties/2025
+        nace_rev2: https://ec.europa.eu/eurostat/web/nace
+        sbi_2008: https://www.cbs.nl/nl-nl/onze-diensten/methoden/classificaties/activiteiten/sbi-2008-standaard-bedrijfsindeling-2008
+        disclosure_context_esrs_e1: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
+    columns:
+      - name: sector_year_key
+        description: Surrogate natural key (nace_section|year).
+        tests:
+          - unique
+          - not_null
+      - name: nace_section
+        description: NACE Rev.2 section letter, or 'UNMAPPED'.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["A", "B", "C", "D", "E", "F", "UNMAPPED"]
+      - name: "year"
+        description: Calendar year.
+        tests:
+          - not_null
+      - name: sector_emissions_mt_co2eq
+        description: Total GHG emissions for the sector-year (Mt CO2-eq).
+        tests:
+          - not_null
+      - name: emissions_share
+        description: Sector emissions divided by the national total for the year.
+        tests:
+          - not_null

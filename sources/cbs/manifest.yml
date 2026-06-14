@@ -1,0 +1,11 @@
+source: cbs
+dataset: 85669NED
+snapshots:
+- release: '2026-03-11'
+  ingested_at: '2026-06-13T11:59:20Z'
+  storage_url: r2://cairn-raw/cbs/85669NED/2026-03-11/data.parquet
+  sha256: 739a9ab58f63ed5f53b8605bb5655384a64326a8483d80b080eccb06c03019a8
+  row_count: 9116
+  periods_covered:
+  - '1990'
+  - '2025'
