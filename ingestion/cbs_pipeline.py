@@ -83,13 +83,18 @@ def _periods_covered(con: duckdb.DuckDBPyConnection, dataset: str) -> list[str]:
 
 
 def _export_parquets(con: duckdb.DuckDBPyConnection, dataset: str, out_dir: Path) -> None:
-    """Export each loaded dlt table to a clean single parquet (no _dlt columns)."""
+    """Export each loaded dlt table to a clean single parquet (no _dlt columns).
+
+    Rows are ordered deterministically (observations by ``id``, code tables by
+    ``index``) so a re-ingest of unchanged source data yields stable output.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     for entity_set, filename in EXPORTS.items():
         table = f"{dataset}.{entity_set.lower()}"
         dest = out_dir / filename
+        order_col = "id" if entity_set == "Observations" else "index"
         con.sql(
-            f"COPY (SELECT * EXCLUDE (_dlt_load_id, _dlt_id) FROM {table}) "
+            f"COPY (SELECT * EXCLUDE (_dlt_load_id, _dlt_id) FROM {table} ORDER BY {order_col}) "
             f"TO '{dest.as_posix()}' (FORMAT PARQUET)"
         )
 

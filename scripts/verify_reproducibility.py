@@ -109,6 +109,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     manifest = load_manifest(args.manifest)
+    if not manifest.snapshots:
+        print(f"Manifest {manifest.source}/{manifest.dataset} pins no snapshots yet.")
+        print("  Nothing to verify. Run an ingest (with R2 creds) to pin one. Skipping.")
+        return 0
     snapshot = _select(manifest, args.release)
     scheme = urlparse(snapshot.storage_url).scheme
     print(f"Verifying {manifest.source}/{manifest.dataset} release {snapshot.release}")

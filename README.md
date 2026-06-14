@@ -130,12 +130,15 @@ control or content-addressed:
 the loop: it picks a manifest snapshot, re-downloads the raw file, recomputes
 the SHA256 and compares it to the pin, then rebuilds the mart from that exact
 file. CI runs it weekly and on demand (`workflow_dispatch`); it skips cleanly
-when R2 secrets are absent.
+when R2 secrets are absent or when no snapshot is pinned yet.
 
 ```bash
-uv run python scripts/verify_reproducibility.py            # latest snapshot
-uv run python scripts/verify_reproducibility.py --release 2026-03-11
+uv run python scripts/verify_reproducibility.py                 # latest snapshot
+uv run python scripts/verify_reproducibility.py --release <YYYY-MM-DD>
 ```
+
+> The manifest ships with **no snapshots pinned** — the first real ingest to R2
+> (below) establishes the pin of record. Until then there is nothing to verify.
 
 ## Source quirks
 
@@ -235,29 +238,50 @@ public, authoritative sources.
 
 ## R2 setup
 
-Raw data is stored in a Cloudflare R2 bucket (S3-compatible). The ingestion
-pipeline and the reproducibility script read these env vars:
+Raw data is stored in a Cloudflare R2 bucket (S3-compatible). You only need this
+to ingest for real and to run the reproducibility check against stored data;
+`--offline` runs and the fixture `dbt build` need none of it.
+
+**1. Create the bucket and credentials (Cloudflare dashboard).**
+
+- R2 → *Create bucket* → name it **`cairn-raw`** (the pipeline writes under this
+  bucket; pick another name only if you also pass `R2_BUCKET` accordingly).
+- R2 → *Manage R2 API Tokens* → *Create API token* with **Object Read & Write**,
+  scoped to that bucket. Copy the **Access Key ID** and **Secret Access Key**
+  (the secret is shown once).
+- Your **Account ID** is on the R2 overview page; the S3 endpoint is
+  `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`.
+
+**2. Provide the four values.**
 
 | Variable | Meaning |
 | --- | --- |
-| `R2_ENDPOINT` | R2 S3 endpoint, e.g. `https://<account>.r2.cloudflarestorage.com` |
+| `R2_ENDPOINT` | `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
 | `R2_ACCESS_KEY_ID` | R2 access key id |
 | `R2_SECRET_ACCESS_KEY` | R2 secret access key |
 | `R2_BUCKET` | bucket name, e.g. `cairn-raw` |
 
+Locally, export them; for CI, add the same four as repository **Actions
+secrets** (Settings → Secrets and variables → Actions) so the weekly
+reproducibility job can read them.
+
+**3. Run the first ingest — this establishes the pin of record.**
+
 ```bash
-export R2_ENDPOINT="https://<account>.r2.cloudflarestorage.com"
+export R2_ENDPOINT="https://<ACCOUNT_ID>.r2.cloudflarestorage.com"
 export R2_ACCESS_KEY_ID="..."
 export R2_SECRET_ACCESS_KEY="..."
 export R2_BUCKET="cairn-raw"
 
-uv run python -m ingestion.cbs_pipeline      # ingest to R2 + update manifest
+uv run python -m ingestion.cbs_pipeline       # ingest to R2 + append manifest snapshot
+uv run python scripts/verify_reproducibility.py   # re-download, check SHA256, rebuild
 ```
 
-The pipeline writes to the immutable path `cbs/<table>/<release>/` and never
-overwrites. For CI, store the same four values as repository secrets; the
-reproducibility job reads them and skips gracefully if they are unset. Run
-`--offline` to exercise the whole pipeline locally without any of this.
+The pipeline fetches the current CBS release, uploads the immutable raw files to
+`cbs/85669NED/<release>/` (never overwriting), and **appends** the first
+snapshot to `sources/cbs/manifest.yml`. Commit that manifest change in a PR.
+From then on each run is idempotent: if the CBS `Modified` date is unchanged it
+exits "no new release" and touches nothing.
 
 ## Branch protection
 
