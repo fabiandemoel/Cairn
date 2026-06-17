@@ -8,7 +8,9 @@
 --     the same installation-year under the Swiss 'chets'; those duplicates are
 --     excluded).
 --   * Stationary installations only -- aircraft and maritime operators are
---     classified by vehicle, not by a sector, and are excluded.
+--     classified by vehicle, not by a sector, and are excluded. A NULL flag
+--     (a few source installations carry none) is treated as not-confirmed-
+--     stationary, so `not is_aircraft_operator` also excludes it.
 --   * Verified emissions only: an installation-year with no reported verified
 --     figure (e.g. future phase years) is excluded.
 --   * Sector = NACE section letter, native to the source. Installations with no

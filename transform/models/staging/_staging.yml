@@ -48,13 +48,14 @@ models:
       - name: nace_section
         description: NACE Rev.2 section letter (A-U), NULL when the installation has no NACE code.
       - name: is_aircraft_operator
-        description: True for aircraft operators (excluded from the stationary benchmark).
-        tests:
-          - not_null
+        description: >
+          True for aircraft operators (excluded from the stationary benchmark).
+          Nullable: a handful of source installations carry no flag, and the
+          mart treats a NULL as not-confirmed-stationary, so it is excluded.
       - name: is_maritime_operator
-        description: True for maritime operators (excluded from the stationary benchmark).
-        tests:
-          - not_null
+        description: >
+          True for maritime operators (excluded from the stationary benchmark).
+          Nullable, handled like is_aircraft_operator.
 
   - name: stg_euets__compliance
     description: >
