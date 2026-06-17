@@ -129,8 +129,9 @@ jobs:
           edit-mode: replace
 
   reproducibility:
-    # Manual (workflow_dispatch) and weekly (schedule). Verifies the real
-    # manifest snapshot against R2; skips gracefully when secrets are absent.
+    # Manual (workflow_dispatch) and weekly (schedule). Verifies every source's
+    # real manifest snapshot (CBS, euets.info, EEA) against R2; skips gracefully
+    # per source when it is unpinned or the secrets are absent.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:

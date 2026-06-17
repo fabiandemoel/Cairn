@@ -12,12 +12,14 @@ clean-targets: ["target", "dbt_packages"]
 
 require-dbt-version: ">=1.8.0"
 
-# raw_dir points at the directory holding a snapshot's parquet files
-# (data.parquet + dim_*.parquet). Default is the committed CI fixture; override
-# with `--vars '{raw_dir: <path>}'` to build against a downloaded R2 snapshot.
-# Paths are resolved by DuckDB relative to the process CWD (the repo root).
+# *_raw_dir vars point at the directory holding a snapshot's parquet files for
+# each source. Defaults are the committed CI fixtures; override with
+# `--vars '{euets_raw_dir: <path>}'` etc. to build against a downloaded R2
+# snapshot. Paths are resolved by DuckDB relative to the process CWD (repo root).
 vars:
   raw_dir: "tests/fixtures/85669NED/2026-03-11"
+  euets_raw_dir: "tests/fixtures/euets/2024-10"
+  eea_raw_dir: "tests/fixtures/eea/2005-2025_v01_r00"
 
 models:
   cairn:

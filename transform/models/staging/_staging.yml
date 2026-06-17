@@ -31,3 +31,67 @@ models:
         description: Calendar year parsed from the period label.
         tests:
           - not_null
+
+  - name: stg_euets__installations
+    description: >
+      Typed, decoded 1:1 view of the euets.info (EUTL) installations. The NACE
+      section letter is resolved by walking the NACE hierarchy to level 1; ETS
+      activity and country are decoded to labels. One row per installation, all
+      countries -- the NL filter and the stationary/aircraft/maritime split are
+      applied in the mart.
+    columns:
+      - name: installation_id
+        description: EUTL installation identifier (e.g. NL_200580).
+        tests:
+          - unique
+          - not_null
+      - name: nace_section
+        description: NACE Rev.2 section letter (A-U), NULL when the installation has no NACE code.
+      - name: is_aircraft_operator
+        description: >
+          True for aircraft operators (excluded from the stationary benchmark).
+          Nullable: a handful of source installations carry no flag, and the
+          mart treats a NULL as not-confirmed-stationary, so it is excluded.
+      - name: is_maritime_operator
+        description: >
+          True for maritime operators (excluded from the stationary benchmark).
+          Nullable, handled like is_aircraft_operator.
+
+  - name: stg_euets__compliance
+    description: >
+      Typed 1:1 view of the euets.info compliance table: verified emissions and
+      allocation/surrender per installation per year. One row per
+      (installation, year); future phase years carry NULL verified emissions.
+    columns:
+      - name: compliance_key
+        description: Surrogate natural key (installation_id|year).
+        tests:
+          - unique
+          - not_null
+      - name: installation_id
+        description: EUTL installation identifier.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_euets__installations')
+              field: installation_id
+      - name: year
+        description: Compliance year.
+        tests:
+          - not_null
+
+  - name: stg_eea__ets
+    description: >
+      Typed 1:1 view of the EEA EU ETS aggregate (country x main activity x year
+      x CITL category x size) -- Cairn's official benchmark denominator and
+      cross-check. `value` is NULL where the source cell is a label, not a number.
+    columns:
+      - name: observation_key
+        description: Surrogate natural key (country|activity|category|year|size).
+        tests:
+          - unique
+          - not_null
+      - name: year
+        description: Reporting year.
+        tests:
+          - not_null

@@ -35,11 +35,15 @@ class Snapshot(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    release: str = Field(..., description="CBS 'Modified' date of the table (YYYY-MM-DD).")
+    release: str = Field(
+        ...,
+        description="Source release identifier (e.g. CBS 'Modified' date, or a "
+        "dataset publication date/version), YYYY-MM-DD or YYYY-MM.",
+    )
     ingested_at: datetime = Field(..., description="When Cairn ingested this snapshot (UTC).")
-    storage_url: str = Field(..., description="r2:// or file:// URL of the raw parquet.")
-    sha256: str = Field(..., pattern=SHA256_RE, description="SHA256 of the raw parquet file.")
-    row_count: int = Field(..., ge=0, description="Number of observation rows in the raw file.")
+    storage_url: str = Field(..., description="r2:// or file:// URL of the primary raw file.")
+    sha256: str = Field(..., pattern=SHA256_RE, description="SHA256 of the primary raw file.")
+    row_count: int = Field(..., ge=0, description="Number of rows in the primary raw file.")
     periods_covered: list[str] = Field(
         ..., min_length=1, description="[min_period, max_period] of the snapshot."
     )
