@@ -4,12 +4,13 @@ Cairn is a queryable benchmark layer on top of official EU/NL climate data
 (CBS, EEA, EU ETS). It connects fragmented public sources and answers, per
 sector: "how do your emissions compare to the sector average?"
 
-> **Status**: Phase 2 — a second source added. Phase 1 delivered one CBS
-> dataset end-to-end (sector averages, the *denominator*). Phase 2 adds the
+> **Status**: Phase 3 — the presentation layer. Phase 1 delivered one CBS
+> dataset end-to-end (sector averages, the *denominator*). Phase 2 added the
 > **EU ETS at installation level** (the *numerator*): per Dutch installation,
-> its verified emissions benchmarked against its NACE-sector peers. Both run on
-> the same architecture (ingestion, manifest-based versioning, dbt, tests, CI).
-> Still no Evidence site, CSRD export, or agent automation.
+> its verified emissions benchmarked against its NACE-sector peers. Phase 3 adds
+> the **Evidence site** (`site/`) — a read-only, queryable view over the dbt
+> marts. All run on the same architecture (ingestion, manifest-based versioning,
+> dbt, tests, CI). Still no CSRD export or agent automation.
 
 > **Maintainers & agents**: see [`CLAUDE.md`](CLAUDE.md) for the upkeep routine
 > (handling new CBS releases, refreshing fixtures, the classification migration
@@ -20,6 +21,7 @@ sector: "how do your emissions compare to the sector average?"
 - [What Cairn is](#what-cairn-is)
 - [Architecture principles](#architecture-principles)
 - [Local quickstart](#local-quickstart)
+- [The Evidence site](#the-evidence-site)
 - [Reproducibility](#reproducibility)
 - [Source quirks](#source-quirks)
 - [References & methodology](#references--methodology)
@@ -146,6 +148,27 @@ uv run pytest -q
 uv run ruff check . && uv run ruff format --check .
 uv run sqlfluff lint transform/models transform/tests
 ```
+
+## The Evidence site
+
+[`site/`](site/) is the presentation layer: an [Evidence](https://evidence.dev)
+project that renders the dbt marts as a queryable, auditable site. It is
+**read-only** — it reads the `cairn.duckdb` warehouse that dbt builds and never
+ingests or transforms anything itself.
+
+```bash
+# 1. build the warehouse (above) so cairn.duckdb exists, then:
+cd site
+npm ci             # install from the committed lockfile (not npm install)
+npm run sources    # materialise the source queries from cairn.duckdb
+npm run dev        # live preview at http://localhost:3000
+```
+
+`npm run build` produces the static site in `site/build/`; CI's `evidence-build`
+job runs `npm run build:strict`, which fails on any query error. Pages: an
+overview, the **CBS sector benchmark**, the interactive **EU ETS installation
+benchmark**, and a **methodology & sources** page documenting the provenance of
+every figure. See [`site/README.md`](site/README.md) for details.
 
 ## Reproducibility
 
