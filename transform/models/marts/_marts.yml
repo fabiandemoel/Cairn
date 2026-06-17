@@ -55,3 +55,65 @@ models:
         description: Sector emissions divided by the national total for the year.
         tests:
           - not_null
+
+  - name: benchmark_installation_emissions
+    description: >
+      Per NL stationary installation and year, its verified EU ETS emissions
+      (tonnes CO2-eq) benchmarked against its NACE-section average (mean and
+      median) over the same population. The installation-level answer to "how do
+      your emissions compare to the sector average?"
+    meta:
+      source_manifest: sources/euets/manifest.yml
+      source_dataset: "eutl (euets.info)"
+      cross_check_manifest: sources/eea/manifest.yml
+      methodology: >
+        NL registry, 'euets' trading system (Swiss 'chets' duplicates excluded),
+        stationary installations only (aircraft/maritime excluded), verified
+        emissions only. Sector = NACE Rev.2 section letter, native to the
+        source. The sector mean/median are computed across the NL stationary ETS
+        population per (nace_section, year). EU ETS covers only large emitters,
+        so this is the ETS sector average; the coverage test reconciles the ETS
+        total against the EEA aggregate (both derive from the EUTL).
+      known_limitations: >
+        (1) euets.info lags the EEA release (latest data ~2023 vs 2025).
+        (2) Installations without a NACE code are excluded (cannot be sector-
+        benchmarked). (3) The benchmark is the ETS large-emitter average, not the
+        whole-economy sector average (see the CBS mart for that). (4) Aircraft
+        and maritime operators are excluded.
+      references:
+        installation_source: https://www.euets.info/
+        eutl_database_doc: https://euets-info-public.s3.eu-central-1.amazonaws.com/Description_EUTL_database.pdf
+        eea_cross_check: https://www.eea.europa.eu/en/datahub/datahubitem-view/98f04097-26de-4fca-86c4-63834818c0c0
+        eu_ets_directive: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087
+        nace_rev2: https://ec.europa.eu/eurostat/web/nace
+        disclosure_context_esrs_e1: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
+    columns:
+      - name: installation_year_key
+        description: Surrogate natural key (installation_id|year).
+        tests:
+          - unique
+          - not_null
+      - name: nace_section
+        description: NACE Rev.2 section letter the installation belongs to.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
+                 "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U"]
+      - name: "year"
+        description: Compliance year.
+        tests:
+          - not_null
+      - name: installation_emissions_t_co2eq
+        description: The installation's verified emissions for the year (tonnes CO2-eq).
+        tests:
+          - not_null
+      - name: sector_mean_emissions_t_co2eq
+        description: Mean verified emissions across the sector-year population.
+        tests:
+          - not_null
+      - name: emissions_vs_sector_mean
+        description: Installation emissions divided by the sector mean for the year.
+        tests:
+          - not_null

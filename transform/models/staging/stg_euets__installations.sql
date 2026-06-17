@@ -9,7 +9,8 @@ nace as (
     select
         id,
         parent_id,
-        level
+        level,
+        description
     from read_parquet('{{ var("euets_raw_dir") }}/dim_nace.parquet')
 ),
 
@@ -34,10 +35,12 @@ walk as (
 
 nace_section as (
     select
-        origin as nace_code,
-        node as section_letter
+        walk.origin as nace_code,
+        walk.node as section_letter,
+        nace.description as section_label
     from walk
-    where level = '1'
+    inner join nace on nace.id = walk.node
+    where walk.level = '1'
 ),
 
 activities as (
@@ -68,6 +71,7 @@ select
     activities.label as ets_activity_label,
     i.nace_id as nace_code,
     nace_section.section_letter as nace_section,
+    nace_section.section_label as nace_section_label,
     cast(i.isaircraftoperator as boolean) as is_aircraft_operator,
     cast(i.ismaritimeoperator as boolean) as is_maritime_operator,
     i.parentcompany as parent_company,
