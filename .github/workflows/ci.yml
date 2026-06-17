@@ -59,6 +59,34 @@ jobs:
       - name: dbt build (fixture)
         run: uv run dbt build --project-dir transform
 
+  evidence-build:
+    # Smoke-test the Evidence site: build the dbt warehouse from fixtures, then
+    # build the site strictly (fails on any query error). Static output only.
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --locked --all-groups
+      - name: dbt build (fixture) -> cairn.duckdb
+        run: uv run dbt build --project-dir transform
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
+      - name: Build site (strict)
+        working-directory: site
+        run: npm run build:strict
+
   benchmark-diff:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
