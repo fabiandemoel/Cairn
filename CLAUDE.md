@@ -13,19 +13,24 @@ These are the architecture's load-bearing rules. Breaking one silently breaks
 auditability, which is the whole point of Cairn.
 
 1. **Raw data is immutable.** Every ingest writes to a new, versioned path
-   (`cbs/<table>/<release>/`). Never overwrite a raw file.
-2. **The manifest is append-only.** `sources/cbs/manifest.yml` is the pin of
-   record. `ingestion/manifest.py` refuses to modify/delete entries — keep it
-   that way. A data change without a manifest change must stay impossible.
+   (`<source>/<dataset>/<release>/`). Never overwrite a raw file.
+2. **The manifest is append-only.** Each source has its own manifest under
+   `sources/` (`cbs/`, `euets/`, `eea/`) — the pin of record. `ingestion/manifest.py`
+   refuses to modify/delete entries — keep it that way. A data change without a
+   manifest change must stay impossible. The committed manifests ship unpinned
+   (`snapshots: []`); the first real R2 ingest establishes the pin — never
+   commit a machine-specific `file://` snapshot from an `--offline` run.
 3. **Mappings are code, reviewed via PRs.** `transform/seeds/sector_mapping_cbs.csv`
-   is the single source of truth for category → NACE. Change it in a PR so the
-   CI benchmark diff makes the numeric impact visible. Never invent figures or
-   mappings — use real source categories, or explicit `NULL` + a `notes` entry.
+   is the single source of truth for CBS category → NACE. Change it in a PR so
+   the CI benchmark diff makes the numeric impact visible. Never invent figures
+   or mappings — use real source categories, or explicit `NULL` + a `notes`
+   entry. (EU ETS needs no such seed — euets.info carries native NACE.)
 4. **CI guards the methodology.** Tests must fail the build. Don't weaken a test
    to make a change pass; fix the change or, if the source genuinely changed,
    update the test deliberately and say so in the PR.
-5. **Phase 1 scope only.** No EEA/ETS, Evidence site, CSRD export, or agent
-   automation yet. Don't scaffold placeholder code for them.
+5. **Phase 2 scope.** Sources: CBS + EU ETS (installation level). Still **no**
+   Evidence site, CSRD export, or agent automation — don't scaffold placeholder
+   code for them.
 
 ## Recurring maintenance (the reason this file exists)
 
@@ -55,6 +60,35 @@ Checklist:
    `uv run pytest -q` green, linters green.
 6. Note the release date in the README (`What Cairn is` + Source quirks).
 
+### When euets.info or the EEA bulk publishes a new release
+The two EU ETS sources update on their own cadences (euets.info roughly yearly,
+trailing ~a year; the EEA bulk after the spring compliance cycle). There is no
+`Modified` endpoint — the release is the source filename's version token.
+
+Checklist:
+1. Find the new URL and ingest:
+   - euets.info: the current zip is hard-coded as `DEFAULT_URL` in
+     `ingestion/euets_pipeline.py`; point `--url` at the newer zip (the filename
+     carries the publication token, e.g. `eutl_2025_2026xx.zip`).
+   - EEA: the datashare link is `DEFAULT_URL` in `ingestion/eea_ets_pipeline.py`;
+     update it if EEA issues a new share. Run with R2 creds, or `--offline`.
+   Both are idempotent — they exit "no new release" if the token is already pinned.
+2. Confirm a **new** append-only snapshot landed in `sources/euets/manifest.yml`
+   / `sources/eea/manifest.yml` (new `release`, new `sha256`).
+3. Refresh the CI fixtures and bump the release dirs:
+   `uv run python scripts/build_eu_ets_fixtures.py` (it reads the local
+   `.localstack/` snapshots), then update the `euets_raw_dir` / `eea_raw_dir`
+   defaults in `transform/dbt_project.yml`, the fixture release dirs, and the
+   per-source `files`/paths in `scripts/verify_reproducibility.py` if the
+   release changed.
+4. **Re-check the assumptions the staging/mart lean on.** If the EUTL schema
+   changed: the compliance grain (`installation|year|system`), the NACE
+   hierarchy walk, the operator flags, or the EEA stationary-total code
+   (`20-99`, in `assert_euets_coverage_within_eea`). The coverage test (<0.5%
+   one-sided) and the relationships/unique tests fail loudly — fix the model,
+   don't suppress the test.
+5. `dbt build`, `pytest`, linters green. Note the release in the README.
+
 ### Classification updates (medium-term, real)
 The mapping rests on SBI 2008 ⊃ NACE Rev.2. Both are migrating:
 - **NACE Rev.2.1** — EU statistics move to it from 2025.
@@ -70,9 +104,10 @@ the mapping. If you change methodology, update both. Don't add a citation you
 haven't verified resolves.
 
 ### Reproducibility
-`scripts/verify_reproducibility.py` runs weekly + on demand in CI. It needs the
-`R2_*` repo secrets; it skips cleanly without them. If R2 is set up, confirm the
-weekly job is green — a failure means a pinned raw file changed or vanished,
+`scripts/verify_reproducibility.py` runs weekly + on demand in CI. With no args
+it verifies **every source** (CBS, euets.info, EEA), skipping cleanly per source
+when unpinned or when the `R2_*` secrets are absent. If R2 is set up, confirm
+the weekly job is green — a failure means a pinned raw file changed or vanished,
 which is a real integrity alarm, not flakiness.
 
 ## How to work here
@@ -84,10 +119,12 @@ which is a real integrity alarm, not flakiness.
   - `uv run ruff check . && uv run ruff format --check .`
   - `uv run sqlfluff lint transform/models transform/tests`
 - **Dependencies:** stay within dlt, dbt-core, dbt-duckdb, duckdb, pydantic,
-  boto3, pyyaml (+ dev: pytest, ruff, sqlfluff). Ask before adding more.
+  boto3, pyyaml (+ dev: pytest, ruff, sqlfluff). Ask before adding more. (The
+  EEA xlsx is read via DuckDB's autoloaded `excel` extension — a DuckDB
+  extension, not a new Python dependency.)
 - **Commits:** conventional commits, one logical change per commit, descriptive
   messages. Commit per milestone, not one giant blob.
-- **Source quirks:** when the CBS API surprises you, document it in the README
+- **Source quirks:** when a source surprises you, document it in the README
   "Source quirks" section rather than silently working around it.
 
 ## Gotchas (already learned — don't rediscover the hard way)
@@ -103,3 +140,18 @@ which is a real integrity alarm, not flakiness.
   and excluded. Including them double-counts.
 - **dbt needs the profile** — pass `--profiles-dir transform` (or set
   `DBT_PROFILES_DIR=transform`); CI sets it at the workflow level.
+- **EU ETS installation data comes from euets.info, not the EEA bulk.** The EEA
+  bulk is aggregated only (`active_installation` = `all entities`); it is the
+  denominator/cross-check, not the installation pin. Don't try to get
+  installation rows out of it.
+- **euets compliance grain is `installation|year|system`.** Linked registries
+  duplicate the same installation-year under `euets` and Swiss `chets`; the mart
+  keeps only `euets`. A 2-part key is not unique.
+- **euets operator flags are nullable.** A few installations have no
+  `isAircraftOperator`/`isMaritimeOperator`; the fixture has none, so the full
+  snapshot is the real test. The mart's `not is_aircraft_operator` excludes a
+  NULL (not-confirmed-stationary) — that's intended; don't add a `not_null` test
+  on those flags.
+- **euets.info source columns are camelCase; SBI/sqlfluff want lowercase.**
+  Reference them unquoted and lowercase (`isaircraftoperator`) — DuckDB resolves
+  case-insensitively, and quoting trips `RF06` while uppercase trips `CP02`.

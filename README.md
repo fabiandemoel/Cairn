@@ -4,9 +4,12 @@ Cairn is a queryable benchmark layer on top of official EU/NL climate data
 (CBS, EEA, EU ETS). It connects fragmented public sources and answers, per
 sector: "how do your emissions compare to the sector average?"
 
-> **Status**: Phase 1 — one CBS dataset, end-to-end (ingestion, transformation,
-> manifest-based versioning, tests, CI). No agent automation, EEA/ETS, Evidence
-> site, or CSRD export yet.
+> **Status**: Phase 2 — a second source added. Phase 1 delivered one CBS
+> dataset end-to-end (sector averages, the *denominator*). Phase 2 adds the
+> **EU ETS at installation level** (the *numerator*): per Dutch installation,
+> its verified emissions benchmarked against its NACE-sector peers. Both run on
+> the same architecture (ingestion, manifest-based versioning, dbt, tests, CI).
+> Still no Evidence site, CSRD export, or agent automation.
 
 > **Maintainers & agents**: see [`CLAUDE.md`](CLAUDE.md) for the upkeep routine
 > (handling new CBS releases, refreshing fixtures, the classification migration
@@ -26,22 +29,39 @@ sector: "how do your emissions compare to the sector average?"
 ## What Cairn is
 
 Cairn turns scattered official climate data into an auditable, queryable
-benchmark. Phase 1 ingests one CBS dataset end-to-end:
+benchmark. It now ingests two sources end-to-end.
 
-- **Source**: CBS StatLine table
+**Source 1 — CBS (sector averages, the denominator).**
+
+- CBS StatLine table
   [`85669NED`](https://opendata.cbs.nl/statline/#/CBS/nl/dataset/85669NED) —
   *"Emissies van broeikasgassen berekend volgens IPCC-voorschriften"*
   (greenhouse-gas emissions per climate sector, IPCC method, annual, 1990–2025).
-- **Ingestion** ([`ingestion/`](ingestion/)): a `dlt` pipeline pulls the table
-  from the CBS OData v4 API, writes immutable per-release parquet, and pins the
-  snapshot in a manifest.
-- **Transformation** ([`transform/`](transform/)): a dbt + DuckDB project that
-  decodes the raw data, maps CBS source categories to **NACE** sections via a
+- **Ingestion**: a `dlt` pipeline pulls the table from the CBS OData v4 API.
+- **Transformation**: maps CBS source categories to **NACE** sections via a
   version-controlled seed, and builds `benchmark_sector_emissions` — emissions
   and national share per NACE section and year.
-- **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): lint, tests,
-  a fixture `dbt build`, a benchmark-diff PR comment, and a weekly
-  reproducibility check.
+
+**Source 2 — EU ETS (installation level, the numerator).**
+
+- **Pin of record**: [euets.info](https://www.euets.info/) (Jan Abrell / EUI),
+  a reprocessing of the EU Transaction Log with per-installation verified
+  emissions and a native NACE code. Ingested as a versioned zip from a stable
+  S3 URL.
+- **Cross-check & denominator**: the EEA
+  [EU ETS data from the Union Registry](https://www.eea.europa.eu/en/datahub/datahubitem-view/98f04097-26de-4fca-86c4-63834818c0c0)
+  bulk — the official, current aggregate by country × activity × year.
+- **Transformation**: `benchmark_installation_emissions` — per NL stationary
+  installation and year, its verified emissions versus its NACE-section mean
+  and median. A coverage test reconciles the ETS total against the EEA aggregate
+  (both derive from the EUTL; they match to ~0.02%).
+
+**Common spine** ([`ingestion/`](ingestion/), [`transform/`](transform/)): every
+source writes immutable per-release parquet and pins each snapshot in its own
+manifest under [`sources/`](sources/). **CI**
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): lint, tests, a fixture
+`dbt build`, a benchmark-diff PR comment (CBS mart), and a weekly
+reproducibility check across all sources.
 
 Every benchmark figure traces back to **a git commit + a manifest entry + an
 immutable raw file** (see [Reproducibility](#reproducibility)).
@@ -101,6 +121,24 @@ uv run dbt build --project-dir transform --profiles-dir transform \
   --vars "{raw_dir: .localstack/cbs/85669NED/<release-date>}"
 ```
 
+**The EU ETS sources** work the same way (download to `./.localstack/`, no
+credentials):
+
+```bash
+uv run python -m ingestion.euets_pipeline --offline    # installation level (euets.info)
+uv run python -m ingestion.eea_ets_pipeline --offline  # official aggregate (EEA)
+```
+
+Both derive their release from the source filename and exit cleanly if it is
+already pinned. After ingesting, refresh the small committed CI fixtures from
+the local snapshots and build the installation mart:
+
+```bash
+uv run python scripts/build_eu_ets_fixtures.py
+uv run dbt build --project-dir transform --profiles-dir transform \
+  --vars "{euets_raw_dir: .localstack/euets/eutl/<release>, eea_raw_dir: .localstack/eea/eu-ets/<release>}"
+```
+
 **Run the tests and linters** (what CI runs):
 
 ```bash
@@ -117,27 +155,29 @@ control or content-addressed:
 1. **A git commit** — the SQL models, the `sector_mapping_cbs` seed, and the
    ingestion code are all in git. Change a mapping and the diff is reviewable;
    CI posts a benchmark diff so the numeric impact is visible before merge.
-2. **A manifest entry** — [`sources/cbs/manifest.yml`](sources/cbs/manifest.yml)
-   pins each snapshot: the CBS release date, the storage URL, the **SHA256 of
-   the raw parquet**, the row count, and the periods covered. The manifest is
-   append-only by construction (`ingestion/manifest.py` refuses to modify or
-   delete entries), and the ingestion pipeline's final, unconditional step is
-   the manifest write — so raw data cannot change without a manifest change.
+2. **A manifest entry** — each source has its own append-only manifest under
+   [`sources/`](sources/) (`cbs/`, `euets/`, `eea/`). It pins every snapshot:
+   the release, the storage URL, the **SHA256 of the primary raw file**, the row
+   count, and the periods covered. The manifest is append-only by construction
+   (`ingestion/manifest.py` refuses to modify or delete entries), and each
+   pipeline's final, unconditional step is the manifest write — so raw data
+   cannot change without a manifest change.
 3. **An immutable raw file** — the raw parquet lives at a versioned R2 path
-   (`cbs/<table>/<release>/data.parquet`) that is never overwritten.
+   (`<source>/<dataset>/<release>/…`) that is never overwritten.
 
 [`scripts/verify_reproducibility.py`](scripts/verify_reproducibility.py) closes
-the loop: it picks a manifest snapshot, re-downloads the raw file, recomputes
-the SHA256 and compares it to the pin, then rebuilds the mart from that exact
-file. CI runs it weekly and on demand (`workflow_dispatch`); it skips cleanly
-when R2 secrets are absent or when no snapshot is pinned yet.
+the loop: for each source it picks a manifest snapshot, re-downloads the raw
+files, recomputes the SHA256 of the primary file and compares it to the pin,
+then rebuilds the project from that exact file. CI runs it weekly and on demand
+(`workflow_dispatch`); it skips cleanly, per source, when R2 secrets are absent
+or when no snapshot is pinned yet.
 
 ```bash
-uv run python scripts/verify_reproducibility.py                 # latest snapshot
-uv run python scripts/verify_reproducibility.py --release <YYYY-MM-DD>
+uv run python scripts/verify_reproducibility.py                      # all sources, latest
+uv run python scripts/verify_reproducibility.py --source euets --release 2024-10
 ```
 
-> The manifest ships with **no snapshots pinned** — the first real ingest to R2
+> The manifests ship with **no snapshots pinned** — the first real ingest to R2
 > (below) establishes the pin of record. Until then there is nothing to verify.
 
 ## Source quirks
@@ -195,6 +235,42 @@ auditable rather than hidden.
   megatonnes); columns are named `*_mt_co2eq`. CBS rounds to 0.1 Mt, which is
   why reconciliation tolerates small (<0.5%) drift.
 
+The **EU ETS** source has its own quirks:
+
+- **No installation-level API; two sources by design.** The EEA "EU ETS data
+  from the Union Registry" bulk is **aggregated only** (country × main activity
+  × year; `active_installation` is always `all entities`) — it cannot answer an
+  installation-level question. So the installation pin of record is
+  **euets.info** (a reprocessing of the EU Transaction Log, shipped as a
+  versioned zip of normalised CSVs at a stable S3 URL), and the EEA bulk is kept
+  as the official, current aggregate and a cross-check. Ingestion is
+  download + hash, not a feed; the release is the source filename's version
+  token.
+- **euets.info lags the EEA release.** Its latest vintage has verified emissions
+  through ~2023; the EEA bulk runs to 2025. Use the EEA figures when currency
+  matters.
+- **ETS "main activity" ≠ NACE — but euets.info carries native NACE.** The raw
+  EUTL activity classification is not NACE, but euets.info already attaches a
+  NACE code per installation (and a full NACE hierarchy), so the section letter
+  is resolved by walking that hierarchy — no invented crosswalk. Installations
+  with no NACE code cannot be sector-benchmarked and are excluded.
+- **ETS is a subset, not a national total.** It covers only large emitters, so
+  there is no national-total reconciliation. Instead `assert_euets_coverage_within_eea`
+  checks (one-sided) that the installation total does not exceed the EEA
+  stationary aggregate (`20-99`, verified emissions); both derive from the EUTL
+  and match to ~0.02% on real data.
+- **The compliance grain includes the trading system.** Linked registries
+  report the same installation-year under both `euets` and the Swiss `chets`,
+  so the natural key is installation × year × system; the mart keeps only
+  `euets`.
+- **Aircraft, maritime, and missing-flag operators are excluded.** The
+  installation benchmark is stationary only; aircraft and maritime operators are
+  classified by vehicle, and the few installations with a NULL operator flag are
+  treated as not-confirmed-stationary and left out.
+- **The EEA bulk is an Excel workbook.** Only the data sheet is ingested (read
+  via the DuckDB `excel` extension, all-VARCHAR — the `value` column legitimately
+  mixes numbers and period labels); the manuals/PDFs in the zip are not.
+
 ## References & methodology
 
 The data, the methodology and the classification logic are all grounded in
@@ -215,6 +291,19 @@ public, authoritative sources.
   and [RIVM Emissieregistratie](https://www.emissieregistratie.nl/) — the
   upstream inventory and emission factors behind the CBS figures.
 - [CBS method note: maand- en kwartaalraming broeikasgasemissies conform IPCC](https://www.cbs.nl/nl-nl/maatwerk/2020/37/maand-en-kwartaalraming-broeikasgasemissies-conform-ipcc).
+
+**EU ETS source data**
+
+- [euets.info](https://www.euets.info/) (Jan Abrell, EUI) — the installation
+  pin of record;
+  [EUTL database description](https://euets-info-public.s3.eu-central-1.amazonaws.com/Description_EUTL_database.pdf)
+  and the [`pyeutl`](https://github.com/jabrell/pyeutl) processing routines
+  document how the raw EU Transaction Log is rebuilt and how NACE is attached.
+- EEA [EU ETS data from the Union Registry](https://www.eea.europa.eu/en/datahub/datahubitem-view/98f04097-26de-4fca-86c4-63834818c0c0)
+  and the [EU ETS data viewer](https://www.eea.europa.eu/data-and-maps/dashboards/emissions-trading-viewer-1)
+  — the official aggregate and cross-check.
+- [EU ETS Directive 2003/87/EC](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087)
+  — the scheme that defines which installations report verified emissions.
 
 **Classification (the sector mapping)**
 
@@ -273,15 +362,17 @@ export R2_ACCESS_KEY_ID="..."
 export R2_SECRET_ACCESS_KEY="..."
 export R2_BUCKET="cairn-raw"
 
-uv run python -m ingestion.cbs_pipeline       # ingest to R2 + append manifest snapshot
-uv run python scripts/verify_reproducibility.py   # re-download, check SHA256, rebuild
+uv run python -m ingestion.cbs_pipeline           # CBS -> R2 + append manifest snapshot
+uv run python -m ingestion.euets_pipeline         # EU ETS installations (euets.info)
+uv run python -m ingestion.eea_ets_pipeline       # EU ETS official aggregate (EEA)
+uv run python scripts/verify_reproducibility.py   # re-download, check SHA256, rebuild (all sources)
 ```
 
-The pipeline fetches the current CBS release, uploads the immutable raw files to
-`cbs/85669NED/<release>/` (never overwriting), and **appends** the first
-snapshot to `sources/cbs/manifest.yml`. Commit that manifest change in a PR.
-From then on each run is idempotent: if the CBS `Modified` date is unchanged it
-exits "no new release" and touches nothing.
+Each pipeline uploads its immutable raw files to `<source>/<dataset>/<release>/`
+(never overwriting) and **appends** the first snapshot to its manifest under
+`sources/`. Commit those manifest changes in a PR. From then on each run is
+idempotent: if the source release is unchanged it exits "no new release" and
+touches nothing.
 
 ## Branch protection
 
