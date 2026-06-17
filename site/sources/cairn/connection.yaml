@@ -1,0 +1,7 @@
+name: cairn
+type: duckdb
+options:
+  # The dbt warehouse, built by `dbt build` at the repo root and read-only here.
+  # Path is resolved relative to this source directory (site/sources/cairn/),
+  # so three levels up reaches the repo root where dbt writes cairn.duckdb.
+  filename: ../../../cairn.duckdb
