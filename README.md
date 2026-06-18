@@ -170,6 +170,30 @@ overview, the **CBS sector benchmark**, the interactive **EU ETS installation
 benchmark**, and a **methodology & sources** page documenting the provenance of
 every figure. See [`site/README.md`](site/README.md) for details.
 
+### Live deployment (GitHub Pages)
+
+The [`pages.yml`](.github/workflows/pages.yml) workflow publishes the site to
+GitHub Pages on every push to `main`. It does **not** use the committed fixtures:
+[`scripts/materialize_warehouse.py`](scripts/materialize_warehouse.py) downloads
+every source's pinned snapshot from R2, **verifies each SHA256 against the
+manifest**, and builds the warehouse from that — so the published numbers carry
+the same provenance guarantee as the reproducibility check. It fails loudly if
+the `R2_*` secrets are absent or any source is unpinned, so the site is never
+published from incomplete or unverified data.
+
+**Prerequisite — pin EU ETS in R2.** CBS is already pinned; the two EU ETS
+sources are not. Establish their pins once (with R2 creds), which the deploy then
+builds from:
+
+```bash
+uv run python -m ingestion.euets_pipeline      # -> R2 + sources/euets/manifest.yml
+uv run python -m ingestion.eea_ets_pipeline    # -> R2 + sources/eea/manifest.yml
+```
+
+Commit the resulting manifest changes in a PR (the first real ingest establishes
+the pin of record). After that, every push to `main` republishes the site from
+the pinned data.
+
 ## Reproducibility
 
 Any benchmark number can be traced back to three things, all under version
@@ -291,8 +315,17 @@ The **EU ETS** source has its own quirks:
   classified by vehicle, and the few installations with a NULL operator flag are
   treated as not-confirmed-stationary and left out.
 - **The EEA bulk is an Excel workbook.** Only the data sheet is ingested (read
-  via the DuckDB `excel` extension, all-VARCHAR — the `value` column legitimately
-  mixes numbers and period labels); the manuals/PDFs in the zip are not.
+  via the DuckDB `excel` extension, all-VARCHAR); the manuals/PDFs in the zip
+  are not.
+- **The EEA `year` column mixes years with trading-period totals.** Alongside
+  per-year rows it carries aggregate rows whose `year` is a label like
+  `Total 1st trading period (05-07)`. Those are sums over years (they would
+  double-count) and are non-numeric, so `stg_eea__ets` keeps only true per-year
+  rows before casting `year` to integer.
+- **The EEA bulk has a known duplicate (Czechia).** CZ's allocated-allowances at
+  the `20-99` aggregate appears twice — a spurious `0` alongside the real value.
+  `stg_eea__ets` collapses exact-grain duplicates, keeping the larger value. It
+  sits outside the NL coverage sum, so it does not affect the benchmark.
 
 ## References & methodology
 

@@ -105,13 +105,24 @@ def build_euets(con: duckdb.DuckDBPyConnection, src: str, dst: str) -> None:
 def build_eea(con: duckdb.DuckDBPyConnection, src: str, dst: str) -> None:
     print(f"eea: {src} -> {dst}")
     data = f"read_parquet('{src}/data.parquet')"
+    cats = (
+        "'2. Verified emissions', '2.1 EU-ETS Verified Emission', "
+        "'1. Total allocated allowances (EUA or EUAA)'"
+    )
+    # NL rows 2018-2023 are the coverage-test denominator. We deliberately also
+    # keep two real-source quirks so the staging tests stay meaningful:
+    #   * NL trading-period aggregate rows (non-numeric year) -> exercises the
+    #     period-row filter in stg_eea__ets.
+    #   * CZ allocated-allowances at the 20-99 aggregate, which the source
+    #     duplicates (a spurious 0 alongside the real value) -> exercises the
+    #     deduplication. CZ is outside the NL coverage sum, so it is numerically
+    #     inert there.
     _copy(
         con,
-        f"SELECT * FROM {data} WHERE country_code = 'NL' "
-        f"AND TRY_CAST(year AS INTEGER) BETWEEN 2018 AND 2023 "
-        f"AND citl_information IN ("
-        f"'2. Verified emissions', '2.1 EU-ETS Verified Emission', "
-        f"'1. Total allocated allowances (EUA or EUAA)')",
+        f"SELECT * FROM {data} WHERE citl_information IN ({cats}) AND ("
+        f"(country_code = 'NL' AND (TRY_CAST(year AS INTEGER) BETWEEN 2018 AND 2023 "
+        f"OR TRY_CAST(year AS INTEGER) IS NULL)) "
+        f"OR (country_code = 'CZ' AND main_activity_code = '20-99'))",
         Path(dst) / "data.parquet",
     )
 
