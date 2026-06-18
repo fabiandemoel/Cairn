@@ -28,9 +28,11 @@ auditability, which is the whole point of Cairn.
 4. **CI guards the methodology.** Tests must fail the build. Don't weaken a test
    to make a change pass; fix the change or, if the source genuinely changed,
    update the test deliberately and say so in the PR.
-5. **Phase 2 scope.** Sources: CBS + EU ETS (installation level). Still **no**
-   Evidence site, CSRD export, or agent automation — don't scaffold placeholder
-   code for them.
+5. **Phase 3 scope.** Sources: CBS + EU ETS (installation level), plus the
+   **Evidence site** (`site/`) — a read-only presentation layer over the dbt
+   marts. The site must never ingest or transform; it only *reads*
+   `cairn.duckdb`. Still **no** CSRD export or agent automation — don't scaffold
+   placeholder code for them.
 
 ## Recurring maintenance (the reason this file exists)
 
@@ -97,6 +99,19 @@ When CBS switches `85669NED` to SBI 2025 / NACE Rev.2.1 codes, revisit the seed
 mapping and the NACE section letters in the mart's `accepted_values` test, and
 update the references. Treat it as a reviewed methodology change (PR + diff).
 
+### Working on the Evidence site (`site/`)
+The site is a **read-only** view of the dbt marts — it never ingests or
+transforms. It reads `cairn.duckdb` (built by dbt at the repo root) via the
+`sources/cairn/` DuckDB connection.
+
+- A new column or mart only shows up after you add it to a `sources/cairn/*.sql`
+  query (or a page query) — the site does not auto-discover mart columns.
+- If a mart's columns/grain change, update the matching source query and any
+  page that references the renamed column; `npm run build:strict` fails on a bad
+  query, so CI catches a drift.
+- Don't move business logic into the site. Benchmarks are computed in dbt and
+  tested there; the site only shapes and displays. New numbers belong in a mart.
+
 ### Keep references honest
 `README.md` (References & methodology) and the mart `meta.references` in
 `transform/models/marts/_marts.yml` cite the sources that justify the data and
@@ -118,10 +133,16 @@ which is a real integrity alarm, not flakiness.
   - `uv run pytest -q`
   - `uv run ruff check . && uv run ruff format --check .`
   - `uv run sqlfluff lint transform/models transform/tests`
-- **Dependencies:** stay within dlt, dbt-core, dbt-duckdb, duckdb, pydantic,
-  boto3, pyyaml (+ dev: pytest, ruff, sqlfluff). Ask before adding more. (The
-  EEA xlsx is read via DuckDB's autoloaded `excel` extension — a DuckDB
-  extension, not a new Python dependency.)
+  - **Evidence site:** after a dbt build, `cd site && npm ci && npm run
+    build:strict` (CI's `evidence-build` job). `npm run dev` for a live preview.
+- **Dependencies (Python):** stay within dlt, dbt-core, dbt-duckdb, duckdb,
+  pydantic, boto3, pyyaml (+ dev: pytest, ruff, sqlfluff). Ask before adding
+  more. (The EEA xlsx is read via DuckDB's autoloaded `excel` extension — a
+  DuckDB extension, not a new Python dependency.)
+- **Dependencies (site):** the `site/` Evidence project has its own Node
+  toolchain, pinned in `site/package-lock.json`. Install with `npm ci`, not
+  `npm install` (a re-resolve trips Evidence's known peer-dep mismatch). Keep it
+  to the Evidence core + the DuckDB datasource; ask before adding npm packages.
 - **Commits:** conventional commits, one logical change per commit, descriptive
   messages. Commit per milestone, not one giant blob.
 - **Source quirks:** when a source surprises you, document it in the README
@@ -155,3 +176,9 @@ which is a real integrity alarm, not flakiness.
 - **euets.info source columns are camelCase; SBI/sqlfluff want lowercase.**
   Reference them unquoted and lowercase (`isaircraftoperator`) — DuckDB resolves
   case-insensitively, and quoting trips `RF06` while uppercase trips `CP02`.
+- **Evidence's DuckDB `filename` is resolved relative to the source directory**
+  (`site/sources/cairn/`), not the project root — hence `../../../cairn.duckdb`
+  to reach the repo root. Build the warehouse (`dbt build`) before the site.
+- **Install the site with `npm ci`, never `npm install`.** A fresh resolve hits
+  Evidence's `svelte2tsx`/`typescript` peer-dep mismatch; the committed
+  `site/package-lock.json` is the working tree.
