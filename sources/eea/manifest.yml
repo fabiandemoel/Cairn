@@ -1,3 +1,11 @@
 source: eea
 dataset: eu-ets
-snapshots: []
+snapshots:
+- release: 2005-2025_v01_r00
+  ingested_at: '2026-06-18T20:46:01.949184Z'
+  storage_url: r2://cairn-raw/eea/eu-ets/2005-2025_v01_r00/data.parquet
+  sha256: 5f06093bdc0bab5a1e94ba03d664ff93e087f5218b5d294096eaeb45750018d9
+  row_count: 83906
+  periods_covered:
+  - '2005'
+  - '2025'

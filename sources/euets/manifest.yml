@@ -1,3 +1,11 @@
 source: euets
 dataset: eutl
-snapshots: []
+snapshots:
+- release: 2024-10
+  ingested_at: '2026-06-18T20:45:58.708958Z'
+  storage_url: r2://cairn-raw/euets/eutl/2024-10/compliance.parquet
+  sha256: b2cc3abfcd566f892e79e565f79128059a0d232b40818ae9d41a7adb788d71ae
+  row_count: 525010
+  periods_covered:
+  - '2005'
+  - '2030'
