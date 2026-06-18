@@ -50,7 +50,8 @@ jobs:
       - name: Set Pages base path
         # Project Pages serve under /<repo>; inject the base path only for the
         # published build so local dev and the CI smoke test stay at root.
-        run: printf '\ndeployment:\n  basePath: /Cairn\n' >> site/evidence.config.yaml
+        run: |
+          printf '\ndeployment:\n  basePath: /Cairn\n' >> site/evidence.config.yaml
       - name: Install site dependencies
         working-directory: site
         run: npm ci
