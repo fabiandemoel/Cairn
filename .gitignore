@@ -14,6 +14,7 @@ transform/logs/
 *.duckdb
 *.duckdb.wal
 .localstack/
+.r2cache/
 
 # Secrets / env
 .env
