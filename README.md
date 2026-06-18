@@ -291,8 +291,17 @@ The **EU ETS** source has its own quirks:
   classified by vehicle, and the few installations with a NULL operator flag are
   treated as not-confirmed-stationary and left out.
 - **The EEA bulk is an Excel workbook.** Only the data sheet is ingested (read
-  via the DuckDB `excel` extension, all-VARCHAR — the `value` column legitimately
-  mixes numbers and period labels); the manuals/PDFs in the zip are not.
+  via the DuckDB `excel` extension, all-VARCHAR); the manuals/PDFs in the zip
+  are not.
+- **The EEA `year` column mixes years with trading-period totals.** Alongside
+  per-year rows it carries aggregate rows whose `year` is a label like
+  `Total 1st trading period (05-07)`. Those are sums over years (they would
+  double-count) and are non-numeric, so `stg_eea__ets` keeps only true per-year
+  rows before casting `year` to integer.
+- **The EEA bulk has a known duplicate (Czechia).** CZ's allocated-allowances at
+  the `20-99` aggregate appears twice — a spurious `0` alongside the real value.
+  `stg_eea__ets` collapses exact-grain duplicates, keeping the larger value. It
+  sits outside the NL coverage sum, so it does not affect the benchmark.
 
 ## References & methodology
 
