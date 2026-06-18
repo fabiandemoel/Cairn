@@ -47,14 +47,21 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: site/package-lock.json
-      - name: Set Pages base path
-        # Project Pages serve under /<repo>; inject the base path only for the
-        # published build so local dev and the CI smoke test stay at root.
-        run: |
-          printf '\ndeployment:\n  basePath: /Cairn\n' >> site/evidence.config.yaml
       - name: Install site dependencies
         working-directory: site
         run: npm ci
+      - name: Generate sources from the warehouse
+        # Must run BEFORE the base path is set: `evidence sources` cannot read
+        # the DuckDB source once deployment.basePath is configured, which would
+        # silently build an empty site (the data files would be missing).
+        working-directory: site
+        run: npm run sources
+      - name: Set Pages base path
+        # Project Pages serve under /<repo>; inject the base path only for the
+        # published build so local dev and the CI smoke test stay at root. The
+        # build below reuses the sources generated in the previous step.
+        run: |
+          printf '\ndeployment:\n  basePath: /Cairn\n' >> site/evidence.config.yaml
       - name: Build site
         working-directory: site
         run: npm run build
