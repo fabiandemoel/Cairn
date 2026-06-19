@@ -3,6 +3,8 @@ title: Sector benchmark — CBS
 description: GHG emissions and share of the national total per NACE section and year.
 ---
 
+<span class="text-sm text-gray-500 dark:text-gray-400">🌐 <strong>English</strong> · <a href="/nl/sectors">Nederlands</a></span>
+
 The whole-economy **denominator**: greenhouse-gas emissions (total GHG in
 CO₂-equivalent, megatonnes) per NACE section and year, with each sector's share
 of the national total. Final (`Definitief`) CBS years only.
