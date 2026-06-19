@@ -74,6 +74,11 @@ jobs:
         run: uv sync --locked --all-groups
       - name: dbt build (fixture) -> cairn.duckdb
         run: uv run dbt build --project-dir transform
+      - name: Export ESRS E1 disclosure bundle (smoke test + site download)
+        # Runs the export end-to-end against the fixture warehouse, and writes
+        # the bundle into the site's static dir so the disclosure page's
+        # download links resolve in the strict build.
+        run: uv run python scripts/export_esrs_e1.py --out-dir site/static/downloads/esrs_e1
       - name: Set up Node
         uses: actions/setup-node@v4
         with:

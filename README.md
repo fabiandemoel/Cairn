@@ -5,17 +5,20 @@ Cairn is a queryable benchmark layer on top of official EU/NL climate data
 sector: "how do your emissions compare to the sector average?"
 
 [![Live site](https://img.shields.io/badge/live%20site-fabiandemoel.github.io%2FCairn-2563eb?logo=githubpages&logoColor=white)](https://fabiandemoel.github.io/Cairn/)
-[![Version](https://img.shields.io/badge/version-v1.0.0%20%C2%B7%20Phase%203-45a1bf)](https://github.com/fabiandemoel/Cairn)
+[![Version](https://img.shields.io/badge/version-v1.1.0%20%C2%B7%20Phase%204-45a1bf)](https://github.com/fabiandemoel/Cairn)
 
 **Live site:** <https://fabiandemoel.github.io/Cairn/>
 
-> **Status**: Phase 3 — the presentation layer. Phase 1 delivered one CBS
-> dataset end-to-end (sector averages, the *denominator*). Phase 2 added the
-> **EU ETS at installation level** (the *numerator*): per Dutch installation,
-> its verified emissions benchmarked against its NACE-sector peers. Phase 3 adds
-> the **Evidence site** (`site/`) — a read-only, queryable view over the dbt
-> marts. All run on the same architecture (ingestion, manifest-based versioning,
-> dbt, tests, CI). Still no CSRD export or agent automation.
+> **Status**: Phase 4 — the CSRD export. Phase 1 delivered one CBS dataset
+> end-to-end (sector averages, the *denominator*). Phase 2 added the **EU ETS at
+> installation level** (the *numerator*): per Dutch installation, its verified
+> emissions benchmarked against its NACE-sector peers. Phase 3 added the
+> **Evidence site** (`site/`) — a read-only, queryable view over the dbt marts.
+> Phase 4 adds the **CSRD/ESRS E1 export** (`mart_esrs_e1`) — verified EU ETS
+> emissions reframed as the ESRS E1-6 *gross Scope 1 GHG emissions* datapoint,
+> with the sector benchmark as context. All run on the same architecture
+> (ingestion, manifest-based versioning, dbt, tests, CI). Still no agent
+> automation.
 
 > **Maintainers & agents**: see [`CLAUDE.md`](CLAUDE.md) for the upkeep routine
 > (handling new CBS releases, refreshing fixtures, the classification migration
@@ -27,6 +30,7 @@ sector: "how do your emissions compare to the sector average?"
 - [Architecture principles](#architecture-principles)
 - [Local quickstart](#local-quickstart)
 - [The Evidence site](#the-evidence-site)
+- [The CSRD/ESRS E1 export](#the-csrdesrs-e1-export)
 - [Reproducibility](#reproducibility)
 - [Source quirks](#source-quirks)
 - [References & methodology](#references--methodology)
@@ -201,6 +205,32 @@ uv run python -m ingestion.eea_ets_pipeline    # -> R2 + sources/eea/manifest.ym
 Commit the resulting manifest changes in a PR (the first real ingest establishes
 the pin of record). After that, every push to `main` republishes the site from
 the pinned data.
+
+## The CSRD/ESRS E1 export
+
+[`scripts/export_esrs_e1.py`](scripts/export_esrs_e1.py) turns the
+`mart_esrs_e1` mart into a self-contained, **auditable disclosure bundle** a
+third party (an auditor, a data consumer, a regulator) can pick up on its own.
+It recomputes nothing — it reads the warehouse and writes:
+
+```bash
+# build the warehouse first (dbt build, or scripts/materialize_warehouse.py)
+uv run python scripts/export_esrs_e1.py        # -> exports/esrs_e1/
+```
+
+- `esrs_e1_disclosure.csv` — verified EU ETS emissions as the ESRS E1-6 *gross
+  Scope 1 GHG emissions* datapoint (t CO₂eq), one row per installation-year,
+  with the NACE-section benchmark as context.
+- `esrs_e1_disclosure.meta.json` — the audit trail: the EU ETS source pin
+  (release + SHA256 from the manifest), the methodology git commit, the
+  warehouse version, a data dictionary, and a SHA256 of the CSV so a consumer
+  can prove the file was not altered after export.
+- `README.md` — how to read and verify the bundle.
+
+**Scope 1 only.** ESRS E1-6 also requires Scope 2 and Scope 3; Cairn has no
+source for them, so they are omitted — never filled with placeholder figures.
+The export is generated on demand (it is git-ignored), so the disclosure always
+traces to the warehouse it was built from.
 
 ## Reproducibility
 

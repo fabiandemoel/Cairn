@@ -16,5 +16,9 @@ transform/logs/
 .localstack/
 .r2cache/
 
+# Generated disclosure exports (reproducible from the warehouse)
+exports/
+site/static/downloads/
+
 # Secrets / env
 .env
