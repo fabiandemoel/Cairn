@@ -1,19 +1,19 @@
 ---
-title: Installation benchmark — EU ETS
-description: Per NL stationary installation, its verified emissions versus its NACE-section peers.
+title: Installatiebenchmark — EU ETS
+description: Per NL stationaire installatie, de geverifieerde emissies versus de NACE-sectorpeers.
 ---
 
-<span class="text-sm text-gray-500 dark:text-gray-400">🌐 <strong>English</strong> · <a href="/nl/installations">Nederlands</a></span>
+<span class="text-sm text-gray-500 dark:text-gray-400">🌐 <a href="/installations">English</a> · <strong>Nederlands</strong></span>
 
-The installation-level **numerator**: for each NL stationary installation, its
-verified EU ETS emissions (tonnes CO₂-eq) against its NACE-section mean and
-median over the ETS population. This is the **large-emitter** benchmark — EU ETS
-covers only large emitters, not the whole economy (the [sector page](/sectors)
-carries that).
+De **teller** op installatieniveau: voor elke NL stationaire installatie de
+geverifieerde EU ETS-emissies (ton CO₂-eq) tegenover het gemiddelde en de
+mediaan van de NACE-sectie. Dit is de benchmark voor **grote uitstoters** — EU
+ETS dekt alleen grote uitstoters, niet de hele economie (de
+[sectorpagina](/nl/sectors) doet dat).
 
-Source: [euets.info](https://www.euets.info/) (reprocessed EU Transaction Log),
-cross-checked against the EEA Union Registry aggregate. Stationary installations
-only; aircraft and maritime operators excluded.
+Bron: [euets.info](https://www.euets.info/) (herverwerkt EU Transaction Log),
+gekruist met het EEA Union Registry-aggregaat. Alleen stationaire installaties;
+lucht- en zeevaartexploitanten uitgesloten.
 
 ```sql installations
 select distinct
@@ -30,7 +30,7 @@ order by installation_name
     value=installation_id
     label=installation_name
     defaultValue={installations[0].installation_id}
-    title="Select an installation"
+    title="Kies een installatie"
 />
 
 ```sql selected_latest
@@ -47,41 +47,41 @@ where installation_id = '${inputs.installation.value}'
     data={selected_latest}
     value=installation_emissions_t_co2eq
     fmt='#,##0" t"'
-    title="Verified emissions (latest year)"
+    title="Geverifieerde emissies (laatste jaar)"
 />
 
 <BigValue
     data={selected_latest}
     value=sector_mean_emissions_t_co2eq
     fmt='#,##0" t"'
-    title="Sector mean"
+    title="Sectorgemiddelde"
 />
 
 <BigValue
     data={selected_latest}
     value=emissions_vs_sector_mean
     fmt='0.0"×"'
-    title="vs. sector mean"
+    title="t.o.v. sectorgemiddelde"
 />
 
-This installation is in NACE section
+Deze installatie zit in NACE-sectie
 **<Value data={selected_latest} column=nace_section />
-(<Value data={selected_latest} column=nace_section_label />)**, benchmarked
-against **<Value data={selected_latest} column=sector_installation_count />**
-ETS installations in that section.
+(<Value data={selected_latest} column=nace_section_label />)**, gebenchmarkt
+tegen **<Value data={selected_latest} column=sector_installation_count />**
+ETS-installaties in die sectie.
 
-## This installation versus its sector, over time
+## Deze installatie versus haar sector, door de tijd
 
 ```sql selected_trend
-select year, 'This installation' as metric, installation_emissions_t_co2eq as emissions_t
+select year, 'Deze installatie' as metric, installation_emissions_t_co2eq as emissions_t
 from cairn.installation_emissions
 where installation_id = '${inputs.installation.value}'
 union all
-select year, 'Sector mean' as metric, sector_mean_emissions_t_co2eq
+select year, 'Sectorgemiddelde' as metric, sector_mean_emissions_t_co2eq
 from cairn.installation_emissions
 where installation_id = '${inputs.installation.value}'
 union all
-select year, 'Sector median' as metric, sector_median_emissions_t_co2eq
+select year, 'Sectormediaan' as metric, sector_median_emissions_t_co2eq
 from cairn.installation_emissions
 where installation_id = '${inputs.installation.value}'
 order by year
@@ -93,10 +93,10 @@ order by year
     y=emissions_t
     series=metric
     yAxisTitle="t CO₂-eq"
-    title="Verified emissions vs. NACE-section benchmark"
+    title="Geverifieerde emissies vs. NACE-sectiebenchmark"
 />
 
-## Where it ranks in its sector (latest year)
+## Waar het rangschikt in zijn sector (laatste jaar)
 
 ```sql sector_peers
 with sel as (
@@ -116,7 +116,7 @@ order by i.installation_emissions_t_co2eq desc
 ```
 
 <DataTable data={sector_peers} rows=15 rowShading={true}>
-    <Column id=installation_name title="Installation" />
-    <Column id=installation_emissions_t_co2eq title="Emissions (t CO₂-eq)" fmt='#,##0' />
-    <Column id=emissions_vs_sector_mean title="vs. sector mean" fmt='0.0"×"' contentType=colorscale />
+    <Column id=installation_name title="Installatie" />
+    <Column id=installation_emissions_t_co2eq title="Emissies (t CO₂-eq)" fmt='#,##0' />
+    <Column id=emissions_vs_sector_mean title="t.o.v. sectorgemiddelde" fmt='0.0"×"' contentType=colorscale />
 </DataTable>

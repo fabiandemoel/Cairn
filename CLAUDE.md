@@ -111,6 +111,16 @@ transforms. It reads `cairn.duckdb` (built by dbt at the repo root) via the
   query, so CI catches a drift.
 - Don't move business logic into the site. Benchmarks are computed in dbt and
   tested there; the site only shapes and displays. New numbers belong in a mart.
+- **The site is bilingual (EN + NL).** Every page under `site/pages/` has a
+  Dutch counterpart under `site/pages/nl/` sharing the same SQL (only prose and
+  component labels are translated). When you add, rename, or restructure a page,
+  do the same for its `/nl/` twin and keep both language switchers (the
+  `🌐 English · Nederlands` line at the top of each page) pointing at the right
+  partner. `build:strict` will not catch a missing translation or a dangling
+  switcher link — check it by hand.
+- **The version badge on the homepage** (`Cairn v…` on `index.md` and
+  `nl/index.md`) is kept in step with `package.json`'s `version`. Bump both
+  together when the site version changes.
 
 ### Keep references honest
 `README.md` (References & methodology) and the mart `meta.references` in

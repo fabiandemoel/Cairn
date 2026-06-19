@@ -10,10 +10,16 @@ the site.
 ## Pages
 
 - `pages/index.md` — overview + headline figures, and the auditability rules.
+  Carries a version/release badge (`Cairn v…`, kept in step with
+  `package.json`).
 - `pages/sectors.md` — CBS sector benchmark (whole-economy denominator).
 - `pages/installations.md` — EU ETS installation benchmark (large-emitter
   numerator), with a per-installation dropdown.
 - `pages/methodology.md` — provenance and limitations of every figure.
+- `pages/nl/` — a Dutch translation of all four pages. Each page carries a
+  language switcher (EN ↔ NL) at the top; the SQL queries are shared (only the
+  prose and component labels are translated). When you add or rename a page,
+  add the Dutch counterpart and update both switchers.
 
 ## Data source
 
