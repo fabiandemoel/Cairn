@@ -117,3 +117,66 @@ models:
         description: Installation emissions divided by the sector mean for the year.
         tests:
           - not_null
+
+  - name: mart_esrs_e1
+    description: >
+      ESRS E1-6 disclosure export: gross Scope 1 greenhouse-gas emissions
+      (tonnes CO2-eq) per NL stationary EU ETS installation and reporting year,
+      with the NACE-section ETS benchmark (count, mean, median, ratio) carried
+      alongside as comparative context. One row per installation per year.
+    meta:
+      source_manifest: sources/euets/manifest.yml
+      source_dataset: "eutl (euets.info)"
+      methodology: >
+        Read/relabel layer over benchmark_installation_emissions; no emissions
+        are recomputed. The verified EU ETS figure is reframed as the ESRS E1-6
+        datapoint "gross Scope 1 GHG emissions" -- EU ETS verified emissions are
+        the regulated Scope 1 figure for a covered installation. The export
+        grain is the installation (the regulated reporting boundary); an
+        undertaking operating several installations aggregates these rows.
+      known_limitations: >
+        (1) Scope 1 only -- ESRS E1-6 also requires Scope 2 and Scope 3, which
+        Cairn has no source for and deliberately does not fill with placeholders
+        (no invented figures). (2) EU ETS covers only large emitters, so the
+        population is regulated installations, not every undertaking. (3) Inherits
+        the euets.info release lag and the exclusions of the underlying mart
+        (aircraft/maritime operators, installations without a NACE code).
+      references:
+        esrs_e1: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
+        csrd_directive: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022L2464
+        installation_source: https://www.euets.info/
+        eu_ets_directive: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087
+    columns:
+      - name: esrs_e1_key
+        description: Surrogate natural key (installation_id|year).
+        tests:
+          - unique
+          - not_null
+      - name: reporting_year
+        description: ESRS reporting year (the EU ETS compliance year).
+        tests:
+          - not_null
+      - name: esrs_datapoint
+        description: ESRS datapoint identifier; constant 'E1-6'.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["E1-6"]
+      - name: ghg_scope
+        description: GHG Protocol scope of the figure; constant 'Scope 1'.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Scope 1"]
+      - name: gross_scope_1_ghg_emissions
+        description: Gross Scope 1 GHG emissions for the installation-year (t CO2-eq).
+        tests:
+          - not_null
+      - name: nace_section
+        description: NACE Rev.2 section letter the installation belongs to.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
+                 "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U"]

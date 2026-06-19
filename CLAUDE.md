@@ -28,11 +28,15 @@ auditability, which is the whole point of Cairn.
 4. **CI guards the methodology.** Tests must fail the build. Don't weaken a test
    to make a change pass; fix the change or, if the source genuinely changed,
    update the test deliberately and say so in the PR.
-5. **Phase 3 scope.** Sources: CBS + EU ETS (installation level), plus the
+5. **Phase 4 scope.** Sources: CBS + EU ETS (installation level), plus the
    **Evidence site** (`site/`) — a read-only presentation layer over the dbt
-   marts. The site must never ingest or transform; it only *reads*
-   `cairn.duckdb`. Still **no** CSRD export or agent automation — don't scaffold
-   placeholder code for them.
+   marts — plus the **CSRD/ESRS E1 export** (`mart_esrs_e1`): a read/relabel
+   mart over `benchmark_installation_emissions` that reframes verified EU ETS
+   emissions as the ESRS E1-6 "gross Scope 1 GHG emissions" datapoint. The site
+   must never ingest or transform; it only *reads* `cairn.duckdb`. The export
+   recomputes nothing and must never **invent** figures — Cairn has no Scope 2/3
+   source, so those datapoints are omitted, never filled with placeholder zeros.
+   Still **no** agent automation — don't scaffold placeholder code for it.
 
 ## Recurring maintenance (the reason this file exists)
 
@@ -114,6 +118,33 @@ transforms. It reads `cairn.duckdb` (built by dbt at the repo root) via the
 - **The version badge on the homepage** (`Cairn v…` on `index.md`) is kept in
   step with `package.json`'s `version`. Bump both together when the site version
   changes.
+
+### Working on the CSRD/ESRS E1 export (`mart_esrs_e1`)
+The export is a **read/relabel** mart over `benchmark_installation_emissions` —
+it `ref`s that mart and renames the verified EU ETS figure to the ESRS E1-6
+"gross Scope 1 GHG emissions" datapoint, carrying the sector benchmark as
+context. It computes no new emissions.
+
+`scripts/export_esrs_e1.py` ships it as the actual deliverable: it reads the
+built warehouse and writes a git-ignored bundle under `exports/esrs_e1/` (CSV +
+`meta.json` audit trail + README). The metadata chains the disclosure back to
+the EU ETS source pin, the methodology git commit, and a SHA256 of the CSV. Like
+the site, it only **reads** `cairn.duckdb` — no transform logic lives there.
+`tests/test_export_esrs_e1.py` guards the bundle (integrity hash matches, sort
+order, coverage); the `DATA_DICTIONARY` order is the CSV column contract, so if
+the mart's columns change, update both together.
+
+- **Don't recompute or aggregate emissions here.** If the underlying numbers
+  need to change, change the source mart; the export only reframes them. New
+  emission logic belongs upstream, tested there.
+- **Never invent missing datapoints.** ESRS E1-6 also wants Scope 2/3; Cairn
+  has no source for them, so they are **omitted**, not zero-filled. If a real
+  Scope 2/3 source is ever added, model it upstream and surface it as its own
+  datapoint rows — don't synthesize figures.
+- The `esrs_datapoint`/`ghg_scope`/`unit` literals make the export
+  self-describing; their `accepted_values` tests pin them. If the ESRS
+  taxonomy version or datapoint id changes, update the literals and those tests
+  together.
 
 ### Keep references honest
 `README.md` (References & methodology) and the mart `meta.references` in

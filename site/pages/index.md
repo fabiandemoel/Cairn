@@ -3,7 +3,7 @@ title: Cairn
 description: A queryable, auditable benchmark layer over official EU/NL climate data.
 ---
 
-<a href="https://github.com/fabiandemoel/Cairn" class="inline-flex items-center gap-1.5 rounded-full border border-gray-300 dark:border-gray-700 px-2.5 py-0.5 text-sm text-gray-600 dark:text-gray-300 no-underline hover:border-gray-400 dark:hover:border-gray-500"><span class="font-medium">Cairn v1.0.0</span><span class="text-gray-400">·</span><span>Phase 3</span></a>
+<a href="https://github.com/fabiandemoel/Cairn" class="inline-flex items-center gap-1.5 rounded-full border border-gray-300 dark:border-gray-700 px-2.5 py-0.5 text-sm text-gray-600 dark:text-gray-300 no-underline hover:border-gray-400 dark:hover:border-gray-500"><span class="font-medium">Cairn v1.1.0</span><span class="text-gray-400">·</span><span>Phase 4</span></a>
 
 Cairn turns scattered official climate data into an auditable, queryable
 benchmark. It answers, per sector: **"how do your emissions compare to the
@@ -93,3 +93,7 @@ from its source:
 
 See **[Methodology & sources →](/methodology)** for the full provenance of
 every figure on this site.
+
+That auditability is the point of the **[CSRD / ESRS E1 disclosure →](/disclosure)**:
+verified EU ETS emissions as the ESRS E1-6 *gross Scope 1 GHG emissions*
+datapoint, downloadable as a self-contained, audit-traceable bundle.

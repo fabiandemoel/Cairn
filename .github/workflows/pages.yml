@@ -41,6 +41,11 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: uv run python scripts/materialize_warehouse.py
+      - name: Export ESRS E1 disclosure bundle
+        # Generate the auditable CSRD/ESRS E1 bundle from the same R2-pinned
+        # warehouse and place it in the site's static dir, so the published
+        # disclosure page offers a download that traces to the pinned release.
+        run: uv run python scripts/export_esrs_e1.py --out-dir site/static/downloads/esrs_e1
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
