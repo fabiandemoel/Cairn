@@ -3,8 +3,6 @@ title: Cairn
 description: A queryable, auditable benchmark layer over official EU/NL climate data.
 ---
 
-<span class="text-sm text-gray-500 dark:text-gray-400">🌐 <strong>English</strong> · <a href="/nl/">Nederlands</a></span>
-
 <a href="https://github.com/fabiandemoel/Cairn" class="inline-flex items-center gap-1.5 rounded-full border border-gray-300 dark:border-gray-700 px-2.5 py-0.5 text-sm text-gray-600 dark:text-gray-300 no-underline hover:border-gray-400 dark:hover:border-gray-500"><span class="font-medium">Cairn v1.0.0</span><span class="text-gray-400">·</span><span>Phase 3</span></a>
 
 Cairn turns scattered official climate data into an auditable, queryable

@@ -3,8 +3,6 @@ title: Installation benchmark — EU ETS
 description: Per NL stationary installation, its verified emissions versus its NACE-section peers.
 ---
 
-<span class="text-sm text-gray-500 dark:text-gray-400">🌐 <strong>English</strong> · <a href="/nl/installations">Nederlands</a></span>
-
 The installation-level **numerator**: for each NL stationary installation, its
 verified EU ETS emissions (tonnes CO₂-eq) against its NACE-section mean and
 median over the ETS population. This is the **large-emitter** benchmark — EU ETS
