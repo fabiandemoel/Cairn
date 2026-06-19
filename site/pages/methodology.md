@@ -3,8 +3,6 @@ title: Methodology & sources
 description: The provenance and limitations behind every figure on this site.
 ---
 
-<span class="text-sm text-gray-500 dark:text-gray-400">🌐 <strong>English</strong> · <a href="/nl/methodology">Nederlands</a></span>
-
 Cairn exists to be **auditable**. Every number on this site traces back to a
 versioned, pinned official source, transformed by reviewed code. This page
 records the provenance and the known limitations — read it before quoting a

@@ -7,8 +7,7 @@ sector: "how do your emissions compare to the sector average?"
 [![Live site](https://img.shields.io/badge/live%20site-fabiandemoel.github.io%2FCairn-2563eb?logo=githubpages&logoColor=white)](https://fabiandemoel.github.io/Cairn/)
 [![Version](https://img.shields.io/badge/version-v1.0.0%20%C2%B7%20Phase%203-45a1bf)](https://github.com/fabiandemoel/Cairn)
 
-**Live site:** <https://fabiandemoel.github.io/Cairn/> (English ·
-[Nederlands](https://fabiandemoel.github.io/Cairn/nl/)).
+**Live site:** <https://fabiandemoel.github.io/Cairn/>
 
 > **Status**: Phase 3 — the presentation layer. Phase 1 delivered one CBS
 > dataset end-to-end (sector averages, the *denominator*). Phase 2 added the
@@ -178,9 +177,8 @@ every figure. See [`site/README.md`](site/README.md) for details.
 
 ### Live deployment (GitHub Pages)
 
-The site is live at **<https://fabiandemoel.github.io/Cairn/>** (with a Dutch
-version at [`/nl/`](https://fabiandemoel.github.io/Cairn/nl/); a language switcher
-and a version badge sit at the top of each page).
+The site is live at **<https://fabiandemoel.github.io/Cairn/>** (a version badge
+sits at the top of the homepage).
 
 The [`pages.yml`](.github/workflows/pages.yml) workflow publishes the site to
 GitHub Pages on every push to `main`. It does **not** use the committed fixtures:
