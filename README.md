@@ -4,10 +4,10 @@ Cairn is a queryable benchmark layer on top of official EU/NL climate data
 (CBS, EEA, EU ETS). It connects fragmented public sources and answers, per
 sector: "how do your emissions compare to the sector average?"
 
-[![Live site](https://img.shields.io/badge/live%20site-fabiandemoel.github.io%2FCairn-2563eb?logo=githubpages&logoColor=white)](https://fabiandemoel.github.io/Cairn/)
+[![Live site](https://img.shields.io/badge/live%20site-cairn.fabiandemoel.net-2563eb?logo=githubpages&logoColor=white)](https://cairn.fabiandemoel.net/)
 [![Version](https://img.shields.io/badge/version-v1.1.0%20%C2%B7%20Phase%204-45a1bf)](https://github.com/fabiandemoel/Cairn)
 
-**Live site:** <https://fabiandemoel.github.io/Cairn/>
+**Live site:** <https://cairn.fabiandemoel.net/>
 
 > **Status**: Phase 4 — the CSRD export. Phase 1 delivered one CBS dataset
 > end-to-end (sector averages, the *denominator*). Phase 2 added the **EU ETS at
@@ -181,8 +181,8 @@ every figure. See [`site/README.md`](site/README.md) for details.
 
 ### Live deployment (GitHub Pages)
 
-The site is live at **<https://fabiandemoel.github.io/Cairn/>** (a version badge
-sits at the top of the homepage).
+The site is live at **<https://cairn.fabiandemoel.net/>** (a version badge
+sits at the top of the homepage), served from GitHub Pages on a custom subdomain.
 
 The [`pages.yml`](.github/workflows/pages.yml) workflow publishes the site to
 GitHub Pages on every push to `main`. It does **not** use the committed fixtures:
@@ -192,6 +192,12 @@ manifest**, and builds the warehouse from that — so the published numbers carr
 the same provenance guarantee as the reproducibility check. It fails loudly if
 the `R2_*` secrets are absent or any source is unpinned, so the site is never
 published from incomplete or unverified data.
+
+The site is served at the **root** of the custom subdomain
+`cairn.fabiandemoel.net` (no base path), pinned by
+[`site/static/CNAME`](site/static/CNAME) — Evidence copies it into the build, so
+each Actions deploy reapplies the custom domain. DNS: a `CNAME` record for
+`cairn` → `fabiandemoel.github.io`.
 
 **Prerequisite — pin EU ETS in R2.** CBS is already pinned; the two EU ETS
 sources are not. Establish their pins once (with R2 creds), which the deploy then
