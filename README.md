@@ -199,18 +199,19 @@ The site is served at the **root** of the custom subdomain
 each Actions deploy reapplies the custom domain. DNS: a `CNAME` record for
 `cairn` → `fabiandemoel.github.io`.
 
-**Prerequisite — pin EU ETS in R2.** CBS is already pinned; the two EU ETS
-sources are not. Establish their pins once (with R2 creds), which the deploy then
-builds from:
+All three sources are pinned to R2 (CBS `85669NED`, euets.info, and the EEA
+bulk), so every push to `main` republishes the site from the pinned data. When a
+source publishes a new release, re-run its pipeline to establish the new pin and
+commit the manifest change in a PR — see the per-source checklists in
+[`CLAUDE.md`](CLAUDE.md):
 
 ```bash
 uv run python -m ingestion.euets_pipeline      # -> R2 + sources/euets/manifest.yml
 uv run python -m ingestion.eea_ets_pipeline    # -> R2 + sources/eea/manifest.yml
 ```
 
-Commit the resulting manifest changes in a PR (the first real ingest establishes
-the pin of record). After that, every push to `main` republishes the site from
-the pinned data.
+Each pipeline is idempotent — it exits "no new release" if the current release
+is already pinned, so it is safe to re-run.
 
 ## The CSRD/ESRS E1 export
 
