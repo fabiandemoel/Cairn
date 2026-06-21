@@ -8,13 +8,8 @@ description: An auditable, queryable benchmark over official EU/NL climate data 
 <a href="https://github.com/fabiandemoel/Cairn" class="inline-flex items-center gap-1.5 rounded-full border border-gray-300 dark:border-gray-700 px-2.5 py-0.5 text-sm text-gray-600 dark:text-gray-300 no-underline hover:border-gray-400 dark:hover:border-gray-500"><span class="font-medium">Cairn v1.1.0</span><span class="text-gray-400">·</span><span>Phase 4</span></a>
 </div>
 
-Cairn turns scattered official climate data into an auditable, queryable
-benchmark. It answers, per sector — *"how do your emissions compare to the
-sector average?"* — and, more to the point, lets you **prove every figure back
-to a versioned, pinned official source.**
-
-For sustainability teams, auditors, and software vendors who need a climate
-figure they can defend to a third party — not just a dashboard.
+**Cairn turns public climate data into auditable, reproducible datasets with
+full lineage.**
 
 ```sql sector_headline
 select
@@ -54,6 +49,12 @@ from cairn.installation_emissions
     comparisonTitle="year"
     comparisonFmt='0'
 />
+
+We build reproducible climate datasets from official public sources with
+complete lineage — CSRD/ESRS reporting is one application.
+
+For sustainability teams, auditors, and software vendors who need to prove every
+number back to an official source.
 
 ## The two benchmarks
 
@@ -100,7 +101,6 @@ from its source:
 See **[Methodology & sources →](/methodology)** for the full provenance of
 every figure on this site.
 
-CSRD reporting is one application of that auditability: the
-**[CSRD / ESRS E1 disclosure →](/disclosure)** provides verified EU ETS
-emissions as the verified basis for the ESRS E1-6 *gross Scope 1 GHG emissions*
-datapoint, downloadable as a self-contained, audit-traceable bundle.
+The **[CSRD / ESRS E1 disclosure →](/disclosure)** supports ESRS E1-6 reporting
+by providing an auditable source for the verified Scope 1 emissions of EU ETS
+installations — downloadable as a self-contained, audit-traceable bundle.
