@@ -104,3 +104,11 @@ every figure on this site.
 The **[CSRD / ESRS E1 disclosure →](/disclosure)** supports ESRS E1-6 reporting
 by providing an auditable source for the verified Scope 1 emissions of EU ETS
 installations — downloadable as a self-contained, audit-traceable bundle.
+
+<Alert status="info">
+
+**What Cairn is not.** A verified data source, not a reporting product — not a
+CSRD reporting platform, not a double-materiality assessment, not Scope 2/3
+calculation, not an assurance opinion, and not legal advice.
+
+</Alert>
