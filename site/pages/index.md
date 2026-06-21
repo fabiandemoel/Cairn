@@ -3,7 +3,10 @@ title: Cairn
 description: An auditable, queryable benchmark over official EU/NL climate data — every figure traces back to a pinned official source.
 ---
 
+<div class="flex flex-wrap items-center gap-2">
+<a href="https://fabiandemoel.nl" class="inline-flex items-center gap-1.5 rounded-full bg-blue-600 dark:bg-blue-500 px-3 py-1 text-sm font-medium text-white no-underline shadow-sm transition-colors hover:bg-blue-700 dark:hover:bg-blue-600"><span aria-hidden="true">←</span><span>Back to fabiandemoel.nl</span></a>
 <a href="https://github.com/fabiandemoel/Cairn" class="inline-flex items-center gap-1.5 rounded-full border border-gray-300 dark:border-gray-700 px-2.5 py-0.5 text-sm text-gray-600 dark:text-gray-300 no-underline hover:border-gray-400 dark:hover:border-gray-500"><span class="font-medium">Cairn v1.1.0</span><span class="text-gray-400">·</span><span>Phase 4</span></a>
+</div>
 
 Cairn turns scattered official climate data into an auditable, queryable
 benchmark. It answers, per sector — *"how do your emissions compare to the
