@@ -31,8 +31,9 @@ auditability, which is the whole point of Cairn.
 5. **Phase 4 scope.** Sources: CBS + EU ETS (installation level), plus the
    **Evidence site** (`site/`) — a read-only presentation layer over the dbt
    marts — plus the **CSRD/ESRS E1 export** (`mart_esrs_e1`): a read/relabel
-   mart over `benchmark_installation_emissions` that reframes verified EU ETS
-   emissions as the ESRS E1-6 "gross Scope 1 GHG emissions" datapoint. The site
+   mart over `benchmark_installation_emissions` that provides verified EU ETS
+   emissions as the verified basis for the ESRS E1-6 "gross Scope 1 GHG
+   emissions" datapoint. The site
    must never ingest or transform; it only *reads* `cairn.duckdb`. The export
    recomputes nothing and must never **invent** figures — Cairn has no Scope 2/3
    source, so those datapoints are omitted, never filled with placeholder zeros.
