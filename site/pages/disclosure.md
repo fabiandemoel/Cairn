@@ -1,6 +1,6 @@
 ---
 title: CSRD / ESRS E1 disclosure
-description: Verified EU ETS emissions as the ESRS E1-6 gross Scope 1 GHG emissions datapoint, with an auditable download.
+description: Verified EU ETS emissions provided as the verified basis for the ESRS E1-6 gross Scope 1 GHG emissions datapoint, with an auditable download.
 ---
 
 The **CSRD/ESRS E1-6** disclosure: for each NL stationary EU ETS installation

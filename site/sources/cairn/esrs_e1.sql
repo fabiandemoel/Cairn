@@ -1,6 +1,7 @@
 -- CSRD/ESRS E1 disclosure: per NL stationary EU ETS installation and reporting
--- year, its verified emissions reframed as the ESRS E1-6 "gross Scope 1 GHG
--- emissions" datapoint, with the NACE-section benchmark as context. Source mart:
+-- year, its verified emissions provided as the verified basis for the
+-- ESRS E1-6 "gross Scope 1 GHG emissions" datapoint, with the NACE-section
+-- benchmark as context. Source mart:
 -- mart_esrs_e1 (a read/relabel over benchmark_installation_emissions). The
 -- downloadable, auditable bundle is produced by scripts/export_esrs_e1.py.
 select

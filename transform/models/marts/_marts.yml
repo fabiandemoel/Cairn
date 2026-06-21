@@ -129,9 +129,10 @@ models:
       source_dataset: "eutl (euets.info)"
       methodology: >
         Read/relabel layer over benchmark_installation_emissions; no emissions
-        are recomputed. The verified EU ETS figure is reframed as the ESRS E1-6
-        datapoint "gross Scope 1 GHG emissions" -- EU ETS verified emissions are
-        the regulated Scope 1 figure for a covered installation. The export
+        are recomputed. The verified EU ETS figure is provided as the verified
+        basis for the ESRS E1-6 datapoint "gross Scope 1 GHG emissions" -- the
+        two usually align, but can diverge on organisational boundary,
+        consolidation scope, and emission sources outside the ETS. The export
         grain is the installation (the regulated reporting boundary); an
         undertaking operating several installations aggregates these rows.
       known_limitations: >

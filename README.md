@@ -1,8 +1,10 @@
 # Cairn
 
-Cairn is a queryable benchmark layer on top of official EU/NL climate data
-(CBS, EEA, EU ETS). It connects fragmented public sources and answers, per
-sector: "how do your emissions compare to the sector average?"
+Cairn builds reproducible climate datasets from official EU/NL public sources
+(CBS, EEA, EU ETS) with full lineage — every figure traces back to a versioned,
+pinned source. It answers, per sector: "how do your emissions compare to the
+sector average?", and supports ESRS E1-6 reporting as one application of that
+auditability.
 
 [![Live site](https://img.shields.io/badge/live%20site-cairn.fabiandemoel.net-2563eb?logo=githubpages&logoColor=white)](https://cairn.fabiandemoel.net/)
 [![Version](https://img.shields.io/badge/version-v1.1.0%20%C2%B7%20Phase%204-45a1bf)](https://github.com/fabiandemoel/Cairn)
@@ -15,8 +17,9 @@ sector: "how do your emissions compare to the sector average?"
 > emissions benchmarked against its NACE-sector peers. Phase 3 added the
 > **Evidence site** (`site/`) — a read-only, queryable view over the dbt marts.
 > Phase 4 adds the **CSRD/ESRS E1 export** (`mart_esrs_e1`) — verified EU ETS
-> emissions reframed as the ESRS E1-6 *gross Scope 1 GHG emissions* datapoint,
-> with the sector benchmark as context. All run on the same architecture
+> emissions provided as the verified basis for the ESRS E1-6 *gross Scope 1 GHG
+> emissions* datapoint, with the sector benchmark as context. All run on the
+> same architecture
 > (ingestion, manifest-based versioning, dbt, tests, CI). Still no agent
 > automation.
 
@@ -39,8 +42,10 @@ sector: "how do your emissions compare to the sector average?"
 
 ## What Cairn is
 
-Cairn turns scattered official climate data into an auditable, queryable
-benchmark. It now ingests two sources end-to-end.
+Cairn builds reproducible climate datasets from official public sources with
+complete lineage. CSRD/ESRS reporting is one application of that auditability —
+the same data answers, per sector: "how do your emissions compare to the
+sector average?" It now ingests two sources end-to-end.
 
 **Source 1 — CBS (sector averages, the denominator).**
 
@@ -225,9 +230,9 @@ It recomputes nothing — it reads the warehouse and writes:
 uv run python scripts/export_esrs_e1.py        # -> exports/esrs_e1/
 ```
 
-- `esrs_e1_disclosure.csv` — verified EU ETS emissions as the ESRS E1-6 *gross
-  Scope 1 GHG emissions* datapoint (t CO₂eq), one row per installation-year,
-  with the NACE-section benchmark as context.
+- `esrs_e1_disclosure.csv` — verified EU ETS emissions provided as the verified
+  basis for the ESRS E1-6 *gross Scope 1 GHG emissions* datapoint (t CO₂eq), one
+  row per installation-year, with the NACE-section benchmark as context.
 - `esrs_e1_disclosure.meta.json` — the audit trail: the EU ETS source pin
   (release + SHA256 from the manifest), the methodology git commit, the
   warehouse version, a data dictionary, and a SHA256 of the CSV so a consumer
