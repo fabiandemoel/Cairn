@@ -252,9 +252,10 @@ This bundle is a machine-readable **{disc["datapoint"]}** disclosure under
 
 ## What it contains
 
-Verified EU ETS emissions reframed as the ESRS E1-6 *gross Scope 1 GHG
-emissions* datapoint (in tonnes CO2-equivalent), with each installation's
-NACE-section benchmark (count, mean, median, ratio) alongside as context.
+Verified EU ETS emissions provided as the verified basis for the ESRS E1-6
+*gross Scope 1 GHG emissions* datapoint (in tonnes CO2-equivalent), with each
+installation's NACE-section benchmark (count, mean, median, ratio) alongside
+as context.
 
 - Coverage: {cov["row_count"]} rows, {cov["installation_count"]} installations,
   reporting years {years[0]}-{years[1]}.

@@ -3,12 +3,13 @@
 -- section ETS benchmark carried alongside as comparative context.
 --
 -- This is a read/relabel layer on top of benchmark_installation_emissions: it
--- does NOT recompute emissions. It reframes the already-verified EU ETS figure
--- as the ESRS E1-6 datapoint "gross Scope 1 GHG emissions". EU ETS verified
--- emissions are the regulated Scope 1 figure for a covered installation
--- (combustion + process emissions at the site). Scope 2 and Scope 3 are out of
--- source scope -- Cairn has no basis to compute them, so they are deliberately
--- not emitted rather than filled with placeholder zeros (no invented figures).
+-- does NOT recompute emissions. It provides the already-verified EU ETS figure
+-- as the verified basis for the ESRS E1-6 datapoint "gross Scope 1 GHG
+-- emissions" -- the two usually align, but can diverge on organisational
+-- boundary, consolidation scope, and emission sources outside the ETS. Scope 2
+-- and Scope 3 are out of source scope -- Cairn has no basis to compute them, so
+-- they are deliberately not emitted rather than filled with placeholder zeros
+-- (no invented figures).
 --
 -- Scope / methodology inherited from benchmark_installation_emissions:
 --   * NL registry, 'euets' trading system, stationary installations only,
