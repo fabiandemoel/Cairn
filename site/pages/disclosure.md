@@ -4,14 +4,30 @@ description: Verified EU ETS emissions as the ESRS E1-6 gross Scope 1 GHG emissi
 ---
 
 The **CSRD/ESRS E1-6** disclosure: for each NL stationary EU ETS installation
-and reporting year, its verified emissions reframed as the *gross Scope 1
-greenhouse-gas emissions* datapoint (tonnes CO₂-eq), with the
+and reporting year, its verified emissions provided as the verified basis for
+the *gross Scope 1 greenhouse-gas emissions* datapoint (tonnes CO₂-eq), with the
 [NACE-section benchmark](/installations) carried alongside as context.
 
 This is a read/relabel over the installation benchmark — no figures are
 recomputed. **Scope 1 only**: ESRS E1-6 also requires Scope 2 and Scope 3, which
 Cairn has no source for, so they are omitted — never filled with placeholder
 figures.
+
+**Verified ETS ≠ ESRS Scope 1, exactly.** The two usually align, but the EU ETS
+verified figure and an entity's reported Scope 1 can diverge on organisational
+boundary, consolidation scope, and emission sources outside the ETS. Cairn
+supplies the verified ETS basis for the datapoint — not a finished,
+entity-level Scope 1 figure.
+
+<Alert status="info">
+
+**What Cairn is not.** Cairn is a verified data source, not a reporting product.
+It is not a CSRD reporting platform, not a double-materiality assessment, not
+Scope 2/3 calculation, not an assurance opinion, not an ESRS reporting engine,
+and not legal advice. It supplies one auditable datapoint; the disclosure built
+around it remains the reporter's responsibility.
+
+</Alert>
 
 ## Download the disclosure bundle
 

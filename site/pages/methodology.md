@@ -16,9 +16,10 @@ figure.
 | **euets.info** | Installation benchmark (large-emitter numerator) | Reprocessed EU Transaction Log, per-installation verified emissions + native NACE | `sources/euets/manifest.yml` |
 | **EEA Union Registry** | Cross-check & denominator | Official aggregate by country × activity × year | `sources/eea/manifest.yml` |
 
-Each source's exact release is pinned by `sha256` in an append-only manifest.
-A weekly CI job re-verifies the pinned raw files; a change is an integrity alarm,
-not flakiness.
+Each source's exact release is pinned by `sha256` in an append-only manifest —
+in plain terms, every source file is cryptographically fingerprinted, so we can
+prove exactly which official dataset produced each number. A weekly CI job
+re-verifies the pinned raw files; a change is an integrity alarm, not flakiness.
 
 ## Sector benchmark (CBS) — method & limitations
 

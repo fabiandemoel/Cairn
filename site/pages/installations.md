@@ -68,6 +68,16 @@ This installation is in NACE section
 against **<Value data={selected_latest} column=sector_installation_count />**
 ETS installations in that section.
 
+<Alert status="info">
+
+A multiple above or below the sector mean is **context, not a verdict**. A
+higher figure can reflect larger production volume, an older installation, a
+different production process, or lower efficiency — not necessarily worse
+performance. Read it alongside the trend and the sector ranking below. Note
+also that euets.info lags the latest EEA release (data to ~2023).
+
+</Alert>
+
 ## This installation versus its sector, over time
 
 ```sql selected_trend
