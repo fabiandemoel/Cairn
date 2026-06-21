@@ -11,6 +11,15 @@ Source: CBS StatLine [`85669NED`](https://opendata.cbs.nl/statline/#/CBS/nl/data
 IPCC method. See [Methodology & sources](/methodology) for limitations (notably
 the ~30–35% `UNMAPPED` share CBS does not attribute to a single NACE section).
 
+<Alert status="info">
+
+**Why ~30–35% is `UNMAPPED`.** Households, land use, transport, and the CBS G–U
+services aggregate are not attributed by CBS to a single NACE section. They are
+still counted in the national total — just not sector-attributed, so sector
+shares sum to roughly two-thirds of the national figure by design.
+
+</Alert>
+
 ```sql emissions_over_time
 select
     year,

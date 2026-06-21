@@ -1,14 +1,17 @@
 ---
 title: Cairn
-description: A queryable, auditable benchmark layer over official EU/NL climate data.
+description: An auditable, queryable benchmark over official EU/NL climate data — every figure traces back to a pinned official source.
 ---
 
 <a href="https://github.com/fabiandemoel/Cairn" class="inline-flex items-center gap-1.5 rounded-full border border-gray-300 dark:border-gray-700 px-2.5 py-0.5 text-sm text-gray-600 dark:text-gray-300 no-underline hover:border-gray-400 dark:hover:border-gray-500"><span class="font-medium">Cairn v1.1.0</span><span class="text-gray-400">·</span><span>Phase 4</span></a>
 
 Cairn turns scattered official climate data into an auditable, queryable
-benchmark. It answers, per sector: **"how do your emissions compare to the
-sector average?"** — and every figure traces back to a versioned, pinned
-official source.
+benchmark. It answers, per sector — *"how do your emissions compare to the
+sector average?"* — and, more to the point, lets you **prove every figure back
+to a versioned, pinned official source.**
+
+For sustainability teams, auditors, and software vendors who need a climate
+figure they can defend to a third party — not just a dashboard.
 
 ```sql sector_headline
 select
@@ -94,6 +97,7 @@ from its source:
 See **[Methodology & sources →](/methodology)** for the full provenance of
 every figure on this site.
 
-That auditability is the point of the **[CSRD / ESRS E1 disclosure →](/disclosure)**:
-verified EU ETS emissions as the ESRS E1-6 *gross Scope 1 GHG emissions*
+CSRD reporting is one application of that auditability: the
+**[CSRD / ESRS E1 disclosure →](/disclosure)** provides verified EU ETS
+emissions as the verified basis for the ESRS E1-6 *gross Scope 1 GHG emissions*
 datapoint, downloadable as a self-contained, audit-traceable bundle.
