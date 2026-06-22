@@ -1,0 +1,93 @@
+name: Cairn Implement
+
+# Runs only when YOU label an issue `approved` (or via manual dispatch with an
+# issue number). It implements that one issue on a branch and opens a PR against
+# main. It does NOT merge. Your existing CI (lint, test, dbt-build, evidence-build,
+# benchmark-diff) is the gate; you review the benchmark diff and merge.
+#
+# IMPORTANT â€” token: the PR must be opened with a PAT / GitHub-App token
+# (secrets.CAIRN_BOT_TOKEN), NOT the default GITHUB_TOKEN. GitHub deliberately does
+# not fire workflows for events created by GITHUB_TOKEN, so a PR opened with it
+# would skip ci.yml and you'd lose the gate. Create a fine-grained PAT (contents +
+# pull_requests: write) or use the app token from `/install-github-app`, and store
+# it as CAIRN_BOT_TOKEN. Confirm the action's token input name against its README.
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to implement"
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: cairn-implement
+  cancel-in-progress: false
+
+jobs:
+  implement:
+    # Only the `approved` label triggers this; ignore every other label event.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.label.name == 'approved'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CAIRN_BOT_TOKEN }}
+
+      # Toolchain available + cached so Claude's build/test commands are fast.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.CAIRN_BOT_TOKEN }}
+          claude_args: "--max-turns 60"
+          prompt: |
+            Read CLAUDE.md and BACKLOG.md first; they are authoritative and the
+            non-negotiable invariants override anything in this prompt.
+
+            Implement issue
+            #${{ github.event.issue.number || github.event.inputs.issue_number }}.
+
+            - If it is a `data-refresh` issue, follow the matching CLAUDE.md
+              "Recurring maintenance" checklist exactly (idempotent ingest, new
+              append-only snapshot, refresh CI fixtures, bump release dirs, re-check
+              the assumptions the models lean on). Never weaken a test to pass.
+            - If it is a `feat` issue, implement the corresponding BACKLOG.md
+              candidate within its stated scope and "watch" caveats. New numbers go
+              in a dbt mart (tested there); the site/export only read. Never invent
+              figures â€” real source categories or explicit NULL + a note. New source
+              => its own append-only manifest under sources/.
+
+            Work on a branch named `agent/<short-slug>`. Before opening the PR, run
+            and pass locally what CI runs:
+              uv sync --locked --all-groups
+              uv run ruff check . && uv run ruff format --check .
+              uv run sqlfluff lint transform/models transform/tests
+              uv run pytest -q
+              uv run dbt build --project-dir transform
+              cd site && npm ci && npm run build:strict
+            Use conventional commits, one logical change per commit.
+
+            Open ONE pull request against `main`. In the description: link the issue,
+            summarise the change, state the data/methodology impact, and list any
+            assumption you made. Do NOT merge. If you cannot make CI pass within
+            scope, open a draft PR explaining exactly what blocks it instead of
+            forcing it green.
