@@ -32,7 +32,12 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Keep it short and cheap: read + curl only, no env build, no file edits.
-          claude_args: "--max-turns 12"
+          # The action denies Bash and MCP tool calls by default; without this
+          # allowlist, scout can't run its freshness curls or actually open issues
+          # (it still exits 0, since a denied tool call isn't a Claude Code error).
+          claude_args: >-
+            --max-turns 12
+            --allowedTools "Bash(curl:*),mcp__github__list_issues,mcp__github__issue_write"
           prompt: |
             You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
             are authoritative. Do NOT edit any file and do NOT open a pull request.
