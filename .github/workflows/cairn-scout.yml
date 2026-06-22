@@ -16,6 +16,7 @@ on:
 permissions:
   contents: read
   issues: write
+  id-token: write   # vereist: action haalt hiermee de OIDC-token op voor de Claude-app
 
 concurrency:
   group: cairn-scout
