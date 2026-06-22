@@ -1,0 +1,56 @@
+name: Cairn Replenish
+
+# Weekly backlog curator. Proposes new candidates, re-scores existing ones, and
+# retires dead/off-spine ideas to "Considered and rejected" â€” as a docs-only PR
+# touching ONLY BACKLOG.md. You merge it; your merge is the curation step (a menu
+# a bot can silently rewrite is no longer curated). Uses CAIRN_BOT_TOKEN so the PR
+# triggers CI under branch protection; ci.yml is wasteful on a docs-only change but
+# harmless â€” add a paths-ignore filter to ci.yml if you want to skip it.
+
+on:
+  schedule:
+    - cron: "42 6 * * 4"   # Thursday 06:42 UTC (clear of the Mon reproducibility cron)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+concurrency:
+  group: cairn-replenish
+  cancel-in-progress: true
+
+jobs:
+  replenish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CAIRN_BOT_TOKEN }}
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.CAIRN_BOT_TOKEN }}
+          claude_args: "--max-turns 20"
+          prompt: |
+            You are Cairn's backlog curator. Read CLAUDE.md, all of BACKLOG.md
+            (including "Considered and rejected"), and the open + recently closed
+            issues and PRs. Edit ONLY BACKLOG.md. Do not touch any other file.
+
+            Then, as a docs-only change:
+            - Propose at most 3 NEW candidates that pass every "Rules of the game"
+              admission test. Score each (Value / Effort / Spine-fit) with the same
+              rubric, add the "watch" caveats and the repo paths it would touch.
+            - Re-rank "Live candidates" by value, then spine-fit, then inverse effort.
+            - Move any candidate that has shipped, been rejected in review, or
+              drifted off-spine into "Considered and rejected" WITH the reason.
+            - Do NOT re-propose anything already in "Considered and rejected".
+            - Keep at most ~15 live candidates.
+
+            Open ONE pull request against `main` from branch
+            `replenish/<YYYY-MM-DD>`, titled "chore(backlog): weekly replenish".
+            In the description, summarise what you added, re-scored, and retired,
+            and why. Do NOT merge. If nothing meaningfully changed, say so and open
+            no PR.

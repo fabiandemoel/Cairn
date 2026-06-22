@@ -1,0 +1,61 @@
+name: Cairn Scout
+
+# Daily, cheap, read-only. Two jobs in one prompt:
+#   1. Detect whether an upstream source published a new release (the freshness
+#      signals are documented in CLAUDE.md: CBS 85669NED `Modified` date,
+#      euets.info zip token, EEA datashare token) vs the pins in sources/*/manifest.yml.
+#   2. Dispatch the top of BACKLOG.md "Live candidates".
+# Output is GitHub issues only â€” never code, never a PR. A human triages them and
+# adds the `approved` label to hand one to Cairn Implement.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"   # daily 06:17 UTC (off the top of the hour; runners lag there)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: cairn-scout
+  cancel-in-progress: true
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Keep it short and cheap: read + curl only, no env build, no file edits.
+          claude_args: "--max-turns 12"
+          prompt: |
+            You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
+            are authoritative. Do NOT edit any file and do NOT open a pull request.
+
+            Two tasks:
+
+            1. UPSTREAM FRESHNESS. For each source, compare the live upstream release
+               token against the pin in its manifest, using the exact signals
+               documented in CLAUDE.md's "Recurring maintenance" runbooks:
+                 - CBS 85669NED: the OData `Properties` `Modified` date vs
+                   sources/cbs/manifest.yml.
+                 - euets.info: the current zip filename token vs sources/euets/manifest.yml.
+                 - EEA bulk: the datashare token vs sources/eea/manifest.yml.
+               Use curl only (no env build). If a source has a NEWER release than the
+               pin, open ONE issue titled "data: <source> new release <token>",
+               labelled `proposal` and `data-refresh`, body referencing the relevant
+               CLAUDE.md checklist. If a similar open issue already exists, skip it.
+
+            2. BACKLOG DISPATCH. Take the single highest item in BACKLOG.md "Live
+               candidates" that has no corresponding open issue. Open ONE issue
+               titled "feat: <candidate name>", labelled `proposal`, summarising the
+               candidate, its value/effort/spine-fit, the "watch" caveats, and the
+               repo paths it touches â€” straight from the backlog entry.
+
+            Open at most 3 issues total. Before opening anything, list current open
+            issues and skip duplicates. If nothing is new and the top candidate is
+            already tracked, do nothing and say so.
