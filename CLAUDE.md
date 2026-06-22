@@ -165,22 +165,29 @@ which is a real integrity alarm, not flakiness.
 Three scheduled workflows run Claude against this repo. They never bypass the
 invariants above, and the existing CI (lint, test, dbt-build, evidence-build,
 benchmark-diff) is the gate for every code change.
-cairn-scout.yml (daily) — read-only. Checks each source's upstream
-release token (the freshness signals documented above) against
-sources/*/manifest.yml, and dispatches the top of BACKLOG.md. Output is
-GitHub issues labelled proposal — never code, never a PR.
-cairn-implement.yml — runs only when a human adds the approved label to
-an issue (or via manual dispatch). Implements that one issue on an agent/*
-branch and opens a PR against main. It must pass the full local CI command set
-before opening the PR, and it never merges. PRs are opened with CAIRN_BOT_TOKEN
-(not GITHUB_TOKEN) so CI actually fires on them.
-cairn-replenish.yml (weekly) — curates BACKLOG.md only, as a docs-only
-PR: new candidates, re-scoring, retiring off-spine ideas to "Considered and
-rejected". Never merges.
+
+- **`cairn-scout.yml`** (daily) — read-only. Checks each source's upstream
+  release token (the freshness signals documented above) against
+  `sources/*/manifest.yml`, and dispatches the top of BACKLOG.md. Output is
+  GitHub issues labelled `proposal` — never code, never a PR.
+- **`cairn-implement.yml`** — runs only when a human adds the `approved` label
+  to an issue (or via manual dispatch). Implements that one issue on an
+  `agent/*` branch and opens a PR against main. It must pass the full local CI
+  command set before opening the PR, and it never merges. PRs are opened with
+  `CAIRN_BOT_TOKEN` (not `GITHUB_TOKEN`) so CI actually fires on them.
+- **`cairn-replenish.yml`** (weekly) — curates BACKLOG.md only, as a docs-only
+  PR: new candidates, re-scoring, retiring off-spine ideas to "Considered and
+  rejected". Never merges.
+
 The human stays out of the doing; the only manual acts are labelling an issue
-approved and merging a green PR. That merge is the audit checkpoint — keep it.
-BACKLOG.md is the curated menu these agents draw from; its "Rules of the game"
-restate these invariants as admission criteria for new sources.
+`approved` and merging a green PR. That merge is the audit checkpoint — keep
+it. BACKLOG.md is the curated menu these agents draw from; its "Rules of the
+game" restate these invariants as admission criteria for new sources.
+
+These workflows reference the labels `proposal`, `data-refresh`, `feat`, and
+`approved` — create them in the repo's Issues → Labels settings before
+enabling the workflows; GitHub's label API will not auto-create a label that
+doesn't exist.
 
 ## How to work here
 
