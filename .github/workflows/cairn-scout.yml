@@ -46,7 +46,7 @@ jobs:
           # without a separate debugging pass.
           show_full_output: true
           claude_args: >-
-            --max-turns 5
+            --max-turns 20
             --allowedTools "Read,Glob,TodoWrite,Bash(curl:*),mcp__github__list_issues,mcp__github__issue_write"
           prompt: |
             You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
