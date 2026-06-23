@@ -39,11 +39,9 @@ jobs:
           # explicitly too, or every attempt gets denied and the run burns
           # turns retrying before hitting --max-turns (error_max_turns, exit
           # code 1).
-          # max-turns is capped low on purpose: a failure should fail fast
-          # and cheap rather than burn turns/cost retrying. show_full_output
-          # prints the full SDK conversation (including which tool calls get
-          # denied) so a failure's cause is visible in the job log directly,
-          # without a separate debugging pass.
+          # show_full_output prints the full SDK conversation (including which
+          # tool calls get denied) so a failure's cause is visible in the job
+          # log directly, without a separate debugging pass.
           show_full_output: true
           claude_args: >-
             --max-turns 20

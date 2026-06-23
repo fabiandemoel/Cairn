@@ -58,10 +58,9 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.CAIRN_BOT_TOKEN }}
-          # max-turns is capped low on purpose: a failure should fail fast and
-          # cheap rather than burn turns/cost retrying. show_full_output prints
-          # the full SDK conversation (including which tool calls get denied)
-          # so a failure's cause is visible in the job log directly.
+          # show_full_output prints the full SDK conversation (including which
+          # tool calls get denied) so a failure's cause is visible in the job
+          # log directly.
           show_full_output: true
           claude_args: "--max-turns 20"
           prompt: |
