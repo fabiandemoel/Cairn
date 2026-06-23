@@ -37,6 +37,7 @@ jobs:
           # BACKLOG.md first") must be listed explicitly too, or every read
           # attempt gets denied and the run burns all its turns retrying
           # before hitting --max-turns (error_max_turns, exit code 1).
+          show_full_output: true
           claude_args: >-
             --max-turns 20
             --allowedTools "Read,Glob,Bash(curl:*),mcp__github__list_issues,mcp__github__issue_write"
