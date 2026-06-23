@@ -34,13 +34,16 @@ jobs:
           # Keep it short and cheap: read + curl only, no env build, no file edits.
           # --allowedTools REPLACES the action's default tool set rather than
           # extending it, so Read/Glob (needed for "Read CLAUDE.md and
-          # BACKLOG.md first") must be listed explicitly too, or every read
-          # attempt gets denied and the run burns all its turns retrying
-          # before hitting --max-turns (error_max_turns, exit code 1).
-          show_full_output: true
+          # BACKLOG.md first") and TodoWrite (Claude Code's own progress
+          # tracker, used by default on every multi-step run) must be listed
+          # explicitly too, or every attempt gets denied and the run burns
+          # turns retrying before hitting --max-turns (error_max_turns, exit
+          # code 1). --max-turns has headroom above the ~14 turns the real
+          # work (3 freshness checks + 2 file reads + issue listing/creation)
+          # takes, so a few denials or retries don't blow the budget.
           claude_args: >-
-            --max-turns 20
-            --allowedTools "Read,Glob,Bash(curl:*),mcp__github__list_issues,mcp__github__issue_write"
+            --max-turns 30
+            --allowedTools "Read,Glob,TodoWrite,Bash(curl:*),mcp__github__list_issues,mcp__github__issue_write"
           prompt: |
             You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
             are authoritative. Do NOT edit any file and do NOT open a pull request.
