@@ -31,21 +31,29 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Keep it short and cheap: read + curl only, no env build, no file edits.
-          # --allowedTools REPLACES the action's default tool set rather than
-          # extending it, so Read/Glob (needed for "Read CLAUDE.md and
-          # BACKLOG.md first") and TodoWrite (Claude Code's own progress
-          # tracker, used by default on every multi-step run) must be listed
-          # explicitly too, or every attempt gets denied and the run burns
-          # turns retrying before hitting --max-turns (error_max_turns, exit
-          # code 1).
+          # Cheap and (mostly) read-only, but freshness checks need real probing:
+          # scraping euets.info's download page, parsing its JS for the current
+          # zip token, grepping headers for the EEA datashare token. --allowedTools
+          # REPLACES the action's default tool set rather than extending it, so
+          # everything the prompt below actually needs must be listed explicitly,
+          # including TodoWrite (Claude Code's own progress tracker, used by
+          # default on every multi-step run) — leaving any of it out means every
+          # attempt gets silently denied and the run burns turns retrying before
+          # hitting --max-turns (error_max_turns, exit code 1). This list was
+          # widened from a curl-only allowlist after a live run
+          # (https://github.com/fabiandemoel/Cairn/actions/runs/28049909611)
+          # showed denials on WebFetch, grep/head/echo as parts of a piped Bash
+          # command, and Grep/Read on scratch files written to /tmp.
+          # --add-dir /tmp lets Read/Grep follow those scratch files (probe
+          # downloads, unzip listings) without widening write access elsewhere.
           # show_full_output prints the full SDK conversation (including which
           # tool calls get denied) so a failure's cause is visible in the job
           # log directly, without a separate debugging pass.
           show_full_output: true
           claude_args: >-
             --max-turns 20
-            --allowedTools "Read,Glob,TodoWrite,Bash(curl:*),mcp__github__list_issues,mcp__github__issue_write"
+            --add-dir /tmp
+            --allowedTools "Read,Glob,Grep,TodoWrite,WebFetch,Bash(curl:*),Bash(grep:*),Bash(head:*),Bash(tail:*),Bash(echo:*),Bash(file:*),Bash(unzip:*),Bash(cat:*),Bash(ls:*),mcp__github__list_issues,mcp__github__issue_write"
           prompt: |
             You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
             are authoritative. Do NOT edit any file and do NOT open a pull request.
@@ -59,8 +67,11 @@ jobs:
                    sources/cbs/manifest.yml.
                  - euets.info: the current zip filename token vs sources/euets/manifest.yml.
                  - EEA bulk: the datashare token vs sources/eea/manifest.yml.
-               Use curl only (no env build). If a source has a NEWER release than the
-               pin, open ONE issue titled "data: <source> new release <token>",
+               Use curl, WebFetch, and read-only shell tools (grep/head/tail/file/
+               unzip) to find the live token — no env build, no file edits in the
+               repo. Scratch files (downloads, probes) may go in /tmp. If a source
+               has a NEWER release than the pin, open ONE issue titled
+               "data: <source> new release <token>",
                labelled `proposal` and `data-refresh`, body referencing the relevant
                CLAUDE.md checklist. If a similar open issue already exists, skip it.
 
