@@ -39,12 +39,21 @@ jobs:
           # including TodoWrite (Claude Code's own progress tracker, used by
           # default on every multi-step run) — leaving any of it out means every
           # attempt gets silently denied and the run burns turns retrying before
-          # hitting --max-turns (error_max_turns, exit code 1). This list was
-          # widened from a curl-only allowlist after a live run
-          # (https://github.com/fabiandemoel/Cairn/actions/runs/28049909611)
-          # showed denials on WebFetch, grep/head/echo as parts of a piped Bash
-          # command, and Grep/Read on scratch files written to /tmp.
-          # --add-dir /tmp lets Read/Grep follow those scratch files (probe
+          # hitting --max-turns (error_max_turns, exit code 1).
+          # Bash is allowed unrestricted (not per-command, e.g. `Bash(curl:*)`):
+          # scout probes release tokens with shell loops and helper functions
+          # (`for tok in ...; do ...`, `probe() { ... }`), and a prefix-matched
+          # allowlist can't recognise those as the underlying command — every
+          # such attempt was denied, burning turns
+          # (https://github.com/fabiandemoel/Cairn/actions/runs/28053500486).
+          # The job has no write permissions at the GitHub Actions level
+          # (`permissions.contents: read` above) and the prompt forbids file
+          # edits, so unrestricted Bash here is read-only in effect.
+          # mcp__github__create_issue is the actual tool name exposed by the
+          # action's bundled github-mcp-server — an earlier allowlist entry of
+          # `mcp__github__issue_write` (a different, non-existent tool name)
+          # silently denied every issue-creation attempt; same run above.
+          # --add-dir /tmp lets Read/Grep follow scratch files (probe
           # downloads, unzip listings) without widening write access elsewhere.
           # show_full_output prints the full SDK conversation (including which
           # tool calls get denied) so a failure's cause is visible in the job
@@ -53,7 +62,7 @@ jobs:
           claude_args: >-
             --max-turns 20
             --add-dir /tmp
-            --allowedTools "Read,Glob,Grep,TodoWrite,WebFetch,Bash(curl:*),Bash(grep:*),Bash(head:*),Bash(tail:*),Bash(echo:*),Bash(file:*),Bash(unzip:*),Bash(cat:*),Bash(ls:*),mcp__github__list_issues,mcp__github__issue_write"
+            --allowedTools "Read,Glob,Grep,TodoWrite,WebFetch,WebSearch,Bash,mcp__github__list_issues,mcp__github__create_issue"
           prompt: |
             You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
             are authoritative. Do NOT edit any file and do NOT open a pull request.
