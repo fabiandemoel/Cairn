@@ -38,11 +38,15 @@ jobs:
           # tracker, used by default on every multi-step run) must be listed
           # explicitly too, or every attempt gets denied and the run burns
           # turns retrying before hitting --max-turns (error_max_turns, exit
-          # code 1). --max-turns has headroom above the ~14 turns the real
-          # work (3 freshness checks + 2 file reads + issue listing/creation)
-          # takes, so a few denials or retries don't blow the budget.
+          # code 1).
+          # max-turns is capped low on purpose: a failure should fail fast
+          # and cheap rather than burn turns/cost retrying. show_full_output
+          # prints the full SDK conversation (including which tool calls get
+          # denied) so a failure's cause is visible in the job log directly,
+          # without a separate debugging pass.
+          show_full_output: true
           claude_args: >-
-            --max-turns 30
+            --max-turns 5
             --allowedTools "Read,Glob,TodoWrite,Bash(curl:*),mcp__github__list_issues,mcp__github__issue_write"
           prompt: |
             You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
