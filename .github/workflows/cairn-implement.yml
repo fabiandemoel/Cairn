@@ -73,13 +73,27 @@ jobs:
           # unrestricted for the same reason as scout: this job's real work
           # (uv/dbt/npm/git/ruff/sqlfluff/pytest) cannot be enumerated as
           # literal command prefixes, and prefix matching can't see through
-          # shell control flow anyway. mcp__github__issue_read /
+          # shell control flow anyway. mcp__github__get_issue /
           # mcp__github__create_pull_request are the real tool names exposed
-          # by the bundled github-mcp-server (not e.g. issue_write/pr_write).
+          # by the bundled github-mcp-server â€” run 28085542460 shows the
+          # agent itself calling get_issue, not issue_read (the name a newer
+          # github-mcp-server build uses elsewhere); allowlisting the wrong
+          # guess denied it again, same mistake class as scout's
+          # issue_write/create_issue mixup.
+          #
+          # --max-turns 20 (scout/replenish's budget) starved this job: run
+          # 28085542460 hit error_max_turns mid-implementation ("Now let me
+          # implement. First the mart:") â€” it was doing real work, not stuck
+          # on denials, it just ran out of room. Unlike scout's read-only
+          # freshness check or replenish's single-file docs edit, this job's
+          # actual scope per CLAUDE.md is explore + edit several files + run
+          # the full local CI suite (uv sync, ruff, sqlfluff, pytest, dbt
+          # build, npm ci, npm run build:strict) + git + open a PR, which
+          # needs a much bigger budget.
           show_full_output: true
           claude_args: >-
-            --max-turns 20
-            --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,WebSearch,mcp__github__issue_read,mcp__github__create_pull_request,mcp__github__list_pull_requests"
+            --max-turns 60
+            --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,WebSearch,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
           prompt: |
             Read CLAUDE.md and BACKLOG.md first; they are authoritative and the
             non-negotiable invariants override anything in this prompt.
