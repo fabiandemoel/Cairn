@@ -48,9 +48,14 @@ jobs:
           # reason as cairn-scout/cairn-implement: git branch/commit/push
           # can't be enumerated as literal prefixes. mcp__github__create_pull_request
           # is the real tool name exposed by the bundled github-mcp-server.
+          # --model: this job re-scores/curates one markdown file against an
+          # explicit rubric, not a task needing Opus-level judgement â€”
+          # Sonnet is enough and cheaper. cairn-implement stays on the
+          # default (Opus) since it makes real multi-file code changes.
           show_full_output: true
           claude_args: >-
             --max-turns 20
+            --model claude-sonnet-4-6
             --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,mcp__github__list_issues,mcp__github__list_pull_requests,mcp__github__search_pull_requests,mcp__github__create_pull_request"
           prompt: |
             You are Cairn's backlog curator. Read CLAUDE.md, all of BACKLOG.md
