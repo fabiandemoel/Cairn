@@ -20,6 +20,12 @@
 --     emitters, so this is the ETS sector average, not the whole-economy sector
 --     average -- the coverage test reconciles the ETS total against the EEA
 --     aggregate, and the CBS mart carries the whole-economy figures.
+--   * Free allocation (allocated_total_t_co2eq) and the verified-vs-allocated
+--     ratio (emissions_vs_allocated) are labelled measures read straight from
+--     the pinned snapshot's allocatedTotal column -- who emits above (>1) or
+--     below (<1) their free grant. Both are nullable: an installation-year with
+--     no allocation stays NULL (never a placeholder zero), and the ratio is
+--     NULL where allocation is missing or zero.
 
 with installations as (
     select *
@@ -35,7 +41,8 @@ compliance as (
     select
         installation_id,
         year,
-        verified_emissions_t_co2eq
+        verified_emissions_t_co2eq,
+        allocated_total
     from {{ ref('stg_euets__compliance') }}
     where
         reported_in_system = 'euets'
@@ -49,7 +56,12 @@ installation_year as (
         installations.nace_section,
         installations.nace_section_label,
         compliance.year,
-        compliance.verified_emissions_t_co2eq as installation_emissions_t_co2eq
+        compliance.verified_emissions_t_co2eq as installation_emissions_t_co2eq,
+        -- Free allocation (allocatedTotal) is a labelled measure straight from
+        -- the pinned euets.info snapshot, not a recomputed figure. It is
+        -- nullable: a few installation-years carry no allocation, which stays
+        -- NULL (never a placeholder zero).
+        compliance.allocated_total as allocated_total_t_co2eq
     from compliance
     inner join installations on installations.installation_id = compliance.installation_id
 ),
@@ -74,11 +86,18 @@ select
     installation_year.nace_section,
     installation_year.nace_section_label,
     installation_year.installation_emissions_t_co2eq,
+    installation_year.allocated_total_t_co2eq,
     sector_benchmark.sector_installation_count,
     sector_benchmark.sector_mean_emissions_t_co2eq,
     sector_benchmark.sector_median_emissions_t_co2eq,
     installation_year.installation_emissions_t_co2eq
-    / sector_benchmark.sector_mean_emissions_t_co2eq as emissions_vs_sector_mean
+    / sector_benchmark.sector_mean_emissions_t_co2eq as emissions_vs_sector_mean,
+    -- Verified-vs-allocated: who emits above (>1) or below (<1) their free
+    -- grant. A labelled comparison of two source figures, not an invented
+    -- number. NULL where allocation is missing or zero (nullif guards the
+    -- divide); never a placeholder.
+    installation_year.installation_emissions_t_co2eq
+    / nullif(installation_year.allocated_total_t_co2eq, 0) as emissions_vs_allocated
 from installation_year
 inner join sector_benchmark
     using (nace_section, year)
