@@ -69,8 +69,10 @@ sector average?" It now ingests two sources end-to-end.
   bulk — the official, current aggregate by country × activity × year.
 - **Transformation**: `benchmark_installation_emissions` — per NL stationary
   installation and year, its verified emissions versus its NACE-section mean
-  and median. A coverage test reconciles the ETS total against the EEA aggregate
-  (both derive from the EUTL; they match to ~0.02%).
+  and median, plus its free allocation (`allocated_total`, read straight from
+  the pinned snapshot) and the verified-vs-allocated ratio — who emits above or
+  below their free grant. A coverage test reconciles the ETS total against the
+  EEA aggregate (both derive from the EUTL; they match to ~0.02%).
 
 **Common spine** ([`ingestion/`](ingestion/), [`transform/`](transform/)): every
 source writes immutable per-release parquet and pins each snapshot in its own

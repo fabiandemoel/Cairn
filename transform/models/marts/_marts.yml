@@ -73,13 +73,20 @@ models:
         source. The sector mean/median are computed across the NL stationary ETS
         population per (nace_section, year). EU ETS covers only large emitters,
         so this is the ETS sector average; the coverage test reconciles the ETS
-        total against the EEA aggregate (both derive from the EUTL).
+        total against the EEA aggregate (both derive from the EUTL). Free
+        allocation (allocated_total_t_co2eq) and the verified-vs-allocated ratio
+        (emissions_vs_allocated) are labelled read/relabel measures over the
+        pinned snapshot's allocatedTotal column -- who emits above or below their
+        free grant -- not recomputed figures.
       known_limitations: >
         (1) euets.info lags the EEA release (latest data ~2023 vs 2025).
         (2) Installations without a NACE code are excluded (cannot be sector-
         benchmarked). (3) The benchmark is the ETS large-emitter average, not the
         whole-economy sector average (see the CBS mart for that). (4) Aircraft
-        and maritime operators are excluded.
+        and maritime operators are excluded. (5) Free allocation is nullable: an
+        installation-year with no allocation stays NULL (never a placeholder
+        zero), and emissions_vs_allocated is NULL where allocation is missing or
+        zero.
       references:
         installation_source: https://www.euets.info/
         eutl_database_doc: https://euets-info-public.s3.eu-central-1.amazonaws.com/Description_EUTL_database.pdf
@@ -109,6 +116,12 @@ models:
         description: The installation's verified emissions for the year (tonnes CO2-eq).
         tests:
           - not_null
+      - name: allocated_total_t_co2eq
+        description: >
+          Total free allowances allocated to the installation for the year
+          (tonnes CO2-eq), read straight from the pinned euets.info snapshot.
+          Nullable -- a few installation-years carry no allocation; NULL is left
+          as NULL, never a placeholder zero.
       - name: sector_mean_emissions_t_co2eq
         description: Mean verified emissions across the sector-year population.
         tests:
@@ -117,6 +130,11 @@ models:
         description: Installation emissions divided by the sector mean for the year.
         tests:
           - not_null
+      - name: emissions_vs_allocated
+        description: >
+          Verified emissions divided by free allocation -- above 1 means the
+          installation emitted more than its free grant, below 1 less. Nullable:
+          NULL where allocation is missing or zero.
 
   - name: mart_esrs_e1
     description: >
