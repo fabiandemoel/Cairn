@@ -58,10 +58,15 @@ jobs:
           # show_full_output prints the full SDK conversation (including which
           # tool calls get denied) so a failure's cause is visible in the job
           # log directly, without a separate debugging pass.
+          # --model: this job is a mechanical freshness/duplicate check against
+          # explicit instructions, not a task needing Opus-level judgement â€”
+          # Sonnet is enough and cheaper. cairn-implement stays on the
+          # default (Opus) since it makes real multi-file code changes.
           show_full_output: true
           claude_args: >-
             --max-turns 20
             --add-dir /tmp
+            --model claude-sonnet-4-6
             --allowedTools "Read,Glob,Grep,TodoWrite,WebFetch,WebSearch,Bash,mcp__github__list_issues,mcp__github__create_issue"
           prompt: |
             You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
