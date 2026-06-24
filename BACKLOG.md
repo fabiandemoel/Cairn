@@ -49,17 +49,33 @@ Order _Live candidates_ by value, then spine-fit, then (inverse) effort.
 
 Freely allocated allowances per installation-year is, after verified emissions
 itself, the most interesting ETS axis: who emits above/below their free grant.
-Likely **no new source** — the euets.info snapshot already ingested
-(`ingestion/euets_pipeline.py`, pinned in `sources/euets/manifest.yml`) mirrors
-the EUTL allocation columns. Add the field through euets staging and a measure
-on `benchmark_installation_emissions` (or a sibling mart), surface via
-`site/sources/cairn/`. Pure read/relabel.
-- *Watch:* confirm the allocation column exists in the **pinned** euets snapshot
-  before modelling. If euets.info doesn't carry it, fall back to the EEA / DG-CLIMA
-  NIM list — then it's a new source + manifest (Effort: M) and a methodology note.
-- *Touches:* euets staging, one mart, `site/sources/cairn/*.sql`, a page, CI fixture.
+**No new source** — the field is already staged: `stg_euets__compliance`
+exposes `allocated_total` (cast from the pinned euets.info snapshot's
+`allocatedTotal`). Add a measure on `benchmark_installation_emissions` (or a
+sibling mart) and surface via `site/sources/cairn/`. Pure read/relabel.
+- *Watch:* the allocation column is **confirmed present** in the pinned snapshot
+  (`allocated_total`), so the EEA / DG-CLIMA NIM fallback is no longer needed.
+  Keep it read/relabel: the verified-vs-allocated comparison is a labelled
+  measure, never an invented figure; missing values stay `NULL` + a note.
+- *Touches:* one mart, `site/sources/cairn/*.sql`, a page, CI fixture (column
+  already in the fixture's `compliance.parquet`).
+- *Status:* dispatched and approved as issue #27 — implementation in flight.
 
-### 2. Eurostat Air Emissions Accounts (`env_ac_ainah_r2`) → cross-country sector benchmark
+### 2. GLEIF / LEI → installation → legal-entity mapping
+**Value: H · Effort: M · Spine-fit: H**
+
+Open, authoritative entity IDs. Makes the benchmark meaningful at company level
+("all of operator X's installations") and is the natural bridge to the ESRS E1
+export, whose disclosures are entity-level, not installation-level.
+- *Watch:* the mapping **is** the methodology — a reviewed seed like
+  `sector_mapping_cbs.csv`. Never invent an LEI; unmatched operators get `NULL`
+  + a `notes` entry. The mapping change shows its impact via `benchmark-diff`.
+  The source's free-text `parent_company` (see candidate #6) is a useful *match
+  aid*, not the authority.
+- *Touches:* a reviewed seed, an entity dimension on the installation mart,
+  optional entity rollup in the ESRS export.
+
+### 3. Eurostat Air Emissions Accounts (`env_ac_ainah_r2`) → cross-country sector benchmark
 **Value: H · Effort: H · Spine-fit: M**
 
 Turns the NL-only CBS sector benchmark into "is NL chemicals high vs EU
@@ -74,29 +90,7 @@ bulk-downloadable.
   staging + a benchmark dimension, NACE-alignment seed if needed, CI fixture,
   site query + page.
 
-### 3. Emissieregistratie (RIVM) → deepen NL provenance + granularity
-**Value: M · Effort: M · Spine-fit: H**
-
-The authoritative source under NL's UNFCCC submission; finer per substance/
-sector/region than CBS. Lets a CBS-derived figure be traced one layer deeper.
-- *Watch:* it partly overlaps CBS national totals — keep it as a cross-check /
-  provenance layer, **not** a second authority for the same figure. Add a
-  reconciliation test against the CBS national total.
-- *Touches:* new pipeline + manifest, staging, a provenance/cross-check model.
-
-### 4. GLEIF / LEI → installation → legal-entity mapping
-**Value: H · Effort: M · Spine-fit: H**
-
-Open, authoritative entity IDs. Makes the benchmark meaningful at company level
-("all of operator X's installations") and is the natural bridge to the ESRS E1
-export, whose disclosures are entity-level, not installation-level.
-- *Watch:* the mapping **is** the methodology — a reviewed seed like
-  `sector_mapping_cbs.csv`. Never invent an LEI; unmatched operators get `NULL`
-  + a `notes` entry. The mapping change shows its impact via `benchmark-diff`.
-- *Touches:* a reviewed seed, an entity dimension on the installation mart,
-  optional entity rollup in the ESRS export.
-
-### 5. EUA carbon price → € valuation overlay
+### 4. EUA carbon price → € valuation overlay
 **Value: H (commercial) · Effort: M · Spine-fit: L**
 
 Adds "these emissions = €X at the current EUA price" — directly addresses the
@@ -107,6 +101,67 @@ pinned-snapshot, read/relabel model.
   from official auction results, pinned per release like any other source. Never
   a stored mart figure, never in the ESRS E1 export. Defer unless commercial
   positioning becomes the active priority.
+
+### 5. EUTL surrendered allowances → verified-vs-surrendered compliance-integrity axis
+**Value: M · Effort: L · Spine-fit: H**
+
+The third leg of the EUTL triple, after allocation (#1) and verified emissions:
+allowances actually surrendered per installation-year. Already staged —
+`stg_euets__compliance` exposes `surrendered`. Surfacing "surrendered vs
+verified" is a pure read/relabel provenance axis over the pinned snapshot; no
+new source, no recomputation. Natural to ship alongside #1.
+- *Watch:* surrender can lag and a single surrender may cover multiple years —
+  present it as a **labelled measure**, not a recomputed running balance, and
+  never as a compliance *verdict* (that would drift toward the assurance scope
+  rule 4 forbids). Missing values stay `NULL` + a note.
+- *Touches:* one mart measure on `benchmark_installation_emissions` (or sibling),
+  `site/sources/cairn/*.sql`, a page. Column already in the fixture's
+  `compliance.parquet`.
+
+### 6. EUTL installation identity enrichment (parent company, ETS activity, geo)
+**Value: M · Effort: L · Spine-fit: H**
+
+`stg_euets__installations` already stages `parent_company`, `ets_activity_label`,
+`country_label`, and `latitude`/`longitude`, but the marts surface only
+`installation_name` + NACE section. Promoting these adds **identity/provenance
+depth** (admission rule 3) at near-zero cost — and `parent_company` lets a
+rough company rollup exist from the pinned snapshot even before the GLEIF/LEI
+seed (#4) lands.
+- *Watch:* `parent_company` is **free text, not an authoritative ID** — surface
+  it as descriptive context only; the authoritative entity mapping stays the
+  reviewed LEI seed (#4). Do **not** normalise/dedupe names into a synthesised
+  entity (that's invention). Geo is euets.info's `latitudeGoogle/longitudeGoogle`
+  — label it source-provided and approximate.
+- *Touches:* installation mart dimension columns, `site/sources/cairn/*.sql`,
+  a page (table/map). Fields already present in the fixture's `installation.parquet`.
+
+### 7. Emissieregistratie (RIVM) → deepen NL provenance + granularity
+**Value: M · Effort: M · Spine-fit: H**
+
+The authoritative source under NL's UNFCCC submission; finer per substance/
+sector/region than CBS. Lets a CBS-derived figure be traced one layer deeper.
+- *Watch:* it partly overlaps CBS national totals — keep it as a cross-check /
+  provenance layer, **not** a second authority for the same figure. Add a
+  reconciliation test against the CBS national total.
+- *Touches:* new pipeline + manifest, staging, a provenance/cross-check model.
+
+### 8. EU ETS aviation & maritime verified emissions → transport benchmark axis
+**Value: M · Effort: M · Spine-fit: H**
+
+`benchmark_installation_emissions` deliberately excludes aircraft and maritime
+operators (`not is_aircraft_operator and not is_maritime_operator`). Surfacing
+them as their *own* labelled transport dimension — benchmarked among themselves,
+not folded into the stationary NACE sectors — adds a new benchmark axis from the
+same pinned snapshot. Read/relabel; the flags are already staged.
+- *Watch:* keep them **out** of the stationary national-total reconciliation and
+  the EEA stationary `20-99` coverage test (both assume stationary; these
+  operators sit outside CBS national totals and that EEA code). Maritime entered
+  EU ETS only from the **2024 compliance year**, so coverage is partial and
+  recent — document it. They carry no NACE section, so benchmark by operator
+  type, never against CBS sectors. Operator flags are nullable — exercise on the
+  full snapshot, not just the fixture.
+- *Touches:* euets staging (flags present), a sibling mart + its own coverage
+  handling/test, `site/sources/cairn/*.sql`, a page, CI fixture check.
 
 ---
 
