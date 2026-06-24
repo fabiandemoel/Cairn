@@ -10,8 +10,10 @@ select
     nace_section,
     nace_section_label,
     installation_emissions_t_co2eq,
+    allocated_total_t_co2eq,
     sector_installation_count,
     sector_mean_emissions_t_co2eq,
     sector_median_emissions_t_co2eq,
-    emissions_vs_sector_mean
+    emissions_vs_sector_mean,
+    emissions_vs_allocated
 from benchmark_installation_emissions

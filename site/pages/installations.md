@@ -62,6 +62,26 @@ where installation_id = '${inputs.installation.value}'
     title="vs. sector mean"
 />
 
+<BigValue
+    data={selected_latest}
+    value=allocated_total_t_co2eq
+    fmt='#,##0" t"'
+    title="Free allocation (latest year)"
+/>
+
+<BigValue
+    data={selected_latest}
+    value=emissions_vs_allocated
+    fmt='0.0"×"'
+    title="vs. free allocation"
+/>
+
+The **verified-vs-allocated** multiple compares verified emissions to the
+installation's free EU ETS allowance grant: above 1× means it emitted more than
+it was freely allocated, below 1× less. Both figures are read straight from the
+pinned euets.info snapshot — where an installation-year carries no free
+allocation, the figure is left blank, never a placeholder zero.
+
 This installation is in NACE section
 **<Value data={selected_latest} column=nace_section />
 (<Value data={selected_latest} column=nace_section_label />)**, benchmarked
@@ -92,6 +112,10 @@ union all
 select year, 'Sector median' as metric, sector_median_emissions_t_co2eq
 from cairn.installation_emissions
 where installation_id = '${inputs.installation.value}'
+union all
+select year, 'Free allocation' as metric, allocated_total_t_co2eq
+from cairn.installation_emissions
+where installation_id = '${inputs.installation.value}'
 order by year
 ```
 
@@ -116,7 +140,9 @@ with sel as (
 select
     i.installation_name,
     i.installation_emissions_t_co2eq,
+    i.allocated_total_t_co2eq,
     i.emissions_vs_sector_mean,
+    i.emissions_vs_allocated,
     i.installation_id = '${inputs.installation.value}' as is_selected
 from cairn.installation_emissions i
 inner join sel on i.nace_section = sel.nace_section and i.year = sel.year
@@ -126,5 +152,7 @@ order by i.installation_emissions_t_co2eq desc
 <DataTable data={sector_peers} rows=15 rowShading={true}>
     <Column id=installation_name title="Installation" />
     <Column id=installation_emissions_t_co2eq title="Emissions (t CO₂-eq)" fmt='#,##0' />
+    <Column id=allocated_total_t_co2eq title="Free allocation (t CO₂-eq)" fmt='#,##0' />
     <Column id=emissions_vs_sector_mean title="vs. sector mean" fmt='0.0"×"' contentType=colorscale />
+    <Column id=emissions_vs_allocated title="vs. free allocation" fmt='0.0"×"' contentType=colorscale />
 </DataTable>
