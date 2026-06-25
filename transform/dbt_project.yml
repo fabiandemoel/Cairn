@@ -33,3 +33,7 @@ seeds:
     sector_mapping_cbs:
       +column_types:
         aggregate: boolean
+    lei_mapping_euets:
+      +column_types:
+        lei: varchar
+        gleif_legal_name: varchar
