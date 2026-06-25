@@ -89,10 +89,24 @@ jobs:
           # actual scope per CLAUDE.md is explore + edit several files + run
           # the full local CI suite (uv sync, ruff, sqlfluff, pytest, dbt
           # build, npm ci, npm run build:strict) + git + open a PR, which
-          # needs a much bigger budget.
+          # needs a much bigger budget. Bumped 20 -> 60 for that reason, but
+          # run 28173119243 (a full new-source vertical slice: ingestion +
+          # mart + dbt test + site page) still hit error_max_turns at 60,
+          # mid-polish (updating README source-count prose) after the real
+          # pipeline/dbt/test work had already passed locally â€” bumped to 100.
+          #
+          # --model: switched from the default (Opus) to Sonnet. Run
+          # 28173119243's Opus cost was $5.16 for a single failed attempt;
+          # the equivalent token count on Sonnet pricing (1/5th across every
+          # tier) would be roughly $1. Sonnet is materially cheaper per
+          # attempt, which matters more now that issues are split into
+          # several smaller PRs (more attempts per issue, not fewer) and
+          # failed attempts no longer discard all progress (see the
+          # milestone-commit instruction in the prompt below).
           show_full_output: true
           claude_args: >-
-            --max-turns 60
+            --max-turns 100
+            --model claude-sonnet-4-6
             --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,WebSearch,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
           prompt: |
             Read CLAUDE.md and BACKLOG.md first; they are authoritative and the
@@ -111,25 +125,52 @@ jobs:
               figures â€” real source categories or explicit NULL + a note. New source
               => its own append-only manifest under sources/.
 
-            Work on a branch named `agent/<short-slug>`. Before opening the PR, run
-            and pass locally what CI runs:
+            Split the work into smaller, independently mergeable PRs rather than one
+            monolithic PR, scoped along the repo's own layers â€” each one a complete,
+            CI-green slice on its own:
+              1. Ingestion + manifest (new `sources/<name>/manifest.yml`, pipeline
+                 script, CI fixture).
+              2. dbt staging/mart model(s) + the dbt test(s) that guard them.
+              3. Evidence site and/or ESRS export integration, if the issue's scope
+                 includes them.
+            A `data-refresh` issue or a small `feat` that only touches one layer is
+            naturally a single PR â€” don't force a split where there's nothing to
+            split. For a larger `feat` (e.g. a new source end-to-end), open PR 1
+            against `main` first; once it is open (and only once its checklist below
+            is satisfied), branch PR 2 from `main` (not from PR 1's branch) and
+            continue, turns permitting. If you run out of turns before reaching a
+            later PR, that is fine â€” the earlier PR(s) already opened are real,
+            reviewable progress, not wasted work.
+
+            Work on a branch named `agent/<short-slug>` per PR. Commit after each
+            logical milestone as you finish it (e.g. right after the manifest +
+            ingestion script land, again after the dbt model + test pass, again
+            before opening each PR) rather than saving everything for one commit at
+            the end â€” a run that hits the turn limit mid-task should still leave
+            committed, pushed progress on its branch instead of losing it when the
+            job's runner is torn down. Use conventional commits, one logical change
+            per commit.
+
+            Before opening each PR, run and pass locally what CI runs (scoped to what
+            that PR actually touches, e.g. skip `npm run build:strict` for a PR that
+            doesn't touch `site/`):
               uv sync --locked --all-groups
               uv run ruff check . && uv run ruff format --check .
               uv run sqlfluff lint transform/models transform/tests
               uv run pytest -q
               uv run dbt build --project-dir transform
               cd site && npm ci && npm run build:strict
-            Use conventional commits, one logical change per commit.
 
-            Open ONE pull request against `main`. The description must open with a
-            section headed "## Executive summary": 2-4 plain-language sentences for a
-            reader with no Cairn context, explaining what changed and why it matters.
-            Spell out every acronym or piece of internal jargon the first time it
-            appears there (e.g. "CBS (Statistics Netherlands)", "EU ETS (the EU's
-            Emissions Trading System)", "NACE (the EU's industry classification)",
-            "manifest (the append-only file that pins which source snapshot Cairn
-            uses)"). Below that section, keep the existing technical content: link the
-            issue, summarise the change, state the data/methodology impact, and list
-            any assumption you made. Do NOT merge. If you cannot make CI pass within
-            scope, open a draft PR explaining exactly what blocks it instead of
-            forcing it green.
+            Each pull request's description must open with a section headed "##
+            Executive summary": 2-4 plain-language sentences for a reader with no
+            Cairn context, explaining what changed and why it matters. Spell out
+            every acronym or piece of internal jargon the first time it appears there
+            (e.g. "CBS (Statistics Netherlands)", "EU ETS (the EU's Emissions Trading
+            System)", "NACE (the EU's industry classification)", "manifest (the
+            append-only file that pins which source snapshot Cairn uses)"). Below
+            that section, keep the existing technical content: link the issue,
+            summarise the change, state the data/methodology impact, list any
+            assumption you made, and â€” if this is one of several PRs for the issue â€”
+            say which step it is and link the others. Do NOT merge. If you cannot make
+            CI pass within a PR's scope, open it as a draft explaining exactly what
+            blocks it instead of forcing it green.

@@ -50,8 +50,9 @@ jobs:
           # is the real tool name exposed by the bundled github-mcp-server.
           # --model: this job re-scores/curates one markdown file against an
           # explicit rubric, not a task needing Opus-level judgement â€”
-          # Sonnet is enough and cheaper. cairn-implement stays on the
-          # default (Opus) since it makes real multi-file code changes.
+          # Sonnet is enough and cheaper. cairn-implement also runs on
+          # Sonnet now (see its own comment) to cut per-attempt cost now
+          # that issues are split into several smaller PRs.
           show_full_output: true
           claude_args: >-
             --max-turns 20
