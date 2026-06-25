@@ -121,8 +121,15 @@ jobs:
               cd site && npm ci && npm run build:strict
             Use conventional commits, one logical change per commit.
 
-            Open ONE pull request against `main`. In the description: link the issue,
-            summarise the change, state the data/methodology impact, and list any
-            assumption you made. Do NOT merge. If you cannot make CI pass within
+            Open ONE pull request against `main`. The description must open with a
+            section headed "## Executive summary": 2-4 plain-language sentences for a
+            reader with no Cairn context, explaining what changed and why it matters.
+            Spell out every acronym or piece of internal jargon the first time it
+            appears there (e.g. "CBS (Statistics Netherlands)", "EU ETS (the EU's
+            Emissions Trading System)", "NACE (the EU's industry classification)",
+            "manifest (the append-only file that pins which source snapshot Cairn
+            uses)"). Below that section, keep the existing technical content: link the
+            issue, summarise the change, state the data/methodology impact, and list
+            any assumption you made. Do NOT merge. If you cannot make CI pass within
             scope, open a draft PR explaining exactly what blocks it instead of
             forcing it green.

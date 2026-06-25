@@ -74,6 +74,9 @@ jobs:
 
             Open ONE pull request against `main` from branch
             `replenish/<YYYY-MM-DD>`, titled "chore(backlog): weekly replenish".
-            In the description, summarise what you added, re-scored, and retired,
-            and why. Do NOT merge. If nothing meaningfully changed, say so and open
-            no PR.
+            The description must open with a section headed "## Executive summary":
+            2-4 plain-language sentences for a reader with no Cairn context, stating
+            what the backlog reshuffle does and why. Spell out any acronym or jargon
+            the first time it appears there. Below that section, summarise what you
+            added, re-scored, and retired, and why, as today. Do NOT merge. If
+            nothing meaningfully changed, say so and open no PR.

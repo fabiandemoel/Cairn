@@ -95,6 +95,15 @@ jobs:
                candidate, its value/effort/spine-fit, the "watch" caveats, and the
                repo paths it touches â€” straight from the backlog entry.
 
+            Every issue body must open with a section headed "## Executive summary":
+            2-4 plain-language sentences, written for a reader with no Cairn context,
+            stating what happened and why it matters. Spell out every acronym or piece
+            of internal jargon the first time it appears in that section (e.g. "CBS
+            (Statistics Netherlands)", "EU ETS (the EU's Emissions Trading System)",
+            "manifest (the append-only file that pins which source snapshot Cairn
+            uses)"). The detailed technical body (checklist references, scoring,
+            paths) follows below that section as today.
+
             Open at most 3 issues total. Before opening anything, list current open
             issues and skip duplicates. If nothing is new and the top candidate is
             already tracked, do nothing and say so.
