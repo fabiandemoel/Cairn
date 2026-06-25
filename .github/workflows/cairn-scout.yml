@@ -4,7 +4,9 @@ name: Cairn Scout
 #   1. Detect whether an upstream source published a new release (the freshness
 #      signals are documented in CLAUDE.md: CBS 85669NED `Modified` date,
 #      euets.info zip token, EEA datashare token) vs the pins in sources/*/manifest.yml.
-#   2. Dispatch the top of BACKLOG.md "Live candidates".
+#      Runs WEEKLY (Mondays) only â€” these sources update ~yearly, so daily
+#      re-scraping is pure waste; the `freshness` step below gates it.
+#   2. Dispatch the top of BACKLOG.md "Live candidates". Runs every day.
 # Output is GitHub issues only â€” never code, never a PR. A human triages them and
 # adds the `approved` label to hand one to Cairn Implement.
 
@@ -27,6 +29,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Freshness probing (task 1) runs weekly (Mondays) or on manual dispatch;
+      # the daily runs do backlog dispatch (task 2) only.
+      - name: Decide whether to run the weekly freshness probe
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(date -u +%u)" = "1" ]; then
+            echo "freshness=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "freshness=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: anthropics/claude-code-action@v1
         with:
@@ -53,6 +66,12 @@ jobs:
           prompt: |
             You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
             are authoritative. Do NOT edit any file and do NOT open a pull request.
+
+            Scope for this run: FRESHNESS_PROBE=${{ steps.scope.outputs.freshness }}.
+            Task 2 (backlog dispatch) runs every time. Run task 1 (upstream
+            freshness) ONLY if FRESHNESS_PROBE is true; if it is false, skip task 1
+            entirely â€” do not probe any upstream source and do not open a
+            data-refresh issue.
 
             Two tasks:
 
