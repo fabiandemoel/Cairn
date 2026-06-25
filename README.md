@@ -366,6 +366,16 @@ The **EU ETS** source has its own quirks:
   installation benchmark is stationary only; aircraft and maritime operators are
   classified by vehicle, and the few installations with a NULL operator flag are
   treated as not-confirmed-stationary and left out.
+- **Legal-entity (LEI) matching is a reviewed mapping, not an automatic join.**
+  The EUTL `parentCompany` field is free text and the installation name is often
+  a site label, so there is no authoritative installation → company key in the
+  source. The
+  [`lei_mapping_euets.csv`](transform/seeds/lei_mapping_euets.csv) seed pins each
+  installation to its operating entity's GLEIF LEI **only where the GLEIF
+  legalName confidently matches** (NL jurisdiction); unmatched installations keep
+  a `NULL` LEI with a note — never an invented identifier — and coverage grows
+  via reviewed PRs (so `benchmark-diff` shows each change). `assert_lei_format_valid`
+  fails the build if any seeded LEI is not a 20-character ISO 17442 code.
 - **The EEA bulk is an Excel workbook.** Only the data sheet is ingested (read
   via the DuckDB `excel` extension, all-VARCHAR); the manuals/PDFs in the zip
   are not.
@@ -412,6 +422,12 @@ public, authoritative sources.
   — the official aggregate and cross-check.
 - [EU ETS Directive 2003/87/EC](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087)
   — the scheme that defines which installations report verified emissions.
+- [GLEIF — the Global Legal Entity Identifier Foundation](https://www.gleif.org/en/about-lei/introducing-the-legal-entity-identifier-lei)
+  ([open LEI API](https://www.gleif.org/en/lei-data/gleif-api)) — the ISO 17442
+  registration authority behind the reviewed
+  [`lei_mapping_euets.csv`](transform/seeds/lei_mapping_euets.csv) seed, which
+  attaches each installation's operating legal entity's LEI so the benchmark can
+  roll up to company level.
 
 **Classification (the sector mapping)**
 
