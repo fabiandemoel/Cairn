@@ -17,6 +17,8 @@ only; aircraft and maritime operators excluded.
 select distinct
     installation_id,
     installation_name,
+    lei,
+    gleif_legal_name,
     nace_section
 from cairn.installation_emissions
 order by installation_name
@@ -88,6 +90,14 @@ This installation is in NACE section
 against **<Value data={selected_latest} column=sector_installation_count />**
 ETS installations in that section.
 
+Operating legal entity (where the reviewed
+[GLEIF](https://www.gleif.org/en/about-lei/introducing-the-legal-entity-identifier-lei)
+mapping has a confident match):
+**<Value data={selected_latest} column=gleif_legal_name />**
+(LEI <Value data={selected_latest} column=lei />). The LEI is the open,
+authoritative entity identifier that lets emissions roll up from installation to
+company; unmatched installations are left blank, never assigned an invented LEI.
+
 <Alert status="info">
 
 A multiple above or below the sector mean is **context, not a verdict**. A
@@ -139,6 +149,7 @@ with sel as (
 )
 select
     i.installation_name,
+    i.gleif_legal_name,
     i.installation_emissions_t_co2eq,
     i.allocated_total_t_co2eq,
     i.emissions_vs_sector_mean,
@@ -151,6 +162,7 @@ order by i.installation_emissions_t_co2eq desc
 
 <DataTable data={sector_peers} rows=15 rowShading={true}>
     <Column id=installation_name title="Installation" />
+    <Column id=gleif_legal_name title="Legal entity (GLEIF)" />
     <Column id=installation_emissions_t_co2eq title="Emissions (t CO₂-eq)" fmt='#,##0' />
     <Column id=allocated_total_t_co2eq title="Free allocation (t CO₂-eq)" fmt='#,##0' />
     <Column id=emissions_vs_sector_mean title="vs. sector mean" fmt='0.0"×"' contentType=colorscale />

@@ -7,6 +7,8 @@ select
     year,
     installation_id,
     installation_name,
+    lei,
+    gleif_legal_name,
     nace_section,
     nace_section_label,
     installation_emissions_t_co2eq,
