@@ -64,14 +64,20 @@ jobs:
             --model claude-sonnet-4-6
             --allowedTools "Read,Glob,Grep,TodoWrite,WebFetch,WebSearch,Bash,mcp__github__list_issues,mcp__github__create_issue"
           prompt: |
-            You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
-            are authoritative. Do NOT edit any file and do NOT open a pull request.
+            You are Cairn's daily scout. CLAUDE.md and BACKLOG.md are authoritative,
+            but read narrowly: every turn re-sends the whole conversation so far, so
+            a big upfront read inflates every later turn's cost. Do NOT edit any file
+            and do NOT open a pull request.
 
             Scope for this run: FRESHNESS_PROBE=${{ steps.scope.outputs.freshness }}.
             Task 2 (backlog dispatch) runs every time. Run task 1 (upstream
             freshness) ONLY if FRESHNESS_PROBE is true; if it is false, skip task 1
-            entirely â€” do not probe any upstream source and do not open a
-            data-refresh issue.
+            entirely â€” do not probe any upstream source, do not open a data-refresh
+            issue, and do not read CLAUDE.md (it's only needed for task 1's
+            checklists). For task 2, read only BACKLOG.md's "Live candidates" section,
+            not the whole file. If FRESHNESS_PROBE is true, also read CLAUDE.md's
+            "Recurring maintenance" runbooks (for task 1) â€” no need for the rest of
+            either file.
 
             Two tasks:
 

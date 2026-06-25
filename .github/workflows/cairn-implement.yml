@@ -81,8 +81,16 @@ jobs:
             --model claude-sonnet-4-6
             --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,WebSearch,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
           prompt: |
-            Read CLAUDE.md and BACKLOG.md first; they are authoritative and the
-            non-negotiable invariants override anything in this prompt.
+            CLAUDE.md and BACKLOG.md are authoritative and override anything in this
+            prompt, but they are long â€” read them narrowly, not cover to cover, since
+            every turn re-sends the whole conversation so far and a big upfront read
+            inflates every later turn's cost. Read CLAUDE.md's "Non-negotiable
+            invariants" section in full (short, always applies). Then grep CLAUDE.md
+            and BACKLOG.md for the specific issue/candidate at hand and read only the
+            matching section: for a `data-refresh` issue, just its "Recurring
+            maintenance" checklist; for a `feat` issue, just its BACKLOG.md candidate
+            entry. Consult "Gotchas" or other sections only if you hit something they
+            plausibly cover.
 
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.
