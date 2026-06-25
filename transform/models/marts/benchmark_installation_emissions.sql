@@ -27,14 +27,33 @@
 --     no allocation stays NULL (never a placeholder zero), and the ratio is
 --     NULL where allocation is missing or zero.
 
-with installations as (
-    select *
-    from {{ ref('stg_euets__installations') }}
+--   * Legal-entity identity (lei, gleif_legal_name) is a labelled read/relabel
+--     dimension joined from the reviewed lei_mapping_euets seed -- the GLEIF
+--     LEI (ISO 17442) of the operating legal entity, letting the benchmark roll
+--     up to company level. The left join is 1:1 on installation_id (the seed is
+--     unique on it), so it adds no rows and changes no figure. Installations
+--     with no reviewed match carry a NULL lei (never an invented identifier).
+
+with lei_mapping as (
+    select
+        euets_installation_id,
+        lei,
+        gleif_legal_name
+    from {{ ref('lei_mapping_euets') }}
+),
+
+installations as (
+    select
+        stg.*,
+        lei_mapping.lei,
+        lei_mapping.gleif_legal_name
+    from {{ ref('stg_euets__installations') }} as stg
+    left join lei_mapping on lei_mapping.euets_installation_id = stg.installation_id
     where
-        registry = 'NL'
-        and not is_aircraft_operator
-        and not is_maritime_operator
-        and nace_section is not null
+        stg.registry = 'NL'
+        and not stg.is_aircraft_operator
+        and not stg.is_maritime_operator
+        and stg.nace_section is not null
 ),
 
 compliance as (
@@ -53,6 +72,8 @@ installation_year as (
     select
         compliance.installation_id,
         installations.installation_name,
+        installations.lei,
+        installations.gleif_legal_name,
         installations.nace_section,
         installations.nace_section_label,
         compliance.year,
@@ -83,6 +104,8 @@ select
     installation_year.year,
     installation_year.installation_id,
     installation_year.installation_name,
+    installation_year.lei,
+    installation_year.gleif_legal_name,
     installation_year.nace_section,
     installation_year.nace_section_label,
     installation_year.installation_emissions_t_co2eq,

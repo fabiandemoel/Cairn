@@ -18,6 +18,10 @@
 --   * Unit is tonnes CO2-equivalent, native to the EUTL.
 -- The export grain is the installation (the regulated reporting boundary); an
 -- undertaking that operates several installations would aggregate these rows.
+-- The legal-entity identifier (lei, gleif_legal_name) is carried through from
+-- the reviewed lei_mapping_euets seed so a consumer can roll the installation-
+-- level rows up to the entity level ESRS disclosures are made at. It is a
+-- labelled identity column, not a recomputed figure; nullable where unmatched.
 
 with benchmark as (
     select * from {{ ref('benchmark_installation_emissions') }}
@@ -28,6 +32,8 @@ select
     year as reporting_year,
     installation_id,
     installation_name,
+    lei,
+    gleif_legal_name,
     nace_section,
     nace_section_label,
     -- ESRS E1-6 self-describing datapoint metadata, so the export stands alone.
