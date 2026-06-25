@@ -44,24 +44,7 @@ Order _Live candidates_ by value, then spine-fit, then (inverse) effort.
 
 ## Live candidates
 
-### 1. EU ETS free allocation → verified-vs-allocated benchmark
-**Value: H · Effort: L · Spine-fit: H**
-
-Freely allocated allowances per installation-year is, after verified emissions
-itself, the most interesting ETS axis: who emits above/below their free grant.
-**No new source** — the field is already staged: `stg_euets__compliance`
-exposes `allocated_total` (cast from the pinned euets.info snapshot's
-`allocatedTotal`). Add a measure on `benchmark_installation_emissions` (or a
-sibling mart) and surface via `site/sources/cairn/`. Pure read/relabel.
-- *Watch:* the allocation column is **confirmed present** in the pinned snapshot
-  (`allocated_total`), so the EEA / DG-CLIMA NIM fallback is no longer needed.
-  Keep it read/relabel: the verified-vs-allocated comparison is a labelled
-  measure, never an invented figure; missing values stay `NULL` + a note.
-- *Touches:* one mart, `site/sources/cairn/*.sql`, a page, CI fixture (column
-  already in the fixture's `compliance.parquet`).
-- *Status:* dispatched and approved as issue #27 — implementation in flight.
-
-### 2. GLEIF / LEI → installation → legal-entity mapping
+### 1. GLEIF / LEI → installation → legal-entity mapping
 **Value: H · Effort: M · Spine-fit: H**
 
 Open, authoritative entity IDs. Makes the benchmark meaningful at company level
@@ -70,12 +53,12 @@ export, whose disclosures are entity-level, not installation-level.
 - *Watch:* the mapping **is** the methodology — a reviewed seed like
   `sector_mapping_cbs.csv`. Never invent an LEI; unmatched operators get `NULL`
   + a `notes` entry. The mapping change shows its impact via `benchmark-diff`.
-  The source's free-text `parent_company` (see candidate #6) is a useful *match
+  The source's free-text `parent_company` (see candidate #5) is a useful *match
   aid*, not the authority.
 - *Touches:* a reviewed seed, an entity dimension on the installation mart,
   optional entity rollup in the ESRS export.
 
-### 3. Eurostat Air Emissions Accounts (`env_ac_ainah_r2`) → cross-country sector benchmark
+### 2. Eurostat Air Emissions Accounts (`env_ac_ainah_r2`) → cross-country sector benchmark
 **Value: H · Effort: H · Spine-fit: M**
 
 Turns the NL-only CBS sector benchmark into "is NL chemicals high vs EU
@@ -90,7 +73,7 @@ bulk-downloadable.
   staging + a benchmark dimension, NACE-alignment seed if needed, CI fixture,
   site query + page.
 
-### 4. EUA carbon price → € valuation overlay
+### 3. EUA carbon price → € valuation overlay
 **Value: H (commercial) · Effort: M · Spine-fit: L**
 
 Adds "these emissions = €X at the current EUA price" — directly addresses the
@@ -102,14 +85,14 @@ pinned-snapshot, read/relabel model.
   a stored mart figure, never in the ESRS E1 export. Defer unless commercial
   positioning becomes the active priority.
 
-### 5. EUTL surrendered allowances → verified-vs-surrendered compliance-integrity axis
+### 4. EUTL surrendered allowances → verified-vs-surrendered compliance-integrity axis
 **Value: M · Effort: L · Spine-fit: H**
 
-The third leg of the EUTL triple, after allocation (#1) and verified emissions:
+The third leg of the EUTL triple, after allocation and verified emissions:
 allowances actually surrendered per installation-year. Already staged —
 `stg_euets__compliance` exposes `surrendered`. Surfacing "surrendered vs
 verified" is a pure read/relabel provenance axis over the pinned snapshot; no
-new source, no recomputation. Natural to ship alongside #1.
+new source, no recomputation. Natural to ship alongside verified-vs-allocated.
 - *Watch:* surrender can lag and a single surrender may cover multiple years —
   present it as a **labelled measure**, not a recomputed running balance, and
   never as a compliance *verdict* (that would drift toward the assurance scope
@@ -118,7 +101,7 @@ new source, no recomputation. Natural to ship alongside #1.
   `site/sources/cairn/*.sql`, a page. Column already in the fixture's
   `compliance.parquet`.
 
-### 6. EUTL installation identity enrichment (parent company, ETS activity, geo)
+### 5. EUTL installation identity enrichment (parent company, ETS activity, geo)
 **Value: M · Effort: L · Spine-fit: H**
 
 `stg_euets__installations` already stages `parent_company`, `ets_activity_label`,
@@ -126,14 +109,36 @@ new source, no recomputation. Natural to ship alongside #1.
 `installation_name` + NACE section. Promoting these adds **identity/provenance
 depth** (admission rule 3) at near-zero cost — and `parent_company` lets a
 rough company rollup exist from the pinned snapshot even before the GLEIF/LEI
-seed (#4) lands.
+seed (#1) lands.
 - *Watch:* `parent_company` is **free text, not an authoritative ID** — surface
   it as descriptive context only; the authoritative entity mapping stays the
-  reviewed LEI seed (#4). Do **not** normalise/dedupe names into a synthesised
+  reviewed LEI seed (#1). Do **not** normalise/dedupe names into a synthesised
   entity (that's invention). Geo is euets.info's `latitudeGoogle/longitudeGoogle`
   — label it source-provided and approximate.
 - *Touches:* installation mart dimension columns, `site/sources/cairn/*.sql`,
   a page (table/map). Fields already present in the fixture's `installation.parquet`.
+
+### 6. Eurostat `env_air_gge` — EU member-state GHG inventory national totals
+**Value: M · Effort: L · Spine-fit: H**
+
+Eurostat aggregates member-state UNFCCC national inventory reports into a single
+bulk download (`env_air_gge`): annual national GHG totals and CRF-sector
+breakdowns for all EU27 + Norway, Iceland, and UK, back to 1990. Because it uses
+the **territorial/production principle** — the same as CBS 85669NED and the EUTL
+— NL's `env_air_gge` total is a direct cross-check of the CBS figure. A
+peer-country view ("NL industry emissions vs DE/FR/BE industry") becomes possible
+at CRF-sector granularity without any residence-principle correction.
+- *Watch:* CRF sectors (energy, industrial processes, agriculture, waste, LULUCF)
+  are **not** NACE — no installation-level or NACE-sector alignment is possible
+  from this source alone. Use it as a **national-total cross-check**
+  (`assert_gge_nl_total_within_cbs`, <1% tolerance) and a peer-country chart,
+  not as a NACE sector benchmark. Do not conflate with Eurostat AEA (#2), which
+  uses the residence principle and NACE sectors for a different purpose. Time
+  lag: UNFCCC submissions trail the current year by 1–2 years; document the
+  latest available year explicitly.
+- *Touches:* `ingestion/eurostat_gge_pipeline.py`, `sources/eurostat_gge/manifest.yml`,
+  a `stg_eurostat__gge` staging model, a cross-check test, `site/sources/cairn/*.sql`,
+  a page.
 
 ### 7. Emissieregistratie (RIVM) → deepen NL provenance + granularity
 **Value: M · Effort: M · Spine-fit: H**
@@ -163,12 +168,58 @@ same pinned snapshot. Read/relabel; the flags are already staged.
 - *Touches:* euets staging (flags present), a sibling mart + its own coverage
   handling/test, `site/sources/cairn/*.sql`, a page, CI fixture check.
 
+### 9. EU ETS carbon leakage list (Delegated Regulation 2019/708) → installation sector-exposure flag
+**Value: M · Effort: M · Spine-fit: H**
+
+Commission Delegated Regulation (EU) 2019/708 (OJ L 120, 11.5.2019, and
+subsequent amendments) lists the NACE and PRODCOM sectors deemed exposed to
+carbon leakage in ETS Phase 4 (2021–2030); exposed sectors receive elevated free
+allocation. Pinning the list as a reviewed seed — like `sector_mapping_cbs.csv`
+— lets the mart label every installation with its carbon-leakage-exposure status:
+a pure policy-context read/relabel, no computation. Answers "why does this sector
+receive more free allocation?" directly from official EU law, providing a
+provenance bridge between candidate #4 (surrendered allowances) and the
+allocation picture shipped in PR #31.
+- *Watch:* the list is versioned to a specific Regulation and OJ citation — pin
+  it there; if an amending regulation is issued, open a new seed version rather
+  than overwriting. Never derive a free-allocation **entitlement** from this flag
+  (that requires benchmark production data Cairn does not have); surface it as a
+  label only. Every seed change goes through a PR and `benchmark-diff` so the
+  numeric impact on the allocation comparison is visible.
+- *Touches:* reviewed seed `seeds/carbon_leakage_list.csv` (NACE/PRODCOM codes +
+  regulation citation), a mart dimension column, `site/sources/cairn/*.sql`, a page.
+
+### 10. CBS NAMEA air emission accounts — residence-principle sector breakdown
+**Value: M · Effort: M · Spine-fit: H**
+
+CBS publishes NAMEA (National Accounting Matrix including Environmental Accounts)
+air emission data: annual GHG emissions attributed to Dutch economic actors by
+NACE sector, using the **residence principle**. Unlike 85669NED
+(territorial/production principle), NAMEA attributes emissions to the industry of
+the emitting company's registered residence. The two methodologies diverge for
+transport, shipping, and multinationals with cross-border activity. Surfacing
+NAMEA as a provenance layer explains why 85669NED and the Eurostat AEA (#2)
+diverge for the same sector — it is the Dutch side of the AEA picture, directly
+from CBS via the same OData v4 API.
+- *Watch:* because it uses the residence principle, NAMEA national totals do
+  **not** directly reconcile with 85669NED — document the bridge explicitly in a
+  note rather than a `<0.5%` test (the divergence is methodological by design,
+  not an error). Avoid duplicating AEA's cross-country story here; keep this as a
+  provenance-depth / methodology-bridge layer for NL only. RIVM (#7) also
+  deepens NL provenance but from the territorial side — these are complementary,
+  not redundant.
+- *Touches:* `ingestion/cbs_namea_pipeline.py`, `sources/cbs_namea/manifest.yml`,
+  staging model, a provenance/cross-check model, `site/sources/cairn/*.sql`.
+
 ---
 
 ## Considered and rejected
 *(Don't re-propose these. If circumstances change, move an item back up with the
 new reason it now fits.)*
 
+- **EU ETS free allocation → verified-vs-allocated benchmark.** Shipped: merged
+  in PR #31 (2026-06-24). The `allocated_total` measure is live on
+  `benchmark_installation_emissions` and surfaced on the Evidence site.
 - **Public read/query API.** Category jump in complexity and maintenance for a
   static, R2-pinned Pages site; solves no current user's problem. (ChatGPT review.)
 - **Interactive lineage graph.** Same — the static Architecture page covers the
