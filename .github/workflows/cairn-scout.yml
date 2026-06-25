@@ -31,38 +31,19 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Cheap and (mostly) read-only, but freshness checks need real probing:
-          # scraping euets.info's download page, parsing its JS for the current
-          # zip token, grepping headers for the EEA datashare token. --allowedTools
-          # REPLACES the action's default tool set rather than extending it, so
-          # everything the prompt below actually needs must be listed explicitly,
-          # including TodoWrite (Claude Code's own progress tracker, used by
-          # default on every multi-step run) — leaving any of it out means every
-          # attempt gets silently denied and the run burns turns retrying before
-          # hitting --max-turns (error_max_turns, exit code 1).
-          # Bash is allowed unrestricted (not per-command, e.g. `Bash(curl:*)`):
-          # scout probes release tokens with shell loops and helper functions
-          # (`for tok in ...; do ...`, `probe() { ... }`), and a prefix-matched
-          # allowlist can't recognise those as the underlying command — every
-          # such attempt was denied, burning turns
-          # (https://github.com/fabiandemoel/Cairn/actions/runs/28053500486).
-          # The job has no write permissions at the GitHub Actions level
-          # (`permissions.contents: read` above) and the prompt forbids file
-          # edits, so unrestricted Bash here is read-only in effect.
-          # mcp__github__create_issue is the actual tool name exposed by the
-          # action's bundled github-mcp-server — an earlier allowlist entry of
-          # `mcp__github__issue_write` (a different, non-existent tool name)
-          # silently denied every issue-creation attempt; same run above.
-          # --add-dir /tmp lets Read/Grep follow scratch files (probe
-          # downloads, unzip listings) without widening write access elsewhere.
-          # show_full_output prints the full SDK conversation (including which
-          # tool calls get denied) so a failure's cause is visible in the job
-          # log directly, without a separate debugging pass.
-          # --model: this job is a mechanical freshness/duplicate check against
-          # explicit instructions, not a task needing Opus-level judgement â€”
-          # Sonnet is enough and cheaper. cairn-implement runs on Sonnet too
-          # (see its comment); the per-layer issue scoping below keeps each
-          # implement run a bounded, Sonnet-sized task.
+          # --allowedTools REPLACES the action's default tool set, so list
+          # everything the prompt needs â€” including TodoWrite (Claude Code's
+          # default progress tracker); omitting any of it silently denies the
+          # call and burns turns to error_max_turns. Bash is unrestricted
+          # because scout probes release tokens with shell loops/functions
+          # that prefix matching can't recognise (run 28053500486); with
+          # contents:read and no file edits, it's read-only in effect.
+          # mcp__github__create_issue is the bundled github-mcp-server's
+          # actual tool name (issue_write does not exist and silently denies).
+          # --add-dir /tmp lets Read/Grep follow scratch probe files.
+          # show_full_output surfaces denied tool calls in the job log.
+          # --model Sonnet: a mechanical freshness/duplicate check needs no
+          # Opus-level judgement.
           show_full_output: true
           claude_args: >-
             --max-turns 20
