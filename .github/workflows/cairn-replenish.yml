@@ -51,9 +51,9 @@ jobs:
           # --model: this job re-scores/curates one markdown file against an
           # explicit rubric, not a task needing Opus-level judgement â€”
           # Sonnet is enough and cheaper. cairn-implement also runs on
-          # Sonnet now (see its own comment) to cut per-attempt cost,
-          # since an oversized issue there now splits into a follow-up
-          # issue rather than a bigger single run.
+          # Sonnet now (see its own comment); each issue cairn-scout files
+          # is scoped to a single repo layer, so an implement run is a
+          # bounded, Sonnet-sized task.
           show_full_output: true
           claude_args: >-
             --max-turns 20
