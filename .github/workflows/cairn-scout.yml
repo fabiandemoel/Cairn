@@ -4,7 +4,9 @@ name: Cairn Scout
 #   1. Detect whether an upstream source published a new release (the freshness
 #      signals are documented in CLAUDE.md: CBS 85669NED `Modified` date,
 #      euets.info zip token, EEA datashare token) vs the pins in sources/*/manifest.yml.
-#   2. Dispatch the top of BACKLOG.md "Live candidates".
+#      Runs WEEKLY (Mondays) only â€” these sources update ~yearly, so daily
+#      re-scraping is pure waste; the `freshness` step below gates it.
+#   2. Dispatch the top of BACKLOG.md "Live candidates". Runs every day.
 # Output is GitHub issues only â€” never code, never a PR. A human triages them and
 # adds the `approved` label to hand one to Cairn Implement.
 
@@ -28,40 +30,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Freshness probing (task 1) runs weekly (Mondays) or on manual dispatch;
+      # the daily runs do backlog dispatch (task 2) only.
+      - name: Decide whether to run the weekly freshness probe
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(date -u +%u)" = "1" ]; then
+            echo "freshness=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "freshness=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Cheap and (mostly) read-only, but freshness checks need real probing:
-          # scraping euets.info's download page, parsing its JS for the current
-          # zip token, grepping headers for the EEA datashare token. --allowedTools
-          # REPLACES the action's default tool set rather than extending it, so
-          # everything the prompt below actually needs must be listed explicitly,
-          # including TodoWrite (Claude Code's own progress tracker, used by
-          # default on every multi-step run) — leaving any of it out means every
-          # attempt gets silently denied and the run burns turns retrying before
-          # hitting --max-turns (error_max_turns, exit code 1).
-          # Bash is allowed unrestricted (not per-command, e.g. `Bash(curl:*)`):
-          # scout probes release tokens with shell loops and helper functions
-          # (`for tok in ...; do ...`, `probe() { ... }`), and a prefix-matched
-          # allowlist can't recognise those as the underlying command — every
-          # such attempt was denied, burning turns
-          # (https://github.com/fabiandemoel/Cairn/actions/runs/28053500486).
-          # The job has no write permissions at the GitHub Actions level
-          # (`permissions.contents: read` above) and the prompt forbids file
-          # edits, so unrestricted Bash here is read-only in effect.
-          # mcp__github__create_issue is the actual tool name exposed by the
-          # action's bundled github-mcp-server — an earlier allowlist entry of
-          # `mcp__github__issue_write` (a different, non-existent tool name)
-          # silently denied every issue-creation attempt; same run above.
-          # --add-dir /tmp lets Read/Grep follow scratch files (probe
-          # downloads, unzip listings) without widening write access elsewhere.
-          # show_full_output prints the full SDK conversation (including which
-          # tool calls get denied) so a failure's cause is visible in the job
-          # log directly, without a separate debugging pass.
-          # --model: this job is a mechanical freshness/duplicate check against
-          # explicit instructions, not a task needing Opus-level judgement â€”
-          # Sonnet is enough and cheaper. cairn-implement stays on the
-          # default (Opus) since it makes real multi-file code changes.
+          # --allowedTools REPLACES the action's default tool set, so list
+          # everything the prompt needs â€” including TodoWrite (Claude Code's
+          # default progress tracker); omitting any of it silently denies the
+          # call and burns turns to error_max_turns. Bash is unrestricted
+          # because scout probes release tokens with shell loops/functions
+          # that prefix matching can't recognise (run 28053500486); with
+          # contents:read and no file edits, it's read-only in effect.
+          # mcp__github__create_issue is the bundled github-mcp-server's
+          # actual tool name (issue_write does not exist and silently denies).
+          # --add-dir /tmp lets Read/Grep follow scratch probe files.
+          # show_full_output surfaces denied tool calls in the job log.
+          # --model Sonnet: a mechanical freshness/duplicate check needs no
+          # Opus-level judgement.
           show_full_output: true
           claude_args: >-
             --max-turns 20
@@ -69,8 +64,20 @@ jobs:
             --model claude-sonnet-4-6
             --allowedTools "Read,Glob,Grep,TodoWrite,WebFetch,WebSearch,Bash,mcp__github__list_issues,mcp__github__create_issue"
           prompt: |
-            You are Cairn's daily scout. Read CLAUDE.md and BACKLOG.md first; they
-            are authoritative. Do NOT edit any file and do NOT open a pull request.
+            You are Cairn's daily scout. CLAUDE.md and BACKLOG.md are authoritative,
+            but read narrowly: every turn re-sends the whole conversation so far, so
+            a big upfront read inflates every later turn's cost. Do NOT edit any file
+            and do NOT open a pull request.
+
+            Scope for this run: FRESHNESS_PROBE=${{ steps.scope.outputs.freshness }}.
+            Task 2 (backlog dispatch) runs every time. Run task 1 (upstream
+            freshness) ONLY if FRESHNESS_PROBE is true; if it is false, skip task 1
+            entirely â€” do not probe any upstream source, do not open a data-refresh
+            issue, and do not read CLAUDE.md (it's only needed for task 1's
+            checklists). For task 2, read only BACKLOG.md's "Live candidates" section,
+            not the whole file. If FRESHNESS_PROBE is true, also read CLAUDE.md's
+            "Recurring maintenance" runbooks (for task 1) â€” no need for the rest of
+            either file.
 
             Two tasks:
 
@@ -90,10 +97,31 @@ jobs:
                CLAUDE.md checklist. If a similar open issue already exists, skip it.
 
             2. BACKLOG DISPATCH. Take the single highest item in BACKLOG.md "Live
-               candidates" that has no corresponding open issue. Open ONE issue
-               titled "feat: <candidate name>", labelled `proposal`, summarising the
-               candidate, its value/effort/spine-fit, the "watch" caveats, and the
-               repo paths it touches â€” straight from the backlog entry.
+               candidates" and dispatch it as one SMALL, single-layer issue that a
+               single implement run can finish well inside its turn budget. Cairn's
+               work splits along the repo's natural layers, in dependency order:
+                 a. Ingestion + manifest â€” the pipeline script, a new
+                    `sources/<name>/manifest.yml`, and the CI fixture.
+                 b. dbt staging/mart model(s) + the dbt test(s) that guard them.
+                 c. Evidence site and/or ESRS export integration.
+               A candidate that only touches one layer is one issue. A candidate that
+               spans several (e.g. a new source end-to-end) must NOT be dispatched as
+               one big issue â€” it gets one issue per layer, and because each layer
+               depends on the previous one having landed, open an issue ONLY for the
+               next not-yet-done layer:
+                 - Inspect the repo to see how far the candidate has progressed
+                   (e.g. does `sources/<name>/manifest.yml` exist yet? the staging
+                   model? the mart? the site query?). The first layer whose artifacts
+                   are absent is the one to dispatch now.
+                 - Skip the candidate entirely if that next layer already has an open
+                   issue, or if the previous layer's PR is still open/unmerged (its
+                   prerequisite hasn't landed â€” nothing to dispatch yet).
+               Title the issue "feat: <candidate name> â€” <layer>" (e.g.
+               "â€” ingestion", "â€” dbt mart", "â€” site"), labelled `proposal`. Scope the
+               body to that layer ONLY: the slice of the backlog entry's
+               value/effort/spine-fit and "watch" caveats relevant to it, the repo
+               paths it touches, and which earlier layers it assumes are already
+               merged. Do not restate the whole multi-layer feature as the task.
 
             Every issue body must open with a section headed "## Executive summary":
             2-4 plain-language sentences, written for a reader with no Cairn context,

@@ -58,45 +58,39 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.CAIRN_BOT_TOKEN }}
-          # show_full_output prints the full SDK conversation (including which
-          # tool calls get denied) so a failure's cause is visible in the job
-          # log directly.
+          # show_full_output surfaces denied tool calls in the job log.
           #
-          # --allowedTools is required: claude-code-action has no built-in
-          # default allowlist, so with none set every tool call (gh, curl,
-          # WebFetch, Bash, even Edit/Write to BACKLOG.md or the repo) is
-          # denied outright. Without this, the run finishes with
-          # conclusion: success and num_turns well under the cap (it just
-          # gives up after explaining it's blocked) â€” a quiet false-green,
-          # confirmed on run 28079588272 (cairn-scout's exact failure mode
-          # before its allowlist got fixed, see cairn-scout.yml). Bash is
-          # unrestricted for the same reason as scout: this job's real work
-          # (uv/dbt/npm/git/ruff/sqlfluff/pytest) cannot be enumerated as
-          # literal command prefixes, and prefix matching can't see through
-          # shell control flow anyway. mcp__github__get_issue /
-          # mcp__github__create_pull_request are the real tool names exposed
-          # by the bundled github-mcp-server â€” run 28085542460 shows the
-          # agent itself calling get_issue, not issue_read (the name a newer
-          # github-mcp-server build uses elsewhere); allowlisting the wrong
-          # guess denied it again, same mistake class as scout's
-          # issue_write/create_issue mixup.
+          # --allowedTools is required: claude-code-action ships no default
+          # allowlist, so with none set every tool call is denied and the run
+          # still reports success â€” a quiet false-green where the agent just
+          # explains it's blocked (run 28079588272). Bash is unrestricted
+          # because this job's real work (uv/dbt/npm/git/ruff/sqlfluff/pytest)
+          # runs through shell control flow that prefix matching can't see.
+          # mcp__github__get_issue / mcp__github__create_pull_request are the
+          # bundled github-mcp-server's actual tool names (run 28085542460);
+          # guessing wrong (issue_read, issue_write) silently denies them.
           #
-          # --max-turns 20 (scout/replenish's budget) starved this job: run
-          # 28085542460 hit error_max_turns mid-implementation ("Now let me
-          # implement. First the mart:") â€” it was doing real work, not stuck
-          # on denials, it just ran out of room. Unlike scout's read-only
-          # freshness check or replenish's single-file docs edit, this job's
-          # actual scope per CLAUDE.md is explore + edit several files + run
-          # the full local CI suite (uv sync, ruff, sqlfluff, pytest, dbt
-          # build, npm ci, npm run build:strict) + git + open a PR, which
-          # needs a much bigger budget.
+          # --max-turns 100: a full new-source slice (ingestion + mart + test
+          # + site) needs room; 20 then 60 both hit error_max_turns mid-work
+          # (runs 28085542460, 28173119243). --model Sonnet: ~5x cheaper than
+          # Opus ($5.16 -> ~$1 on run 28173119243), and cairn-scout now scopes
+          # each issue to one repo layer, so a run is a bounded, Sonnet task.
           show_full_output: true
           claude_args: >-
-            --max-turns 60
+            --max-turns 100
+            --model claude-sonnet-4-6
             --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,WebSearch,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
           prompt: |
-            Read CLAUDE.md and BACKLOG.md first; they are authoritative and the
-            non-negotiable invariants override anything in this prompt.
+            CLAUDE.md and BACKLOG.md are authoritative and override anything in this
+            prompt, but they are long â€” read them narrowly, not cover to cover, since
+            every turn re-sends the whole conversation so far and a big upfront read
+            inflates every later turn's cost. Read CLAUDE.md's "Non-negotiable
+            invariants" section in full (short, always applies). Then grep CLAUDE.md
+            and BACKLOG.md for the specific issue/candidate at hand and read only the
+            matching section: for a `data-refresh` issue, just its "Recurring
+            maintenance" checklist; for a `feat` issue, just its BACKLOG.md candidate
+            entry. Consult "Gotchas" or other sections only if you hit something they
+            plausibly cover.
 
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.
@@ -111,15 +105,20 @@ jobs:
               figures â€” real source categories or explicit NULL + a note. New source
               => its own append-only manifest under sources/.
 
-            Work on a branch named `agent/<short-slug>`. Before opening the PR, run
-            and pass locally what CI runs:
+            Work on a branch named `agent/<short-slug>`. Commit after each logical
+            milestone as you finish it rather than saving everything for one commit
+            at the end â€” a run that hits the turn limit mid-task should still leave
+            committed, pushed progress on its branch instead of losing it when the
+            job's runner is torn down. Use conventional commits, one logical change
+            per commit.
+
+            Before opening the PR, run and pass locally what CI runs:
               uv sync --locked --all-groups
               uv run ruff check . && uv run ruff format --check .
               uv run sqlfluff lint transform/models transform/tests
               uv run pytest -q
               uv run dbt build --project-dir transform
               cd site && npm ci && npm run build:strict
-            Use conventional commits, one logical change per commit.
 
             Open ONE pull request against `main`. The description must open with a
             section headed "## Executive summary": 2-4 plain-language sentences for a

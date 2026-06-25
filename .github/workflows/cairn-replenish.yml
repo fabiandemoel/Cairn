@@ -33,25 +33,16 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.CAIRN_BOT_TOKEN }}
-          # show_full_output prints the full SDK conversation (including which
-          # tool calls get denied) so a failure's cause is visible in the job
-          # log directly, without a separate debugging pass.
+          # show_full_output surfaces denied tool calls in the job log.
           #
-          # --allowedTools is required: with none set, claude-code-action
-          # denies every tool call by default (no Edit/Write to BACKLOG.md,
-          # no git, no PR tool) and the run still finishes with
-          # conclusion: success â€” it drafts the whole replenish in its final
-          # text and gives up, reporting it's blocked. Confirmed on run
-          # 28080248083 ("the harness is blocking writes to BACKLOG.md...
-          # the edit, branch creation, and PR open all require a permission
-          # grant I don't have here"). Bash is unrestricted for the same
-          # reason as cairn-scout/cairn-implement: git branch/commit/push
-          # can't be enumerated as literal prefixes. mcp__github__create_pull_request
-          # is the real tool name exposed by the bundled github-mcp-server.
-          # --model: this job re-scores/curates one markdown file against an
-          # explicit rubric, not a task needing Opus-level judgement â€”
-          # Sonnet is enough and cheaper. cairn-implement stays on the
-          # default (Opus) since it makes real multi-file code changes.
+          # --allowedTools is required: with none set claude-code-action
+          # denies every tool call yet still reports success â€” it drafts the
+          # whole replenish in its final text and gives up (run 28080248083).
+          # Bash is unrestricted because git branch/commit/push runs through
+          # shell control flow that prefix matching can't see.
+          # mcp__github__create_pull_request is the bundled github-mcp-server's
+          # actual tool name. --model Sonnet: re-scoring one markdown file
+          # against an explicit rubric needs no Opus-level judgement.
           show_full_output: true
           claude_args: >-
             --max-turns 20
