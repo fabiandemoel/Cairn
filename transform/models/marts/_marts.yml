@@ -77,7 +77,12 @@ models:
         allocation (allocated_total_t_co2eq) and the verified-vs-allocated ratio
         (emissions_vs_allocated) are labelled read/relabel measures over the
         pinned snapshot's allocatedTotal column -- who emits above or below their
-        free grant -- not recomputed figures.
+        free grant -- not recomputed figures. Legal-entity identity (lei,
+        gleif_legal_name) is a labelled read/relabel dimension joined from the
+        reviewed lei_mapping_euets seed -- the operating entity's GLEIF Legal
+        Entity Identifier (ISO 17442), letting the benchmark roll up to company
+        level. The join is 1:1 on installation_id, so it adds no rows and changes
+        no emissions figure.
       known_limitations: >
         (1) euets.info lags the EEA release (latest data ~2023 vs 2025).
         (2) Installations without a NACE code are excluded (cannot be sector-
@@ -86,13 +91,17 @@ models:
         and maritime operators are excluded. (5) Free allocation is nullable: an
         installation-year with no allocation stays NULL (never a placeholder
         zero), and emissions_vs_allocated is NULL where allocation is missing or
-        zero.
+        zero. (6) The LEI is nullable: it is set only where the reviewed
+        lei_mapping_euets seed carries a confident GLEIF match; unmatched
+        installations stay NULL (never an invented identifier), and seed coverage
+        grows over time via PRs.
       references:
         installation_source: https://www.euets.info/
         eutl_database_doc: https://euets-info-public.s3.eu-central-1.amazonaws.com/Description_EUTL_database.pdf
         eea_cross_check: https://www.eea.europa.eu/en/datahub/datahubitem-view/98f04097-26de-4fca-86c4-63834818c0c0
         eu_ets_directive: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087
         nace_rev2: https://ec.europa.eu/eurostat/web/nace
+        gleif_lei: https://www.gleif.org/en/about-lei/introducing-the-legal-entity-identifier-lei
         disclosure_context_esrs_e1: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
     columns:
       - name: installation_year_key
@@ -100,6 +109,15 @@ models:
         tests:
           - unique
           - not_null
+      - name: lei
+        description: >
+          GLEIF Legal Entity Identifier (ISO 17442) of the operating legal
+          entity, from the reviewed lei_mapping_euets seed. Nullable -- NULL
+          where no confident GLEIF match exists; never an invented identifier.
+      - name: gleif_legal_name
+        description: >
+          The GLEIF-registered legal name the LEI resolves to (context for the
+          mapping). Nullable, paired with lei.
       - name: nace_section
         description: NACE Rev.2 section letter the installation belongs to.
         tests:
@@ -152,19 +170,24 @@ models:
         two usually align, but can diverge on organisational boundary,
         consolidation scope, and emission sources outside the ETS. The export
         grain is the installation (the regulated reporting boundary); an
-        undertaking operating several installations aggregates these rows.
+        undertaking operating several installations aggregates these rows -- the
+        carried-through LEI (lei, gleif_legal_name, from the reviewed
+        lei_mapping_euets seed) is the key for that entity-level roll-up.
       known_limitations: >
         (1) Scope 1 only -- ESRS E1-6 also requires Scope 2 and Scope 3, which
         Cairn has no source for and deliberately does not fill with placeholders
         (no invented figures). (2) EU ETS covers only large emitters, so the
         population is regulated installations, not every undertaking. (3) Inherits
         the euets.info release lag and the exclusions of the underlying mart
-        (aircraft/maritime operators, installations without a NACE code).
+        (aircraft/maritime operators, installations without a NACE code). (4) The
+        LEI is nullable -- present only where the reviewed seed carries a
+        confident GLEIF match; never invented.
       references:
         esrs_e1: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
         csrd_directive: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022L2464
         installation_source: https://www.euets.info/
         eu_ets_directive: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087
+        gleif_lei: https://www.gleif.org/en/about-lei/introducing-the-legal-entity-identifier-lei
     columns:
       - name: esrs_e1_key
         description: Surrogate natural key (installation_id|year).

@@ -18,3 +18,27 @@ seeds:
         description: True for CBS totals/subtotals and bunker memo items.
         tests:
           - not_null
+
+  - name: lei_mapping_euets
+    description: >
+      Reviewed mapping of euets.info (EUTL) installations to their operating
+      legal entity's GLEIF Legal Entity Identifier (LEI, ISO 17442). This is a
+      methodology seed, like sector_mapping_cbs: every change goes through a PR
+      so benchmark-diff makes the impact visible. An LEI is only set where the
+      GLEIF legalName matches the EUTL operator name (NL jurisdiction); where no
+      confident match exists the lei stays NULL with a note -- LEIs are never
+      invented. Coverage grows over time via reviewed PRs; installations absent
+      from this seed surface a NULL LEI downstream (left join, never dropped).
+    columns:
+      - name: euets_installation_id
+        description: EUTL installation identifier (primary key, e.g. NL_100).
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_euets__installations')
+              field: installation_id
+      - name: lei
+        description: >
+          GLEIF Legal Entity Identifier (20-char ISO 17442) of the operating
+          legal entity, or NULL when no confident GLEIF match exists.

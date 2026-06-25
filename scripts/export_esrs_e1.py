@@ -65,6 +65,20 @@ DATA_DICTIONARY: list[dict[str, str]] = [
         "description": "Installation name as registered in the EUTL.",
     },
     {
+        "column": "lei",
+        "unit": "",
+        "description": (
+            "GLEIF Legal Entity Identifier (ISO 17442) of the operating legal entity, "
+            "from the reviewed lei_mapping_euets seed; the key for entity-level roll-up. "
+            "Empty where no confident GLEIF match exists (never invented)."
+        ),
+    },
+    {
+        "column": "gleif_legal_name",
+        "unit": "",
+        "description": "GLEIF-registered legal name the LEI resolves to. Empty where lei is empty.",
+    },
+    {
         "column": "nace_section",
         "unit": "",
         "description": "NACE Rev.2 section letter the installation belongs to.",

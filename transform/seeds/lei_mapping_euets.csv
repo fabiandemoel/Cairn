@@ -1,0 +1,16 @@
+euets_installation_id,installation_name,lei,gleif_legal_name,notes
+NL_1,TAQA Onshore B.V.,,,No GLEIF record found for the operator name; left unmatched (LEI NULL) rather than invented.
+NL_100,Zeeland Refinery N.V.,7245006FEHJ05N4PKJ05,Zeeland Refinery N.V.,GLEIF legalName matches the EUTL operator name exactly (NL jurisdiction).
+NL_102,Frisia Zout B.V.,529900W50A2EXPC1CG63,Frisia Zout B.V.,GLEIF legalName matches the EUTL operator name exactly (NL jurisdiction).
+NL_103,"Air Liquide Industrie B.V., vestiging Botlek-Rotterdam",5299003RXKBTUW2Q6J52,Air Liquide Industrie B.V.,EUTL name is a vestiging (branch) of the legal entity Air Liquide Industrie B.V.; GLEIF legalName matches the entity (NL jurisdiction).
+NL_109,Biotech Campus Delft Permit B.V.,724500LKMPDKQSEH6E57,Biotech Campus Delft Permit B.V.,GLEIF legalName matches the EUTL operator name exactly (NL jurisdiction).
+NL_124,Almatis B.V.,549300ZDGWIFS6CFV277,Almatis B.V.,GLEIF legalName matches the EUTL operator name exactly (NL jurisdiction).
+NL_131,O-I Manufacturing Netherlands B.V.,,,No GLEIF record found for the operator name; left unmatched (LEI NULL) rather than invented.
+NL_203202,Holland Malt B.V. locatie Eemshaven,724500A820C0XEB91849,Holland Malt B.V.,EUTL name is the Eemshaven location of the legal entity Holland Malt B.V.; GLEIF legalName matches the entity (NL jurisdiction).
+NL_203203,"DOC Kaas ba, vestiging Alteveerstraat",,,"GLEIF has ""DOC Kaas B.V."" but the EUTL operator is the cooperative ""DOC Kaas ba""; legal form differs, so not confidently the same entity. Left unmatched (LEI NULL)."
+NL_212,Harting Holland B.V.,89450082877EJIZIBA83,Harting Holland,"GLEIF legalName ""Harting Holland"" matches the EUTL operator ""Harting Holland B.V."" modulo legal-form suffix (NL jurisdiction)."
+NL_305,Trespa International B.V.,,,No GLEIF record found for the operator name; left unmatched (LEI NULL) rather than invented.
+NL_324,Huhtamaki Nederland BV,549300PNFKEV4ESZ9Y17,Huhtamaki Nederland B.V.,GLEIF legalName matches the EUTL operator name exactly modulo punctuation (NL jurisdiction).
+NL_365,NXP Semiconductors Nijmegen,,,"EUTL name is a site label (the Nijmegen fab), not a legal-entity name; the operating entity cannot be asserted from the name alone. Left unmatched (LEI NULL) pending the GLEIF/parent-company match aid."
+NL_369,Philip Morris Holland B.V.,724500BP0LP5KPPR3527,PHILIP MORRIS HOLLAND HOLDINGS B.V.,"GLEIF record's previous legalName was exactly ""Philip Morris Holland B.V.""; the same legal entity (this LEI) was later renamed to PHILIP MORRIS HOLLAND HOLDINGS B.V. (NL jurisdiction)."
+NL_449,PGI Nonwovens B.V.,8945000IGR1CTDKKFL42,PGI Nonwovens B.V.,GLEIF legalName matches the EUTL operator name exactly (NL jurisdiction).
