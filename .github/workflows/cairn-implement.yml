@@ -105,12 +105,22 @@ jobs:
               figures â€” real source categories or explicit NULL + a note. New source
               => its own append-only manifest under sources/.
 
-            Work on a branch named `agent/<short-slug>`. Commit after each logical
-            milestone as you finish it rather than saving everything for one commit
-            at the end â€” a run that hits the turn limit mid-task should still leave
-            committed, pushed progress on its branch instead of losing it when the
-            job's runner is torn down. Use conventional commits, one logical change
-            per commit.
+            Branch naming: `agent/<issue-number>-<short-slug>`, e.g. `agent/38-eurostat-ingestion`
+            â€” the issue number makes a previous run's branch unambiguous to find.
+
+            Before starting, check whether a previous run already made progress on
+            this issue: list open PRs (`mcp__github__list_pull_requests`) and remote
+            branches (`git branch -r`) for one matching `agent/<issue-number>-*`. If
+            one exists, check it out and continue from its last commit instead of
+            starting over â€” read its existing commits first so you don't redo or
+            contradict finished work. Otherwise, start fresh on a new branch named
+            `agent/<issue-number>-<short-slug>`.
+
+            Commit after each logical milestone as you finish it rather than saving
+            everything for one commit at the end â€” a run that hits the turn limit
+            mid-task should still leave committed, pushed progress on its branch so
+            the next run can resume it instead of losing it when the job's runner is
+            torn down. Use conventional commits, one logical change per commit.
 
             Before opening the PR, run and pass locally what CI runs:
               uv sync --locked --all-groups
