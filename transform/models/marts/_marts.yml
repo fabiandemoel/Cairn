@@ -237,3 +237,97 @@ models:
               values:
                 ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
                  "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U"]
+
+  - name: mart_data_provenance
+    description: >
+      Provenance-integrity view over the source manifests: one row per pinned
+      snapshot (plus one placeholder row for a configured-but-unpinned source),
+      reporting whether each published figure's chain back to its official
+      source is intact. Observable facts only -- pin status, storage backend,
+      SHA256, row count, release, ingest time, period coverage -- never a
+      confidence score. It reads the same sources/<source>/manifest.yml files
+      ingestion writes, so it is a second reader of the pin of record, not a
+      second source of truth.
+    config:
+      tags: ["provenance"]
+    meta:
+      source_manifest: sources/
+      methodology: >
+        Built by transform/models/marts/mart_data_provenance.py, which reads
+        every sources/*/manifest.yml and materialises its snapshots verbatim --
+        nothing is recomputed and no figures are invented. pin_status is a
+        deterministic label from the snapshot's storage URL scheme: 'pinned_r2'
+        (immutable object storage, the auditable pin of record), 'pinned_local'
+        (a file:// pin from an --offline run, never the committed pin of record,
+        so an integrity flag), or 'unpinned' (configured source with no snapshot
+        yet). is_latest marks each source's most recently ingested snapshot --
+        its current pin of record. The SHA256 shown is the manifest's claim; the
+        weekly verify_reproducibility.py job re-downloads each raw file and
+        re-checks that hash, so this mart shows the pin and CI verifies it.
+      known_limitations: >
+        (1) This mart reports the manifest's pinned SHA256, not a live
+        re-verification -- that is the weekly reproducibility job's role.
+        (2) An unpinned source carries one placeholder row with NULL snapshot
+        fields (never a placeholder hash or row count). (3) Append-only
+        manifests mean rows only ever accrue; a snapshot is never edited away.
+      references:
+        manifest_logic: https://github.com/fabiandemoel/Cairn/blob/main/ingestion/manifest.py
+        reproducibility_check: https://github.com/fabiandemoel/Cairn/blob/main/scripts/verify_reproducibility.py
+    columns:
+      - name: provenance_key
+        description: Surrogate natural key (source|release, or source|UNPINNED).
+        tests:
+          - unique
+          - not_null
+      - name: source
+        description: Source identifier (cbs, euets, eea, ...).
+        tests:
+          - not_null
+      - name: dataset
+        description: Dataset identifier within the source (e.g. 85669NED, eutl).
+        tests:
+          - not_null
+      - name: pin_status
+        description: >
+          Provenance-integrity label derived from the snapshot's storage URL.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["pinned_r2", "pinned_local", "unpinned"]
+      - name: is_pinned
+        description: Whether the source has at least one pinned snapshot.
+        tests:
+          - not_null
+      - name: is_latest
+        description: >
+          Whether this is the source's most recently ingested snapshot (its
+          current pin of record). True for the placeholder row of an unpinned
+          source.
+        tests:
+          - not_null
+      - name: snapshot_count
+        description: Number of pinned snapshots for the source (0 when unpinned).
+        tests:
+          - not_null
+      - name: release
+        description: Source release identifier of the snapshot. NULL when unpinned.
+      - name: ingested_at
+        description: When Cairn ingested the snapshot (UTC). NULL when unpinned.
+      - name: storage_backend
+        description: >
+          Storage scheme of the raw file (r2 or file). NULL when unpinned.
+        tests:
+          - accepted_values:
+              values: ["r2", "file"]
+      - name: storage_url
+        description: r2:// or file:// URL of the primary raw file. NULL when unpinned.
+      - name: sha256
+        description: >
+          Manifest-pinned SHA256 of the primary raw file (the claim CI verifies
+          weekly). NULL when unpinned.
+      - name: row_count
+        description: Rows in the primary raw file at ingest. NULL when unpinned.
+      - name: period_start
+        description: Earliest period the snapshot covers. NULL when unpinned.
+      - name: period_end
+        description: Latest period the snapshot covers. NULL when unpinned.
