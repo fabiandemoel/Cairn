@@ -99,7 +99,9 @@ from its source:
   build if a source shifts under us.
 
 See **[Methodology & sources →](/methodology)** for the full provenance of
-every figure on this site.
+every figure on this site, or **[Data quality →](/data-quality)** for the live
+pin status of each source — whether every figure is still chained, by hash, to
+an immutable official source.
 
 The **[CSRD / ESRS E1 disclosure →](/disclosure)** supports ESRS E1-6 reporting
 by providing an auditable source for the verified Scope 1 emissions of EU ETS
