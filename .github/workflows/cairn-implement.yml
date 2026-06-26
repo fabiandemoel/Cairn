@@ -101,12 +101,17 @@ jobs:
           # (runs 28085542460, 28173119243). --model: Sonnet is ~5x cheaper
           # than Opus ($5.16 -> ~$1 on run 28173119243); the model step above
           # drops to Haiku for data-refresh issues, which follow a fixed
-          # checklist and need no Sonnet-level judgement.
+          # checklist and need no Sonnet-level judgement. Task is allowed so
+          # the orchestrator (whichever model it runs as) can hand bulk
+          # reconnaissance to the `legwork` subagent
+          # (.claude/agents/legwork.md, pinned to Haiku regardless of
+          # --model), instead of burning the orchestrator's own context/cost
+          # on it.
           show_full_output: true
           claude_args: >-
             --max-turns 100
             --model ${{ steps.model.outputs.model }}
-            --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,WebSearch,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
+            --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,WebSearch,Task,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
           prompt: |
             CLAUDE.md and BACKLOG.md are authoritative and override anything in this
             prompt, but they are long â€” read them narrowly, not cover to cover, since
@@ -118,6 +123,14 @@ jobs:
             maintenance" checklist; for a `feat` issue, just its BACKLOG.md candidate
             entry. Consult "Gotchas" or other sections only if you hit something they
             plausibly cover.
+
+            Delegate bulk reconnaissance to the `legwork` subagent (Task tool,
+            subagent_type: legwork) instead of doing it inline yourself: digesting
+            long `dbt build`/`pytest`/`npm run build:strict` output, summarizing a
+            large raw file or manifest, or multi-file/multi-term codebase search.
+            It runs on a cheaper model and only reports findings back — it does not
+            decide mappings, model design, or methodology, and it never edits files.
+            Keep those decisions, and all file edits, in your own turns.
 
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.
