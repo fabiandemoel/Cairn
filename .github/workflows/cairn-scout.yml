@@ -171,7 +171,10 @@ jobs:
           PROJECT_NUMBER: ${{ vars.AI_COST_PROJECT_NUMBER || '1' }}
           FIELD_NAME: ${{ vars.AI_COST_FIELD_NAME || 'AI cost (USD)' }}
         with:
-          github-token: ${{ secrets.CAIRN_BOT_TOKEN || github.token }}
+          # Comment via GITHUB_TOKEN: this workflow's `permissions:` grants it
+          # issues: write, whereas the CAIRN_BOT_TOKEN PAT (scoped for opening
+          # PRs) lacks issue access. The Projects v2 calls use PROJECTS_TOKEN.
+          github-token: ${{ github.token }}
           script: |
             const fs = require('fs');
             const path = require('path');
