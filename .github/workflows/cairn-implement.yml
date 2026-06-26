@@ -54,6 +54,32 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
 
+      # data-refresh issues are a mechanical checklist (run the idempotent
+      # ingest, confirm a new snapshot, refresh fixtures, run dbt/pytest) â€”
+      # Haiku is sufficient and ~much cheaper. feat issues require design
+      # judgement (new dbt models, mappings, site queries) and stay on
+      # Sonnet. Falls back to Sonnet if the label can't be read.
+      - name: Determine model based on issue labels
+        id: model
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = ${{ github.event.issue.number || github.event.inputs.issue_number }};
+            let model = "claude-sonnet-4-6";
+            try {
+              const { data: issue } = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+              });
+              const labels = issue.labels.map(l => (typeof l === "string" ? l : l.name));
+              model = labels.includes("data-refresh") ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+              core.info(`Issue #${issueNumber} labels: ${labels.join(", ")} -> model ${model}`);
+            } catch (err) {
+              core.warning(`Could not read labels for #${issueNumber}, defaulting to Sonnet: ${err}`);
+            }
+            core.setOutput("model", model);
+
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -72,13 +98,14 @@ jobs:
           #
           # --max-turns 100: a full new-source slice (ingestion + mart + test
           # + site) needs room; 20 then 60 both hit error_max_turns mid-work
-          # (runs 28085542460, 28173119243). --model Sonnet: ~5x cheaper than
-          # Opus ($5.16 -> ~$1 on run 28173119243), and cairn-scout now scopes
-          # each issue to one repo layer, so a run is a bounded, Sonnet task.
+          # (runs 28085542460, 28173119243). --model: Sonnet is ~5x cheaper
+          # than Opus ($5.16 -> ~$1 on run 28173119243); the model step above
+          # drops to Haiku for data-refresh issues, which follow a fixed
+          # checklist and need no Sonnet-level judgement.
           show_full_output: true
           claude_args: >-
             --max-turns 100
-            --model claude-sonnet-4-6
+            --model ${{ steps.model.outputs.model }}
             --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,WebSearch,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
           prompt: |
             CLAUDE.md and BACKLOG.md are authoritative and override anything in this
