@@ -26,6 +26,13 @@
 --     below (<1) their free grant. Both are nullable: an installation-year with
 --     no allocation stays NULL (never a placeholder zero), and the ratio is
 --     NULL where allocation is missing or zero.
+--   * Surrendered allowances (surrendered_allowances_t_co2eq) is the third leg
+--     of the EUTL compliance triple: allowances the operator actually handed back
+--     to cover their verified emissions. It is a labelled measure read straight
+--     from the pinned snapshot's surrendered column -- never a recomputed running
+--     balance, never a compliance verdict. Nullable: surrender can lag and a
+--     single surrender may cover multiple years, so some installation-years
+--     legitimately carry NULL (never a placeholder zero).
 
 --   * Legal-entity identity (lei, gleif_legal_name) is a labelled read/relabel
 --     dimension joined from the reviewed lei_mapping_euets seed -- the GLEIF
@@ -61,7 +68,8 @@ compliance as (
         installation_id,
         year,
         verified_emissions_t_co2eq,
-        allocated_total
+        allocated_total,
+        surrendered
     from {{ ref('stg_euets__compliance') }}
     where
         reported_in_system = 'euets'
@@ -82,7 +90,12 @@ installation_year as (
         -- the pinned euets.info snapshot, not a recomputed figure. It is
         -- nullable: a few installation-years carry no allocation, which stays
         -- NULL (never a placeholder zero).
-        compliance.allocated_total as allocated_total_t_co2eq
+        compliance.allocated_total as allocated_total_t_co2eq,
+        -- Surrendered allowances (surrendered) is the third leg of the EUTL
+        -- compliance triple: allowances the operator actually handed back.
+        -- Nullable: surrender can lag and a single surrender may cover multiple
+        -- years; NULL stays NULL (never a placeholder zero).
+        compliance.surrendered as surrendered_allowances_t_co2eq
     from compliance
     inner join installations on installations.installation_id = compliance.installation_id
 ),
@@ -110,6 +123,7 @@ select
     installation_year.nace_section_label,
     installation_year.installation_emissions_t_co2eq,
     installation_year.allocated_total_t_co2eq,
+    installation_year.surrendered_allowances_t_co2eq,
     sector_benchmark.sector_installation_count,
     sector_benchmark.sector_mean_emissions_t_co2eq,
     sector_benchmark.sector_median_emissions_t_co2eq,
