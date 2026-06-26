@@ -30,6 +30,16 @@ concurrency:
   group: cairn-implement
   cancel-in-progress: false
 
+env:
+  # GitHub Projects (v2) board that tracks Claude action cost per issue/PR
+  # (CLAUDE.md "Action usage & cost dashboard"). AI_COST_PROJECT_NUMBER is
+  # the small integer in the project's URL, not its GraphQL node ID.
+  # AI_COST_PROJECT_FIELD_NAME must already exist on that project as a
+  # Number field with this exact name.
+  AI_COST_PROJECT_OWNER: ${{ github.repository_owner }}
+  AI_COST_PROJECT_NUMBER: 1
+  AI_COST_PROJECT_FIELD_NAME: "AI cost (USD)"
+
 jobs:
   implement:
     # Only the `approved` label triggers this; ignore every other label event.
@@ -75,12 +85,16 @@ jobs:
               const labels = issue.labels.map(l => (typeof l === "string" ? l : l.name));
               model = labels.includes("data-refresh") ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
               core.info(`Issue #${issueNumber} labels: ${labels.join(", ")} -> model ${model}`);
+              // node_id feeds the "Set AI cost project field" step below --
+              // GitHub Projects v2 mutations address content by GraphQL node ID.
+              core.setOutput("issue_node_id", issue.node_id);
             } catch (err) {
               core.warning(`Could not read labels for #${issueNumber}, defaulting to Sonnet: ${err}`);
             }
             core.setOutput("model", model);
 
       - uses: anthropics/claude-code-action@v1
+        id: claude
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.CAIRN_BOT_TOKEN }}
@@ -182,3 +196,74 @@ jobs:
             any assumption you made. Do NOT merge. If you cannot make CI pass within
             scope, open a draft PR explaining exactly what blocks it instead of
             forcing it green.
+
+      # Cost/usage visibility (CLAUDE.md "Action usage & cost dashboard"):
+      # always() because the run incurs Anthropic API cost whether or not it
+      # finished cleanly. Parses the action's execution_file (the Claude Code
+      # CLI's --output-format json result -- total_cost_usd, token usage,
+      # per-model breakdown) into a step summary and a GITHUB_OUTPUT that the
+      # comment/project-field steps below consume.
+      - name: Record action usage
+        id: usage
+        if: always() && steps.claude.outputs.execution_file != ''
+        run: |
+          uv run python scripts/record_action_usage.py \
+            --execution-file "${{ steps.claude.outputs.execution_file }}" \
+            --workflow cairn-implement \
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Comment usage on issue
+        if: always() && steps.usage.outputs.total_cost_usd != ''
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+        with:
+          github-token: ${{ secrets.CAIRN_BOT_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(process.env.ISSUE_NUMBER),
+              body: [
+                "**Claude action usage** (cairn-implement, run " +
+                  `[#${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})):`,
+                `- model: \`${{ steps.usage.outputs.model }}\``,
+                `- tokens: ${{ steps.usage.outputs.input_tokens }} in / ${{ steps.usage.outputs.output_tokens }} out`,
+                `- cost: $${{ steps.usage.outputs.total_cost_usd }}`,
+                `- turns: ${{ steps.usage.outputs.num_turns }}, duration: ${{ steps.usage.outputs.duration_ms }} ms`,
+              ].join("\n"),
+            });
+
+      # The PR isn't known until Claude opens it during the run above, so it
+      # has to be resolved after the fact via the action's branch_name output.
+      - name: Resolve PR opened by this run
+        id: pr
+        if: always() && steps.claude.outputs.branch_name != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CAIRN_BOT_TOKEN }}
+          script: |
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${context.repo.owner}:${{ steps.claude.outputs.branch_name }}`,
+              state: "open",
+            });
+            if (prs.length > 0) {
+              core.setOutput("node_id", prs[0].node_id);
+              core.setOutput("number", prs[0].number);
+            }
+
+      - name: Set AI cost project field
+        if: always() && steps.usage.outputs.total_cost_usd != ''
+        uses: actions/github-script@v7
+        env:
+          PROJECT_OWNER: ${{ env.AI_COST_PROJECT_OWNER }}
+          PROJECT_NUMBER: ${{ env.AI_COST_PROJECT_NUMBER }}
+          PROJECT_FIELD_NAME: ${{ env.AI_COST_PROJECT_FIELD_NAME }}
+          CONTENT_NODE_IDS: ${{ format('{0},{1}', steps.model.outputs.issue_node_id, steps.pr.outputs.node_id) }}
+          COST_USD: ${{ steps.usage.outputs.total_cost_usd }}
+        with:
+          github-token: ${{ secrets.CAIRN_BOT_TOKEN }}
+          script-path: .github/scripts/set_project_cost_field.mjs

@@ -189,6 +189,32 @@ These workflows reference the labels `proposal`, `data-refresh`, `feat`, and
 enabling the workflows; GitHub's label API will not auto-create a label that
 doesn't exist.
 
+### Action usage & cost dashboard
+Each of the three workflows parses the Claude Code action's `execution_file`
+output (`scripts/record_action_usage.py`) into a per-run cost/usage summary,
+then surfaces it two ways — no separate dashboard, branch, or CSV:
+- A comment on the issue (`cairn-scout`) or issue + PR (`cairn-implement`,
+  `cairn-replenish`, when it opens one) with model, token counts, cost, turns,
+  and duration.
+- A Number field, set via `.github/scripts/set_project_cost_field.mjs`
+  (GitHub Projects v2 GraphQL), on the same issue/PR — so cost is filterable/
+  sortable/chartable as a real attribute, not just comment text.
+
+This needs a Projects v2 board (project "AI Management", assumed `number: 1`
+owned by `github.repository_owner` — see `AI_COST_PROJECT_*` env vars at the
+top of each workflow) with a **Number** field named exactly `AI cost (USD)`.
+The mutation step looks the field up by that name and warns (doesn't fail the
+run) if it's missing, so create it before relying on the dashboard. Setting
+the field requires `CAIRN_BOT_TOKEN` to have Projects (v2) write access — the
+default `GITHUB_TOKEN` cannot write to a user/org-level Project.
+
+`cairn-scout` creates 0–3 issues per run with no single deterministic handle
+on them (unlike implement/replenish, which know their one issue/PR up front),
+so it records the run's start time and finds issues via Search
+(`created:>=<run start>` + `label:proposal`) afterwards. If a run opens more
+than one issue, the same full run cost is attributed to each — a known,
+accepted double-count, not a bug.
+
 ## How to work here
 
 - **Setup:** `uv sync --all-groups`. Python 3.12.

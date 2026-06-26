@@ -24,11 +24,23 @@ concurrency:
   group: cairn-scout
   cancel-in-progress: true
 
+env:
+  # See cairn-implement.yml for the full rationale. AI_COST_PROJECT_NUMBER is
+  # the small integer in the project's URL, not its GraphQL node ID.
+  AI_COST_PROJECT_OWNER: ${{ github.repository_owner }}
+  AI_COST_PROJECT_NUMBER: 1
+  AI_COST_PROJECT_FIELD_NAME: "AI cost (USD)"
+
 jobs:
   scout:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
 
       # Freshness probing (task 1) runs weekly (Mondays) or on manual dispatch;
       # the daily runs do backlog dispatch (task 2) only.
@@ -41,7 +53,12 @@ jobs:
             echo "freshness=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Record run start time
+        id: started
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - uses: anthropics/claude-code-action@v1
+        id: claude
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # --allowedTools REPLACES the action's default tool set, so list
@@ -135,3 +152,76 @@ jobs:
             Open at most 3 issues total. Before opening anything, list current open
             issues and skip duplicates. If nothing is new and the top candidate is
             already tracked, do nothing and say so.
+
+      # Cost/usage visibility (CLAUDE.md "Action usage & cost dashboard"):
+      # see cairn-implement.yml for the full rationale. always() because cost
+      # is incurred whether or not the run finished cleanly.
+      - name: Record action usage
+        id: usage
+        if: always() && steps.claude.outputs.execution_file != ''
+        run: |
+          uv run python scripts/record_action_usage.py \
+            --execution-file "${{ steps.claude.outputs.execution_file }}" \
+            --workflow cairn-scout \
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            --github-output "$GITHUB_OUTPUT"
+
+      # Scout creates 0-3 issues per run with no single deterministic output
+      # identifying them, unlike implement/replenish which know one issue/PR
+      # up front. Find them via Search, bounded by this run's start time.
+      - name: Find issues opened by this run
+        id: opened
+        if: always() && steps.usage.outputs.total_cost_usd != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.search.issuesAndPullRequests({
+              q: [
+                `repo:${context.repo.owner}/${context.repo.repo}`,
+                "is:issue",
+                "label:proposal",
+                `created:>=${{ steps.started.outputs.at }}`,
+              ].join(" "),
+            });
+            core.setOutput("node_ids", data.items.map((i) => i.node_id).join(","));
+            core.setOutput("numbers", JSON.stringify(data.items.map((i) => i.number)));
+
+      - name: Comment usage on opened issues
+        if: always() && steps.usage.outputs.total_cost_usd != '' && steps.opened.outputs.numbers != '[]'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const numbers = JSON.parse('${{ steps.opened.outputs.numbers }}');
+            const body = [
+              "**Claude action usage** (cairn-scout, run " +
+                `[#${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})):`,
+              `- model: \`${{ steps.usage.outputs.model }}\``,
+              `- tokens: ${{ steps.usage.outputs.input_tokens }} in / ${{ steps.usage.outputs.output_tokens }} out`,
+              `- cost: $${{ steps.usage.outputs.total_cost_usd }}`,
+              `- turns: ${{ steps.usage.outputs.num_turns }}, duration: ${{ steps.usage.outputs.duration_ms }} ms`,
+              "",
+              "_Note: this run's full cost is attributed to each issue it opened this run; if multiple issues were opened, the cost shown is not split between them._",
+            ].join("\n");
+            for (const number of numbers) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                body,
+              });
+            }
+
+      - name: Set AI cost project field
+        if: always() && steps.usage.outputs.total_cost_usd != '' && steps.opened.outputs.node_ids != ''
+        uses: actions/github-script@v7
+        env:
+          PROJECT_OWNER: ${{ env.AI_COST_PROJECT_OWNER }}
+          PROJECT_NUMBER: ${{ env.AI_COST_PROJECT_NUMBER }}
+          PROJECT_FIELD_NAME: ${{ env.AI_COST_PROJECT_FIELD_NAME }}
+          CONTENT_NODE_IDS: ${{ steps.opened.outputs.node_ids }}
+          COST_USD: ${{ steps.usage.outputs.total_cost_usd }}
+        with:
+          # Default GITHUB_TOKEN cannot write to a user/org-level Project; see
+          # cairn-implement.yml for the full rationale on CAIRN_BOT_TOKEN.
+          github-token: ${{ secrets.CAIRN_BOT_TOKEN }}
+          script-path: .github/scripts/set_project_cost_field.mjs
