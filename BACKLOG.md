@@ -211,6 +211,65 @@ from CBS via the same OData v4 API.
 - *Touches:* `ingestion/cbs_namea_pipeline.py`, `sources/cbs_namea/manifest.yml`,
   staging model, a provenance/cross-check model, `site/sources/cairn/*.sql`.
 
+### 11. Coverage & completeness observability — surface the reconciliation drift the tests already compute
+**Value: M · Effort: L · Spine-fit: M**
+
+The provenance-integrity view (`mart_data_provenance`) and its **Data quality**
+site page already answer "is each figure still pinned to its source?". The next
+data-quality dimension is **coverage**: `assert_national_total_reconciles` and
+`assert_euets_coverage_within_eea` already compute the drift between Cairn's
+totals and the official aggregates, and the CBS mart already buckets ~30–35% of
+national emissions as `UNMAPPED` — but those numbers are discarded once the test
+goes green or stay hidden inside a mart. A read-only observability mart could
+surface them as standing facts (per source/year: reconciliation drift %,
+`UNMAPPED` share, covered share), extending the Data quality page from "is the
+chain pinned?" to "how complete is the coverage?".
+- *Watch:* a coverage ratio **is** a computation, so keep it strictly an
+  *observation* over figures the marts/tests already produce — never a new
+  benchmark figure, never in the ESRS E1 export. It is descriptive ("32% of
+  national emissions are UNMAPPED"), **never a confidence/quality score** on any
+  single figure (that line stays in _Considered and rejected_). Read the share
+  from the existing mart; do not re-derive the national total a second way.
+- *Touches:* a read-only mart over `benchmark_sector_emissions` /
+  `benchmark_installation_emissions` (+ the EEA aggregate), `site/sources/cairn/*.sql`
+  + the existing Data quality page, dbt tests.
+
+### 12. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
+**Value: M · Effort: L · Spine-fit: H**
+
+Several mart columns are deliberately nullable — `lei`, `allocated_total`,
+`surrendered_allowances` on the installation mart; the `UNMAPPED`/NULL NACE on
+CBS. Their completeness is itself a data-quality signal a user wants to see
+("what fraction of installation-years carry an LEI / a free-allocation figure?").
+A read-only mart of per-source/per-year populated-vs-NULL counts surfaces that as
+a pure observable fact — counts only, no recomputation — and lets reviewed-seed
+coverage (e.g. the LEI mapping) be watched as it grows over time.
+- *Watch:* pure counts/shares of populated vs NULL; **never impute or fill a
+  NULL**, and never present completeness as a quality verdict on the figures
+  themselves. Honour the existing nullability semantics — a NULL LEI / allocation
+  / surrender is legitimate (a not-yet-mapped or genuinely-absent value), not an
+  error to be "fixed".
+- *Touches:* a read-only completeness mart over the existing marts,
+  `site/sources/cairn/*.sql` + the Data quality page, dbt tests.
+
+### 13. Freshness / staleness observability — how current is each source?
+**Value: M · Effort: L · Spine-fit: H**
+
+The manifests pin each source's release and ingest date; the marts know the
+latest covered year. How current the data is — release-to-now lag per source, the
+known euets.info-vs-EEA latency, the latest `Definitief` CBS year vs the
+provisional one — is a data-quality dimension that today lives only in README
+prose and the source quirks. A read-only mart (extending `mart_data_provenance`,
+which already reads the manifests) could surface freshness as standing facts on
+the Data quality page.
+- *Watch:* freshness is **descriptive**, computed from pinned dates and the
+  marts' `max(year)` — not a freshness SLA or alarm (that is the weekly
+  reproducibility job's / Scout's role) and never a score. Don't invent an
+  "expected next release" date for a source with no official cadence; state the
+  observed lag, not a verdict.
+- *Touches:* extend `mart_data_provenance` (or a sibling), `site/sources/cairn/*.sql`
+  + the Data quality page, dbt tests.
+
 ---
 
 ## Considered and rejected
