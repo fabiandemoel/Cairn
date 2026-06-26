@@ -177,7 +177,15 @@ benchmark-diff) is the gate for every code change.
   `CAIRN_BOT_TOKEN` (not `GITHUB_TOKEN`) so CI actually fires on them.
 - **`cairn-replenish.yml`** (weekly) — curates BACKLOG.md only, as a docs-only
   PR: new candidates, re-scoring, retiring off-spine ideas to "Considered and
-  rejected". Never merges.
+  rejected". Never merges. **Data-quality observability is a standing candidate
+  theme here** alongside new sources and benchmark axes: read-only marts that
+  surface coverage/completeness, field-completeness (NULL-rates), and freshness
+  as *observable facts* over the manifests and existing marts. The shipped
+  `mart_data_provenance` provenance-integrity view and its **Data quality** site
+  page are the established pattern (read-only, reads the manifests, recomputes
+  nothing). Keep such candidates to observable facts — never confidence/quality
+  *scores* on individual figures; that line stays in BACKLOG's _Considered and
+  rejected_.
 
 The human stays out of the doing; the only manual acts are labelling an issue
 `approved` and merging a green PR. That merge is the audit checkpoint — keep

@@ -183,8 +183,10 @@ npm run dev        # live preview at http://localhost:3000
 `npm run build` produces the static site in `site/build/`; CI's `evidence-build`
 job runs `npm run build:strict`, which fails on any query error. Pages: an
 overview, the **CBS sector benchmark**, the interactive **EU ETS installation
-benchmark**, and a **methodology & sources** page documenting the provenance of
-every figure. See [`site/README.md`](site/README.md) for details.
+benchmark**, a **methodology & sources** page documenting the provenance of
+every figure, and a **data quality** page reporting the live pin status of each
+source (from `mart_data_provenance`, a read-only view over the manifests). See
+[`site/README.md`](site/README.md) for details.
 
 ### Live deployment (GitHub Pages)
 
