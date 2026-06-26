@@ -77,12 +77,16 @@ models:
         allocation (allocated_total_t_co2eq) and the verified-vs-allocated ratio
         (emissions_vs_allocated) are labelled read/relabel measures over the
         pinned snapshot's allocatedTotal column -- who emits above or below their
-        free grant -- not recomputed figures. Legal-entity identity (lei,
-        gleif_legal_name) is a labelled read/relabel dimension joined from the
-        reviewed lei_mapping_euets seed -- the operating entity's GLEIF Legal
-        Entity Identifier (ISO 17442), letting the benchmark roll up to company
-        level. The join is 1:1 on installation_id, so it adds no rows and changes
-        no emissions figure.
+        free grant -- not recomputed figures. Surrendered allowances
+        (surrendered_allowances_t_co2eq) complete the EUTL compliance triple:
+        the allowances the operator actually handed back, read straight from the
+        pinned snapshot's surrendered column. It is a labelled measure, not a
+        recomputed running balance, and never a compliance verdict. Legal-entity
+        identity (lei, gleif_legal_name) is a labelled read/relabel dimension
+        joined from the reviewed lei_mapping_euets seed -- the operating entity's
+        GLEIF Legal Entity Identifier (ISO 17442), letting the benchmark roll up
+        to company level. The join is 1:1 on installation_id, so it adds no rows
+        and changes no emissions figure.
       known_limitations: >
         (1) euets.info lags the EEA release (latest data ~2023 vs 2025).
         (2) Installations without a NACE code are excluded (cannot be sector-
@@ -91,10 +95,12 @@ models:
         and maritime operators are excluded. (5) Free allocation is nullable: an
         installation-year with no allocation stays NULL (never a placeholder
         zero), and emissions_vs_allocated is NULL where allocation is missing or
-        zero. (6) The LEI is nullable: it is set only where the reviewed
-        lei_mapping_euets seed carries a confident GLEIF match; unmatched
-        installations stay NULL (never an invented identifier), and seed coverage
-        grows over time via PRs.
+        zero. (6) Surrendered allowances are nullable: surrender can lag and a
+        single surrender may cover multiple years, so some installation-years
+        legitimately carry NULL (never a placeholder zero). (7) The LEI is
+        nullable: it is set only where the reviewed lei_mapping_euets seed carries
+        a confident GLEIF match; unmatched installations stay NULL (never an
+        invented identifier), and seed coverage grows over time via PRs.
       references:
         installation_source: https://www.euets.info/
         eutl_database_doc: https://euets-info-public.s3.eu-central-1.amazonaws.com/Description_EUTL_database.pdf
@@ -140,6 +146,15 @@ models:
           (tonnes CO2-eq), read straight from the pinned euets.info snapshot.
           Nullable -- a few installation-years carry no allocation; NULL is left
           as NULL, never a placeholder zero.
+      - name: surrendered_allowances_t_co2eq
+        description: >
+          Allowances the installation actually surrendered for the year (tonnes
+          CO2-eq), read straight from the pinned euets.info snapshot. The third
+          leg of the EUTL compliance triple alongside verified emissions and free
+          allocation. Nullable -- surrender can lag and a single surrender may
+          cover multiple years, so some installation-years legitimately carry
+          NULL (never a placeholder zero). Presented as a labelled measure only,
+          not a compliance verdict.
       - name: sector_mean_emissions_t_co2eq
         description: Mean verified emissions across the sector-year population.
         tests:
