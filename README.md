@@ -412,6 +412,25 @@ public, authoritative sources.
   upstream inventory and emission factors behind the CBS figures.
 - [CBS method note: maand- en kwartaalraming broeikasgasemissies conform IPCC](https://www.cbs.nl/nl-nl/maatwerk/2020/37/maand-en-kwartaalraming-broeikasgasemissies-conform-ipcc).
 
+**Eurostat Air Emissions Accounts**
+
+- Eurostat dataset [`env_ac_ainah_r2`](https://ec.europa.eu/eurostat/databrowser/view/env_ac_ainah_r2)
+  — *Air emissions accounts by NACE Rev. 2 activity*: GHG and air-pollutant
+  emissions per country, NACE section and year, covering all EU member states.
+  The source of `benchmark_country_sector_emissions`.
+- Eurostat dataset [`env_ac_aibrid_r2`](https://ec.europa.eu/eurostat/databrowser/view/env_ac_aibrid_r2)
+  — *Bridge between air emissions accounts and national inventories*: quantifies
+  the legitimate residual between the AEA (residence principle — emissions by
+  resident producers regardless of where they occur) and the national inventory
+  (territorial principle — emissions occurring within the country's borders
+  regardless of the producer's nationality). CBS 85669NED and the EU ETS both
+  use the territorial principle, so NL totals from the two sources will differ
+  by this bridge amount. Cairn cites `env_ac_aibrid_r2` as the documented
+  explanation; it is not ingested.
+- [Eurostat Air Emissions Accounts methodology](https://ec.europa.eu/eurostat/web/environment/air-emissions-accounts)
+  — background on the residence-vs-territorial accounting distinction and the
+  NACE breakdown used in `env_ac_ainah_r2`.
+
 **EU ETS source data**
 
 - [euets.info](https://www.euets.info/) (Jan Abrell, EUI) — the installation
