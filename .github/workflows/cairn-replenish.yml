@@ -29,7 +29,14 @@ jobs:
         with:
           token: ${{ secrets.CAIRN_BOT_TOKEN }}
 
-      - uses: anthropics/claude-code-action@v1
+      # Timestamp the run start so the cost step picks up the replenish/<date> PR
+      # this run opens, not an older one.
+      - name: Record run start
+        id: run_start
+        run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - id: claude
+        uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.CAIRN_BOT_TOKEN }}
@@ -71,3 +78,57 @@ jobs:
             the first time it appears there. Below that section, summarise what you
             added, re-scored, and retired, and why, as today. Do NOT merge. If
             nothing meaningfully changed, say so and open no PR.
+
+      # Cost visibility (best-effort; never fails the run). Parse the action's
+      # execution_file into a markdown summary + the total cost in USD.
+      - name: Summarise run cost
+        id: cost
+        if: always()
+        run: |
+          python3 scripts/ai_cost_summary.py \
+            --execution-file "${{ steps.claude.outputs.execution_file }}" \
+            --label "Cairn Replenish" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -o "${{ runner.temp }}/ai_cost.md"
+
+      # Attribute the cost to the replenish/<date> PR this run opened, if any
+      # (a run that changes nothing opens no PR, so there is no target).
+      - name: Attribute run cost
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          RUN_START: ${{ steps.run_start.outputs.ts }}
+          COMMENT_PATH: ${{ runner.temp }}/ai_cost.md
+          COST_USD: ${{ steps.cost.outputs.cost_usd }}
+          PROJECTS_TOKEN: ${{ secrets.PROJECTS_TOKEN || secrets.CAIRN_BOT_TOKEN || github.token }}
+          PROJECT_OWNER: ${{ vars.AI_COST_PROJECT_OWNER || 'fabiandemoel' }}
+          PROJECT_NUMBER: ${{ vars.AI_COST_PROJECT_NUMBER || '1' }}
+          FIELD_NAME: ${{ vars.AI_COST_FIELD_NAME || 'AI cost (USD)' }}
+        with:
+          github-token: ${{ secrets.CAIRN_BOT_TOKEN || github.token }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const attribute = require(path.resolve('.github/scripts/attribute_run_cost.js'));
+
+            const since = new Date(process.env.RUN_START);
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'all', sort: 'created', direction: 'desc', per_page: 30,
+            });
+            const match = prs.data.filter(
+              (p) => p.head.ref.startsWith('replenish/') && new Date(p.created_at) >= since,
+            );
+            const targets = match.length ? [match[0].number] : [];
+
+            let commentBody = '';
+            try { commentBody = fs.readFileSync(process.env.COMMENT_PATH, 'utf8'); } catch (e) {}
+
+            await attribute({
+              github, context, core, targets, commentBody,
+              costUsd: process.env.COST_USD,
+              projectOwner: process.env.PROJECT_OWNER,
+              projectNumber: parseInt(process.env.PROJECT_NUMBER, 10),
+              fieldName: process.env.FIELD_NAME,
+              projectsToken: process.env.PROJECTS_TOKEN,
+            });

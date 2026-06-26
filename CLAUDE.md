@@ -184,6 +184,29 @@ The human stays out of the doing; the only manual acts are labelling an issue
 it. BACKLOG.md is the curated menu these agents draw from; its "Rules of the
 game" restate these invariants as admission criteria for new sources.
 
+**Cost visibility.** Each of the three workflows ends with two best-effort steps
+that surface what the run cost. `scripts/ai_cost_summary.py` (stdlib-only,
+unit-tested in `tests/test_ai_cost_summary.py`) parses the action's
+`execution_file` output — its `total_cost_usd`, `usage`, `modelUsage`,
+`num_turns`, `duration_ms` — into a markdown comment and the total cost in USD.
+The shared `.github/scripts/attribute_run_cost.js` github-script module then
+posts that comment and sets a Projects v2 Number field for each issue/PR the run
+touched: implement/replenish resolve the PR they opened by branch prefix
+(`agent/<issue>-*`, `replenish/*`); scout timestamps its start and resolves the
+0–3 issues it opened via Search (a multi-issue run double-attributes the run's
+cost — accepted). Both steps run `if: always()` and the Projects v2 update is
+wrapped in try/catch, so a missing board/field or a token without `project`
+scope **warns** rather than failing the run. Configuration:
+  - Board defaults to `fabiandemoel` project **#1** ("AI Management"), field
+    **"AI cost (USD)"** (a NUMBER field). Override per repo via the Actions
+    variables `AI_COST_PROJECT_OWNER`, `AI_COST_PROJECT_NUMBER`,
+    `AI_COST_FIELD_NAME`.
+  - The GraphQL calls need a token with the `project` scope: add a
+    `PROJECTS_TOKEN` secret (a fine-grained PAT or classic token with
+    `project`). It falls back to `CAIRN_BOT_TOKEN` then `GITHUB_TOKEN`, which
+    usually lack `project` — without `PROJECTS_TOKEN` the comment still posts and
+    the field update just warns.
+
 These workflows reference the labels `proposal`, `data-refresh`, `feat`, and
 `approved` — create them in the repo's Issues → Labels settings before
 enabling the workflows; GitHub's label API will not auto-create a label that
