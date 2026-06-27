@@ -25,6 +25,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  actions: read
 
 concurrency:
   group: cairn-implement
@@ -86,6 +87,41 @@ jobs:
         id: run_start
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # No-LLM baseline: knowing upfront whether ci.yml is currently green on
+      # main means the agent never needs to git-stash/checkout main itself to
+      # tell "I broke this" apart from "this was already broken" — that
+      # stash/pop round trip (done inline, mid-debugging) was itself a cost
+      # driver on run 28267511721. A stale/unknown baseline just falls back to
+      # the agent checking directly, so this is a pure cost optimization, not
+      # a correctness dependency.
+      - name: Check latest CI status on main
+        id: main_ci
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let conclusion = "unknown", sha = "unknown", url = "";
+            try {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: "ci.yml",
+                branch: "main",
+                status: "completed",
+                per_page: 1,
+              });
+              const run = data.workflow_runs[0];
+              if (run) {
+                conclusion = run.conclusion;
+                sha = run.head_sha.substring(0, 7);
+                url = run.html_url;
+              }
+            } catch (err) {
+              core.warning(`Could not fetch main's CI status: ${err}`);
+            }
+            core.setOutput("conclusion", conclusion);
+            core.setOutput("sha", sha);
+            core.setOutput("url", url);
+
       - id: claude
         uses: anthropics/claude-code-action@v1
         with:
@@ -115,6 +151,13 @@ jobs:
           # --model), instead of burning the orchestrator's own context/cost
           # on it.
           show_full_output: true
+          # BASH_MAX_OUTPUT_LENGTH (default 30,000 chars): hard-caps any single
+          # Bash result regardless of whether the command was piped through
+          # head/tail. This truncates at the harness level after the command's
+          # exit code is already captured, so it can't corrupt a pass/fail
+          # check the way rewriting commands with a shell pipe could.
+          env:
+            BASH_MAX_OUTPUT_LENGTH: "10000"
           claude_args: >-
             --max-turns 100
             --model ${{ steps.model.outputs.model }}
@@ -138,6 +181,29 @@ jobs:
             It runs on a cheaper model and only reports findings back — it does not
             decide mappings, model design, or methodology, and it never edits files.
             Keep those decisions, and all file edits, in your own turns.
+
+            This also applies when a command fails for a reason you don't
+            understand yet: hand the "figure out why this is failing" step to
+            `legwork` too, even if any single failed command's output is short.
+            Every extra turn you spend trial-and-error-ing in your own context
+            re-sends the entire conversation so far (this is the dominant cost
+            driver, not any single large tool output) — diagnosing a failure
+            across several of your own turns is expensive precisely because it's
+            several turns, regardless of output size. Give `legwork` the failing
+            command, the error, and a pointed question ("why does build:strict
+            404 on this path — check what generates that file and whether a
+            prior step was skipped"); let it iterate and come back with a
+            diagnosis, then make the fix yourself in one turn.
+
+            Baseline: CI on `main` (commit ${{ steps.main_ci.outputs.sha }})
+            was last ${{ steps.main_ci.outputs.conclusion }}
+            (${{ steps.main_ci.outputs.url }}). Trust this by default: if a
+            check fails after your change and it isn't obviously related to
+            what you touched, treat it as pre-existing and note it in the PR
+            rather than re-verifying against `main` yourself. Only check
+            directly (one `git stash` / `git worktree`, not a repeated
+            stash/pop while you try fixes) if this baseline is `unknown`/stale
+            or the failing check is in the exact area you changed.
 
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.
@@ -169,12 +235,18 @@ jobs:
             the next run can resume it instead of losing it when the job's runner is
             torn down. Use conventional commits, one logical change per commit.
 
-            Before opening the PR, run and pass locally what CI runs:
+            Before opening the PR, run and pass locally what CI runs, in this
+            exact order (the export step writes the ESRS E1 bundle into
+            site/static/downloads/esrs_e1/ — the disclosure page links to it, so
+            skipping this step makes build:strict fail on a 404 and triggers a
+            long, expensive trial-and-error debugging loop; see ci.yml's
+            evidence-build job, which this list mirrors):
               uv sync --locked --all-groups
               uv run ruff check . && uv run ruff format --check .
               uv run sqlfluff lint transform/models transform/tests
               uv run pytest -q
               uv run dbt build --project-dir transform
+              uv run python scripts/export_esrs_e1.py --out-dir site/static/downloads/esrs_e1
               cd site && npm ci && npm run build:strict
 
             Open ONE pull request against `main`. The description must open with a
