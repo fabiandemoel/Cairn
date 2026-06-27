@@ -139,6 +139,26 @@ jobs:
             decide mappings, model design, or methodology, and it never edits files.
             Keep those decisions, and all file edits, in your own turns.
 
+            This also applies when a command fails for a reason you don't
+            understand yet: hand the "figure out why this is failing" step to
+            `legwork` too, even if any single failed command's output is short.
+            Every extra turn you spend trial-and-error-ing in your own context
+            re-sends the entire conversation so far (this is the dominant cost
+            driver, not any single large tool output) — diagnosing a failure
+            across several of your own turns is expensive precisely because it's
+            several turns, regardless of output size. Give `legwork` the failing
+            command, the error, and a pointed question ("why does build:strict
+            404 on this path — check what generates that file and whether a
+            prior step was skipped"); let it iterate and come back with a
+            diagnosis, then make the fix yourself in one turn.
+
+            Before assuming a failure is caused by your own change, check
+            whether it reproduces on a clean checkout of `main` (one
+            `git stash` / `git worktree` check, not a repeated stash/pop while
+            you try fixes) — a failure that's already broken on `main` is
+            pre-existing and out of scope; note it in the PR rather than
+            chasing it.
+
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.
 
