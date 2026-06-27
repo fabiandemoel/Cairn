@@ -78,11 +78,24 @@ where installation_id = '${inputs.installation.value}'
     title="vs. free allocation"
 />
 
+<BigValue
+    data={selected_latest}
+    value=surrendered_allowances_t_co2eq
+    fmt='#,##0" t"'
+    title="Surrendered allowances (latest year)"
+/>
+
 The **verified-vs-allocated** multiple compares verified emissions to the
 installation's free EU ETS allowance grant: above 1× means it emitted more than
 it was freely allocated, below 1× less. Both figures are read straight from the
 pinned euets.info snapshot — where an installation-year carries no free
 allocation, the figure is left blank, never a placeholder zero.
+
+**Surrendered allowances** are the allowances the operator actually surrendered
+for the year — the third leg of the EUTL (EU Transaction Log) compliance triple
+alongside verified emissions and free allocation. A single surrender can cover
+multiple years and can lag the compliance year; some installation-years
+legitimately carry no figure — left blank, never a placeholder zero.
 
 This installation is in NACE section
 **<Value data={selected_latest} column=nace_section />
@@ -126,6 +139,10 @@ union all
 select year, 'Free allocation' as metric, allocated_total_t_co2eq
 from cairn.installation_emissions
 where installation_id = '${inputs.installation.value}'
+union all
+select year, 'Surrendered allowances' as metric, surrendered_allowances_t_co2eq
+from cairn.installation_emissions
+where installation_id = '${inputs.installation.value}'
 order by year
 ```
 
@@ -152,6 +169,7 @@ select
     i.gleif_legal_name,
     i.installation_emissions_t_co2eq,
     i.allocated_total_t_co2eq,
+    i.surrendered_allowances_t_co2eq,
     i.emissions_vs_sector_mean,
     i.emissions_vs_allocated,
     i.installation_id = '${inputs.installation.value}' as is_selected
@@ -165,6 +183,7 @@ order by i.installation_emissions_t_co2eq desc
     <Column id=gleif_legal_name title="Legal entity (GLEIF)" />
     <Column id=installation_emissions_t_co2eq title="Emissions (t CO₂-eq)" fmt='#,##0' />
     <Column id=allocated_total_t_co2eq title="Free allocation (t CO₂-eq)" fmt='#,##0' />
+    <Column id=surrendered_allowances_t_co2eq title="Surrendered allowances (t CO₂-eq)" fmt='#,##0' />
     <Column id=emissions_vs_sector_mean title="vs. sector mean" fmt='0.0"×"' contentType=colorscale />
     <Column id=emissions_vs_allocated title="vs. free allocation" fmt='0.0"×"' contentType=colorscale />
 </DataTable>
