@@ -7,12 +7,12 @@ pin for the future dbt staging and EU-wide sector benchmark mart.
 
 End to end:
 
-1. Fetch the dataset's last-update date from the Eurostat catalogue JSON API (lightweight;
-   no data download). Use this as the release token.
+1. Fetch the dataset's last-update date from the Eurostat SDMX dataflow JSON API
+   (lightweight; a couple of KB, no data download). Use this as the release token.
 2. Idempotency: if the latest manifest snapshot already pins that release, exit cleanly --
    no download, no upload, no manifest change.
-3. Download the SDMX-CSV zip from the Eurostat dissemination API, extract the CSV, and
-   convert to a clean, deterministically-ordered parquet (all columns VARCHAR).
+3. Download the SDMX-CSV from the Eurostat dissemination API and convert it to a clean,
+   deterministically-ordered parquet (all columns VARCHAR).
 4. Place the raw file immutably: R2 under ``eurostat/env_ac_ainah_r2/{release}/`` (online)
    or ``./.localstack/eurostat/env_ac_ainah_r2/{release}/`` (``--offline``, no credentials).
 5. Hash ``data.parquet`` and append a manifest snapshot. Ingestion without a manifest update
@@ -42,7 +42,6 @@ import shutil
 import sys
 import tempfile
 import urllib.request
-import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -62,10 +61,15 @@ SOURCE = "eurostat"
 DATASET = "env_ac_ainah_r2"
 MANIFEST_PATH = Path(__file__).resolve().parent.parent / "sources" / "eurostat" / "manifest.yml"
 
-# Lightweight catalogue metadata URL — returns JSON with the dataset's lastUpdate date.
-METADATA_URL = f"https://ec.europa.eu/eurostat/api/dissemination/catalogue/datasets/{DATASET}/json"
+# Lightweight SDMX dataflow metadata URL — a couple of KB of JSON whose annotations
+# include the dataset's last-update timestamp (UPDATE_DATA). Eurostat's older
+# catalogue/datasets/<id>/json endpoint, which used to expose this, returns 404 as of
+# 2026; this dataflow endpoint is the SDMX-native replacement.
+METADATA_URL = (
+    f"https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/dataflow/ESTAT/{DATASET}?format=json"
+)
 
-# Full data download URL — returns a zip containing the SDMX-CSV file.
+# Full data download URL — returns the SDMX-CSV file directly (no longer zipped, as of 2026).
 # The format=SDMX-CSV parameter selects the standard comma-separated SDMX 1.0 layout:
 #   DATAFLOW, LAST UPDATE, freq, airpol, unit, nace_r2, geo, TIME_PERIOD, OBS_VALUE, OBS_FLAG
 DEFAULT_DATA_URL = (
@@ -77,7 +81,7 @@ PRIMARY = "data.parquet"
 
 
 def _fetch_last_update(metadata_url: str = METADATA_URL) -> str:
-    """Fetch the dataset's last-update date from the Eurostat catalogue API.
+    """Fetch the dataset's last-update date from the Eurostat SDMX dataflow API.
 
     Returns a release token in YYYY-MM-DD format, suitable for use as the manifest
     snapshot ``release`` field.
@@ -85,26 +89,34 @@ def _fetch_last_update(metadata_url: str = METADATA_URL) -> str:
     req = urllib.request.Request(metadata_url, headers={"Accept": "application/json"})
     with urllib.request.urlopen(req) as resp:  # noqa: S310
         payload = json.loads(resp.read().decode())
+    return _parse_release(_extract_update_date(payload))
 
-    # The catalogue JSON uses "lastUpdate" (sometimes "last_update" in older responses).
-    raw = payload.get("lastUpdate") or payload.get("last_update") or payload.get("lastModified")
-    if not raw:
-        raise ValueError(
-            f"Cannot find a last-update date in the Eurostat catalogue response "
-            f"for {DATASET}. Keys present: {list(payload.keys())}"
-        )
-    return _parse_release(str(raw))
+
+def _extract_update_date(payload: dict) -> str:
+    """Pull the UPDATE_DATA annotation's date out of an SDMX dataflow JSON payload."""
+    annotations = payload.get("extension", {}).get("annotation", [])
+    for annotation in annotations:
+        if annotation.get("type") == "UPDATE_DATA":
+            date = annotation.get("date")
+            if date:
+                return str(date)
+    raise ValueError(
+        f"Cannot find a UPDATE_DATA annotation in the Eurostat dataflow response "
+        f"for {DATASET}. Annotation types present: "
+        f"{[a.get('type') for a in annotations]}"
+    )
 
 
 def _parse_release(raw: str) -> str:
     """Normalise a Eurostat date string to YYYY-MM-DD.
 
-    The catalogue API typically returns DD.MM.YYYY; the data files may use
-    YYYY-MM-DD. Both are normalised to ISO YYYY-MM-DD as the release token.
+    The SDMX dataflow API returns an ISO timestamp (optionally with a timezone
+    offset); older catalogue responses used DD.MM.YYYY. Both are normalised to
+    ISO YYYY-MM-DD as the release token.
     """
     s = raw.strip()
 
-    # DD.MM.YYYY — common Eurostat catalogue format
+    # DD.MM.YYYY — older Eurostat catalogue format
     m = re.match(r"^(\d{2})\.(\d{2})\.(\d{4})$", s)
     if m:
         day, month, year = m.groups()
@@ -130,26 +142,6 @@ def _download(url: str, dest: Path) -> None:
     print(f"Downloading {url}")
     with urllib.request.urlopen(url) as resp, open(dest, "wb") as fh:  # noqa: S310
         shutil.copyfileobj(resp, fh)
-
-
-def _extract_csv_from_zip(zip_path: Path, out_dir: Path) -> Path:
-    """Extract the single CSV from a Eurostat SDMX-CSV zip.
-
-    Eurostat's download zip contains exactly one CSV (the exact filename varies,
-    e.g. ``env_ac_ainah_r2_en.csv``).
-    """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(zip_path) as zf:
-        csvs = [m for m in zf.namelist() if m.lower().endswith(".csv")]
-        if not csvs:
-            raise ValueError(f"No .csv file found in Eurostat download zip: {zip_path}")
-        if len(csvs) > 1:
-            raise ValueError(
-                f"Expected exactly one .csv in Eurostat zip; found {csvs}. "
-                "Update _extract_csv_from_zip if Eurostat changed the bundle layout."
-            )
-        extracted = Path(zf.extract(csvs[0], out_dir))
-    return extracted
 
 
 def _export_parquet(csv_path: Path, out_dir: Path) -> Path:
@@ -226,11 +218,8 @@ def run(data_url: str = DEFAULT_DATA_URL, *, offline: bool = False) -> int:
         return 0
 
     work = Path(tempfile.mkdtemp(prefix="cairn-eurostat-"))
-    zip_path = work / f"{DATASET}.zip"
-    _download(data_url, zip_path)
-
-    csv_dir = work / "csv"
-    csv_path = _extract_csv_from_zip(zip_path, csv_dir)
+    csv_path = work / f"{DATASET}.csv"
+    _download(data_url, csv_path)
 
     release_dir = work / "release"
     data_path = _export_parquet(csv_path, release_dir)

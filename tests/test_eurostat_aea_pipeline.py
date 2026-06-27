@@ -1,13 +1,13 @@
 """Tests for the Eurostat AEA ingestion pipeline.
 
-No network access: all tests use in-memory CSVs / zips so CI runs offline. Exercises
-date parsing, CSV-to-parquet conversion, column faithfulness, determinism, period
-detection, and the idempotency short-circuit that prevents duplicate manifest entries.
+No network access: all tests use in-memory CSVs / JSON payloads so CI runs offline.
+Exercises date parsing, the SDMX dataflow metadata parser, CSV-to-parquet conversion,
+column faithfulness, determinism, period detection, and the idempotency short-circuit
+that prevents duplicate manifest entries.
 """
 
 from __future__ import annotations
 
-import zipfile
 from pathlib import Path
 
 import duckdb
@@ -25,12 +25,6 @@ FIXTURE_CSV = (
     "ESTAT:env_ac_ainah_r2(1.0),2024-10-23,A,GHG,THS_T,B,DE,2022,12345.6,\n"
     "ESTAT:env_ac_ainah_r2(1.0),2024-10-23,A,CO2,THS_T,A,NL,2022,70123.4,\n"
 )
-
-
-def _make_zip(path: Path, csv_name: str, csv_content: str) -> Path:
-    with zipfile.ZipFile(path, "w") as zf:
-        zf.writestr(csv_name, csv_content)
-    return path
 
 
 # --- date parsing ------------------------------------------------------------
@@ -58,30 +52,26 @@ def test_parse_release_rejects_unknown() -> None:
         ep._parse_release("Oct 2024")
 
 
-# --- zip extraction ----------------------------------------------------------
+# --- dataflow metadata parsing ------------------------------------------------
 
 
-def test_extract_csv_from_zip_returns_path(tmp_path: Path) -> None:
-    zip_path = _make_zip(tmp_path / "data.zip", "env_ac_ainah_r2_en.csv", FIXTURE_CSV)
-    out_dir = tmp_path / "csv"
-    csv_path = ep._extract_csv_from_zip(zip_path, out_dir)
-    assert csv_path.exists()
-    assert csv_path.suffix == ".csv"
+def test_extract_update_date_finds_update_data_annotation() -> None:
+    payload = {
+        "extension": {
+            "annotation": [
+                {"type": "CREATED", "date": "2012-12-19T15:46:33+0100"},
+                {"type": "UPDATE_DATA", "date": "2026-06-16T11:00:00+0200"},
+                {"type": "UPDATE_STRUCTURE", "date": "2026-06-16T11:00:00+0200"},
+            ]
+        }
+    }
+    assert ep._extract_update_date(payload) == "2026-06-16T11:00:00+0200"
 
 
-def test_extract_csv_from_zip_no_csv_raises(tmp_path: Path) -> None:
-    with zipfile.ZipFile(tmp_path / "bad.zip", "w") as zf:
-        zf.writestr("readme.txt", "nothing here")
-    with pytest.raises(ValueError, match="No .csv file found"):
-        ep._extract_csv_from_zip(tmp_path / "bad.zip", tmp_path / "out")
-
-
-def test_extract_csv_from_zip_multiple_csvs_raises(tmp_path: Path) -> None:
-    with zipfile.ZipFile(tmp_path / "multi.zip", "w") as zf:
-        zf.writestr("a.csv", "col\n1\n")
-        zf.writestr("b.csv", "col\n2\n")
-    with pytest.raises(ValueError, match="Expected exactly one"):
-        ep._extract_csv_from_zip(tmp_path / "multi.zip", tmp_path / "out")
+def test_extract_update_date_missing_annotation_raises() -> None:
+    payload = {"extension": {"annotation": [{"type": "CREATED", "date": "2012-12-19"}]}}
+    with pytest.raises(ValueError, match="Cannot find a UPDATE_DATA annotation"):
+        ep._extract_update_date(payload)
 
 
 # --- parquet conversion ------------------------------------------------------
