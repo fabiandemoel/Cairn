@@ -11,6 +11,15 @@ name: Cairn Implement
 # would skip ci.yml and you'd lose the gate. Create a fine-grained PAT (contents +
 # pull_requests: write) or use the app token from `/install-github-app`, and store
 # it as CAIRN_BOT_TOKEN. Confirm the action's token input name against its README.
+#
+# IMPORTANT â€” R2 credentials: this job carries the R2_* secrets so the agent can
+# run a `data-refresh`/new-source issue's real ingest (not `--offline`) and pin a
+# genuine r2:// snapshot in the source's manifest, same secrets as ci.yml/pages.yml.
+# The ingest writes straight to the production R2 bucket before any human reviews
+# the PR -- that write is not gated by review the way the code is. Acceptable here
+# because the manifest is append-only (a bad pin adds a snapshot, never overwrites
+# or deletes one) and verify_reproducibility.py / the benchmark-diff CI job still
+# catch a bad release before merge; revisit if that stops holding.
 
 on:
   issues:
@@ -211,6 +220,22 @@ jobs:
               figures â€” real source categories or explicit NULL + a note. New source
               => its own append-only manifest under sources/.
 
+            R2 credentials are set on this job (R2_ENDPOINT/R2_ACCESS_KEY_ID/
+            R2_SECRET_ACCESS_KEY/R2_BUCKET) specifically so you can run the real
+            ingest, not `--offline`. When the issue calls for ingesting a release
+            (a new source, or a new release of an existing one): run the pipeline
+            without `--offline` so it uploads to R2 and pins a real `r2://` snapshot
+            in the source's `sources/<source>/manifest.yml` â€” never commit a
+            `file://` snapshot from an `--offline` run, and never hand-edit a
+            manifest. If the ingest fails or the credentials turn out to be absent,
+            say so plainly in the PR and leave the manifest unpinned rather than
+            faking a snapshot. After a new snapshot lands, also confirm the source
+            is registered in `scripts/verify_reproducibility.py`'s `SOURCES` dict
+            (and therefore covered by `scripts/materialize_warehouse.py`) â€” a
+            source with dbt models but no entry there builds the production site
+            from its stale fixture instead of the real pinned data, which is the
+            bug that prompted this change.
+
             Branch naming: `agent/<issue-number>-<short-slug>`, e.g. `agent/38-eurostat-ingestion`
             â€” the issue number makes a previous run's branch unambiguous to find.
 
@@ -261,6 +286,13 @@ jobs:
         # check the way rewriting commands with a shell pipe could.
         env:
           BASH_MAX_OUTPUT_LENGTH: "10000"
+          # Lets the agent run the real (non---offline) ingest for data-refresh /
+          # new-source issues, so a new release gets a genuine r2:// pin instead
+          # of landing unpinned (see the prompt's R2 paragraph above).
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
 
       # Cost visibility (best-effort; never fails the run). Parse the action's
       # execution_file into a markdown summary + the total cost in USD.

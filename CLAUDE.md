@@ -174,7 +174,18 @@ benchmark-diff) is the gate for every code change.
   to an issue (or via manual dispatch). Implements that one issue on an
   `agent/*` branch and opens a PR against main. It must pass the full local CI
   command set before opening the PR, and it never merges. PRs are opened with
-  `CAIRN_BOT_TOKEN` (not `GITHUB_TOKEN`) so CI actually fires on them.
+  `CAIRN_BOT_TOKEN` (not `GITHUB_TOKEN`) so CI actually fires on them. It also
+  carries the `R2_*` secrets: for a `data-refresh` or new-source issue, the agent
+  runs the real (non-`--offline`) ingest itself, so a new release lands as a
+  genuine `r2://`-pinned manifest snapshot rather than staying unpinned. The
+  manifest's append-only invariant is the safety net for this — a bad pin adds a
+  snapshot, it can't overwrite or delete one — and `verify_reproducibility.py` /
+  the `benchmark-diff` CI job still have to pass before the human reviews and
+  merges. **Whenever a new source is added, it must also be registered in
+  `scripts/verify_reproducibility.py`'s `SOURCES` dict** — that dict is what
+  `materialize_warehouse.py` reads to decide which sources to fetch real R2 data
+  for; a source missing from it silently builds the production site from its
+  stale dbt-fixture default instead of the real pinned snapshot once one exists.
 - **`cairn-replenish.yml`** (weekly) — curates BACKLOG.md only, as a docs-only
   PR: new candidates, re-scoring, retiring off-spine ideas to "Considered and
   rejected". Never merges. **Data-quality observability is a standing candidate
