@@ -5,7 +5,7 @@ SHA256 of the primary file matches the pin, then rebuilds the dbt project agains
 that raw file. This is the end-to-end proof behind every benchmark figure:
 commit + manifest + immutable raw file reproduce the numbers.
 
-By default it verifies every source (CBS, euets.info, EEA); pass --source to
+By default it verifies every source (CBS, euets.info, EEA, Eurostat AEA); pass --source to
 target one. Each source skips gracefully -- if its manifest pins no snapshot
 yet, or its snapshot lives in R2 and the R2_* secrets are absent -- so CI stays
 green without credentials.
@@ -63,6 +63,11 @@ SOURCES: dict[str, dict] = {
     "eea": {
         "manifest": REPO_ROOT / "sources" / "eea" / "manifest.yml",
         "var": "eea_raw_dir",
+        "files": ("data.parquet",),
+    },
+    "eurostat": {
+        "manifest": REPO_ROOT / "sources" / "eurostat" / "manifest.yml",
+        "var": "eurostat_aea_raw_dir",
         "files": ("data.parquet",),
     },
 }

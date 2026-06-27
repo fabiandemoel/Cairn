@@ -1,8 +1,8 @@
 """Materialise the dbt warehouse from the pinned R2 snapshots, for the site build.
 
-Downloads each source's latest pinned snapshot (CBS, euets.info, EEA) from R2
-into a local cache dir, verifies its SHA256 against the manifest, then runs a
-single ``dbt build`` with the ``*_raw_dir`` vars pointing at them. The result is
+Downloads each source's latest pinned snapshot (CBS, euets.info, EEA, Eurostat AEA)
+from R2 into a local cache dir, verifies its SHA256 against the manifest, then runs
+a single ``dbt build`` with the ``*_raw_dir`` vars pointing at them. The result is
 ``cairn.duckdb`` at the repo root -- the warehouse the Evidence site reads.
 
 Unlike ``verify_reproducibility.py`` (which checks each snapshot in isolation and
