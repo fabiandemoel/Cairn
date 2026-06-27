@@ -49,8 +49,9 @@ reproducibility job).
 
 Checklist:
 1. Run the ingest: `uv run python -m ingestion.cbs_pipeline` (with R2 creds) or
-   `--offline` to dry-run locally. It is idempotent — it exits "no new release"
-   if `Modified` already matches the latest snapshot.
+   `--offline` to dry-run locally, or trigger `cairn-ingest.yml` (source `cbs`)
+   to run it in CI and open the manifest-pin PR for you. It is idempotent — it
+   exits "no new release" if `Modified` already matches the latest snapshot.
 2. Confirm a **new** append-only snapshot landed in `sources/cbs/manifest.yml`
    (new `release`, new `sha256`). The old snapshot stays.
 3. Refresh the CI fixture so tests run on representative data:
@@ -79,6 +80,9 @@ Checklist:
      carries the publication token, e.g. `eutl_2025_2026xx.zip`).
    - EEA: the datashare link is `DEFAULT_URL` in `ingestion/eea_ets_pipeline.py`;
      update it if EEA issues a new share. Run with R2 creds, or `--offline`.
+   - Either way, `cairn-ingest.yml` (source `euets` or `eea`, with the new URL
+     as the workflow's `url` input) can run the ingest in CI and open the
+     manifest-pin PR for you.
    Both are idempotent — they exit "no new release" if the token is already pinned.
 2. Confirm a **new** append-only snapshot landed in `sources/euets/manifest.yml`
    / `sources/eea/manifest.yml` (new `release`, new `sha256`).
@@ -162,10 +166,22 @@ which is a real integrity alarm, not flakiness.
 
 
 ### Agent automation (CI maintenance loop)
-Three scheduled workflows run Claude against this repo. They never bypass the
-invariants above, and the existing CI (lint, test, dbt-build, evidence-build,
-benchmark-diff) is the gate for every code change.
+Three scheduled workflows run Claude against this repo, plus one manually
+triggered, non-LLM workflow that performs the actual R2 write. They never
+bypass the invariants above, and the existing CI (lint, test, dbt-build,
+evidence-build, benchmark-diff) is the gate for every code change.
 
+- **`cairn-ingest.yml`** — manual only (`workflow_dispatch`, pick a source from
+  the dropdown). No LLM runs in this job; it directly invokes that source's
+  existing idempotent `ingestion/*_pipeline.py` with the `R2_*` secrets, so an
+  agent never holds R2 write-credentials. If the pipeline pins a new release,
+  the job opens a PR carrying only the manifest diff (via
+  `peter-evans/create-pull-request`); it never merges. The PR's checklist
+  reminds the reviewer that fixtures/`*_raw_dir` defaults/model assumptions
+  (the rest of the matching "Recurring maintenance" checklist below) still
+  need doing before it's safe to merge — a bare manifest bump alone is
+  expected to fail `dbt build`/`pytest` in that PR's CI run. A `data-refresh`
+  issue from `cairn-scout.yml` is the usual trigger to run this by hand.
 - **`cairn-scout.yml`** (daily) — read-only. Checks each source's upstream
   release token (the freshness signals documented above) against
   `sources/*/manifest.yml`, and dispatches the top of BACKLOG.md. Output is
@@ -187,10 +203,12 @@ benchmark-diff) is the gate for every code change.
   *scores* on individual figures; that line stays in BACKLOG's _Considered and
   rejected_.
 
-The human stays out of the doing; the only manual acts are labelling an issue
-`approved` and merging a green PR. That merge is the audit checkpoint — keep
-it. BACKLOG.md is the curated menu these agents draw from; its "Rules of the
-game" restate these invariants as admission criteria for new sources.
+The human stays out of the doing for code changes; the manual acts are
+labelling an issue `approved`, manually running `cairn-ingest.yml` when a
+source needs a new pin, and merging a green PR. That merge is the audit
+checkpoint — keep it. BACKLOG.md is the curated menu these agents draw from;
+its "Rules of the game" restate these invariants as admission criteria for new
+sources.
 
 **Cost visibility.** Each of the three workflows ends with two best-effort steps
 that surface what the run cost. `scripts/ai_cost_summary.py` (stdlib-only,

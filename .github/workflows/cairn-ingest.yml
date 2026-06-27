@@ -1,0 +1,118 @@
+name: Cairn Ingest
+
+# Manually triggered (Actions tab -> Run workflow), by a human, after they've
+# decided a source needs a new pin (the freshness signals + checklists in
+# CLAUDE.md's "Recurring maintenance" section). Runs the source's existing
+# idempotent ingestion pipeline directly -- no LLM in this job, so the R2
+# write-credentials are never in an agent's hands. If the pipeline pins a new
+# snapshot, it opens a PR with just the manifest diff; nothing merges here.
+# CI (ci.yml) still gates the merge as normal.
+#
+# This only does step 1-2 of each CLAUDE.md checklist (run the ingest, land
+# the new snapshot). The remaining steps -- refreshing CI fixtures, bumping
+# release dirs, re-checking the assumptions the models lean on -- still need a
+# human or a `cairn-implement` issue; a bare manifest bump without those is
+# expected to fail dbt build/pytest in the PR's CI run until they're done.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Source to ingest"
+        required: true
+        type: choice
+        options: [cbs, euets, eea, eurostat]
+      url:
+        description: >-
+          Override URL (euets/eea only -- point at the new release zip, e.g.
+          the euets.info or EEA datashare link from the CLAUDE.md checklist).
+          Leave blank for cbs/eurostat, which auto-detect their latest release.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: cairn-ingest-${{ github.event.inputs.source }}
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CAIRN_BOT_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Run ingest
+        id: ingest
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SOURCE: ${{ github.event.inputs.source }}
+          URL: ${{ github.event.inputs.url }}
+        run: |
+          set -euo pipefail
+          case "$SOURCE" in
+            cbs)      module=ingestion.cbs_pipeline ;;
+            euets)    module=ingestion.euets_pipeline ;;
+            eea)      module=ingestion.eea_ets_pipeline ;;
+            eurostat) module=ingestion.eurostat_aea_pipeline ;;
+            *) echo "Unknown source: $SOURCE" >&2; exit 1 ;;
+          esac
+
+          args=()
+          if [ -n "$URL" ]; then
+            case "$SOURCE" in
+              euets|eea) args+=(--url "$URL") ;;
+              *) echo "::warning::--url is ignored for $SOURCE (it auto-detects its release)" ;;
+            esac
+          fi
+
+          uv run python -m "$module" "${args[@]}"
+
+      - name: Check for a new manifest snapshot
+        id: diff
+        run: |
+          if git diff --quiet -- "sources/${{ github.event.inputs.source }}/manifest.yml"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No new release -- manifest unchanged."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open PR with the new pin
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.CAIRN_BOT_TOKEN }}
+          add-paths: sources/${{ github.event.inputs.source }}/manifest.yml
+          commit-message: "data(${{ github.event.inputs.source }}): pin new release"
+          branch: ingest/${{ github.event.inputs.source }}-${{ github.run_id }}
+          title: "data(${{ github.event.inputs.source }}): pin new release"
+          body: |
+            Opened by the `cairn-ingest` workflow (run ${{ github.run_id }}, triggered
+            by @${{ github.actor }}). The ingest pipeline pinned a new append-only
+            snapshot in `sources/${{ github.event.inputs.source }}/manifest.yml`.
+
+            This PR only carries the manifest bump. Per CLAUDE.md's "Recurring
+            maintenance" checklist for this source, it still needs:
+            - [ ] CI fixtures refreshed to the new release
+            - [ ] `*_raw_dir` defaults in `transform/dbt_project.yml` bumped
+            - [ ] the assumptions the staging/mart models lean on re-checked
+            - [ ] `dbt build` / `pytest` / linters green
+            - [ ] README release note
+
+            Do not merge until those are done -- a bare manifest bump is expected to
+            fail `dbt build`/`pytest` in this PR's CI run until the fixtures catch up.
