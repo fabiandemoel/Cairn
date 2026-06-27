@@ -13,6 +13,7 @@ select
     nace_section_label,
     installation_emissions_t_co2eq,
     allocated_total_t_co2eq,
+    surrendered_allowances_t_co2eq,
     sector_installation_count,
     sector_mean_emissions_t_co2eq,
     sector_median_emissions_t_co2eq,
