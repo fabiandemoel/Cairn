@@ -20,6 +20,7 @@ vars:
   raw_dir: "tests/fixtures/85669NED/2026-03-11"
   euets_raw_dir: "tests/fixtures/euets/2024-10"
   eea_raw_dir: "tests/fixtures/eea/2005-2025_v01_r00"
+  eurostat_aea_raw_dir: "tests/fixtures/eurostat/env_ac_ainah_r2/2024-10-23"
 
 models:
   cairn:

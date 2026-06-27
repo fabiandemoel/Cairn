@@ -80,6 +80,56 @@ models:
         tests:
           - not_null
 
+  - name: stg_eurostat__aea
+    description: >
+      Typed 1:1 view of the raw Eurostat AEA (Air Emissions Accounts) snapshot
+      (env_ac_ainah_r2): greenhouse-gas and air-pollutant emissions per country,
+      NACE section and year. Columns are renamed and typed; no rows are filtered.
+      Uses the residence principle (see accounting note in the model file).
+    columns:
+      - name: observation_key
+        description: Surrogate natural key (country|nace_r2|airpol|year).
+        tests:
+          - unique
+          - not_null
+      - name: country
+        description: ISO 3166-1 alpha-2 country code (e.g. NL, DE, FR).
+        tests:
+          - not_null
+      - name: nace_r2
+        description: >
+          NACE Rev.2 section code or Eurostat aggregate (single letter A-T,
+          M_N for M+N combined, R_S for R+S combined, TOTAL for national sum).
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+                 "K", "L", "M_N", "O", "P", "Q", "R_S", "T", "TOTAL"]
+      - name: airpol
+        description: Air pollutant code (CH4, CO2, GHG, N2O).
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["CH4", "CO2", "GHG", "N2O"]
+      - name: unit
+        description: Unit of measurement; always THS_T (thousands of tonnes CO2-equivalent).
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["THS_T"]
+      - name: year
+        description: Reporting year, cast from the source TIME_PERIOD string.
+        tests:
+          - not_null
+      - name: value_ths_t_co2eq
+        description: >
+          Emission value in thousands of tonnes CO2-equivalent. Nullable -- a
+          few source cells carry no observation; NULL is left as NULL, never a
+          placeholder zero.
+      - name: obs_flag
+        description: Eurostat quality/observation flag. Nullable -- most cells are unflagged.
+
   - name: stg_eea__ets
     description: >
       Typed 1:1 view of the EEA EU ETS aggregate (country x main activity x year

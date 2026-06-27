@@ -238,6 +238,82 @@ models:
                 ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
                  "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U"]
 
+  - name: benchmark_country_sector_emissions
+    description: >
+      Cross-country greenhouse-gas emissions (Eurostat AEA, total GHG in
+      thousands of tonnes CO2-equivalent) per country, NACE section and year,
+      with each sector's share of that country's national total. Grain:
+      country × nace_section × year. Enables EU peer benchmarking: "how does
+      NL sector C compare to DE sector C in 2022?"
+    meta:
+      source_manifest: sources/eurostat/manifest.yml
+      source_dataset: "env_ac_ainah_r2"
+      methodology: >
+        Headline pollutant GHG (total greenhouse gases in CO2-equivalent,
+        airpol = 'GHG'). The TOTAL row is excluded; individual section rows
+        sum to the national total. Eurostat-native aggregates M_N (Sections M
+        and N combined) and R_S (R and S combined) are preserved as-is -- the
+        AEA publishes at this grain and they cannot be disaggregated without
+        a secondary source. Unit is THS_T (thousands of tonnes CO2-equivalent)
+        throughout. AEA uses the residence principle (emissions attributed to
+        resident producers); CBS 85669NED and EU ETS use the territorial
+        principle (emissions within NL borders). NL figures from this mart
+        will legitimately differ from the CBS and EU ETS marts; see the
+        assert_eurostat_aea_nl_within_cbs test and the env_ac_aibrid_r2
+        bridge reference in README.md.
+      known_limitations: >
+        (1) AEA uses the residence principle, not the territorial principle
+        used by CBS 85669NED and EU ETS -- cross-source totals will differ by
+        design. (2) Sections M and N are published as the combined M_N
+        aggregate; R and S as R_S -- they cannot be disaggregated. (3) The
+        Eurostat AEA snapshot lags publication by roughly two years.
+        (4) The fixture covers NL, DE, and FR only; real R2 data covers all
+        EU member states reporting to Eurostat.
+      references:
+        source_table: https://ec.europa.eu/eurostat/databrowser/view/env_ac_ainah_r2
+        aea_methodology: https://ec.europa.eu/eurostat/web/environment/air-emissions-accounts
+        bridge_dataset: https://ec.europa.eu/eurostat/databrowser/view/env_ac_aibrid_r2
+        nace_rev2: https://ec.europa.eu/eurostat/web/nace
+    columns:
+      - name: country_nace_year_key
+        description: Surrogate natural key (country|nace_section|year).
+        tests:
+          - unique
+          - not_null
+      - name: country
+        description: ISO 3166-1 alpha-2 country code (e.g. NL, DE, FR).
+        tests:
+          - not_null
+      - name: nace_section
+        description: >
+          NACE Rev.2 section letter or Eurostat-native aggregate. M_N covers
+          Sections M (Professional, scientific and technical) and N
+          (Administrative and support service activities) combined; R_S covers
+          Sections R (Arts, entertainment and recreation) and S (Other service
+          activities) combined.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+                 "K", "L", "M_N", "O", "P", "Q", "R_S", "T"]
+      - name: "year"
+        description: Reporting year.
+        tests:
+          - not_null
+      - name: emissions_ths_t_co2eq
+        description: GHG emissions for the country-sector-year (thousands of tonnes CO2-eq).
+        tests:
+          - not_null
+      - name: national_emissions_ths_t_co2eq
+        description: National GHG total for the country-year (thousands of tonnes CO2-eq).
+        tests:
+          - not_null
+      - name: emissions_share
+        description: Sector emissions divided by that country's national total for the year.
+        tests:
+          - not_null
+
   - name: mart_data_provenance
     description: >
       Provenance-integrity view over the source manifests: one row per pinned
