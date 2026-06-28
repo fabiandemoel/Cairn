@@ -250,25 +250,25 @@ models:
       source_dataset: "env_ac_ainah_r2"
       methodology: >
         Headline pollutant GHG (total greenhouse gases in CO2-equivalent,
-        airpol = 'GHG'). The TOTAL row is excluded; individual section rows
-        sum to the national total. Eurostat-native aggregates M_N (Sections M
-        and N combined) and R_S (R and S combined) are preserved as-is -- the
-        AEA publishes at this grain and they cannot be disaggregated without
-        a secondary source. Unit is THS_T (thousands of tonnes CO2-equivalent)
-        throughout. AEA uses the residence principle (emissions attributed to
-        resident producers); CBS 85669NED and EU ETS use the territorial
-        principle (emissions within NL borders). NL figures from this mart
-        will legitimately differ from the CBS and EU ETS marts; see the
-        assert_eurostat_aea_nl_within_cbs test and the env_ac_aibrid_r2
+        airpol = 'GHG'), unit THS_T only -- env_ac_ainah_r2 also reports the
+        same observations in T, per-capita, and index units, which must be
+        excluded to avoid mixing incompatible scales. nace_r2 is restricted to
+        the 21 NACE Rev.2 section letters (A-U); env_ac_ainah_r2 also publishes
+        division-level breakdowns (e.g. A01, C20), household/aggregate rows
+        (HH, TOTAL_HH, G-U_X_H) and the national TOTAL, which are excluded so
+        that individual section rows sum to the national total without
+        double-counting. AEA uses the residence principle (emissions
+        attributed to resident producers); CBS 85669NED and EU ETS use the
+        territorial principle (emissions within NL borders). NL figures from
+        this mart will legitimately differ from the CBS and EU ETS marts; see
+        the assert_eurostat_aea_nl_within_cbs test and the env_ac_aibrid_r2
         bridge reference in README.md.
       known_limitations: >
         (1) AEA uses the residence principle, not the territorial principle
         used by CBS 85669NED and EU ETS -- cross-source totals will differ by
-        design. (2) Sections M and N are published as the combined M_N
-        aggregate; R and S as R_S -- they cannot be disaggregated. (3) The
-        Eurostat AEA snapshot lags publication by roughly two years.
-        (4) The fixture covers NL, DE, and FR only; real R2 data covers all
-        EU member states reporting to Eurostat.
+        design. (2) The Eurostat AEA snapshot lags publication by roughly two
+        years. (3) The fixture covers NL, DE, and FR only; real R2 data covers
+        all EU member states reporting to Eurostat.
       references:
         source_table: https://ec.europa.eu/eurostat/databrowser/view/env_ac_ainah_r2
         aea_methodology: https://ec.europa.eu/eurostat/web/environment/air-emissions-accounts
@@ -285,18 +285,13 @@ models:
         tests:
           - not_null
       - name: nace_section
-        description: >
-          NACE Rev.2 section letter or Eurostat-native aggregate. M_N covers
-          Sections M (Professional, scientific and technical) and N
-          (Administrative and support service activities) combined; R_S covers
-          Sections R (Arts, entertainment and recreation) and S (Other service
-          activities) combined.
+        description: NACE Rev.2 section letter (A-U).
         tests:
           - not_null
           - accepted_values:
               values:
-                ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
-                 "K", "L", "M_N", "O", "P", "Q", "R_S", "T"]
+                ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
+                 "M", "N", "O", "P", "Q", "R", "S", "T", "U"]
       - name: "year"
         description: Reporting year.
         tests:

@@ -4,11 +4,14 @@
 --
 -- Methodology:
 --   * Headline pollutant = total GHG in CO2-equivalent (airpol = 'GHG').
---   * 'TOTAL' rows are excluded; per-section rows sum to the national total.
---   * Eurostat-native aggregates M_N (Sections M + N combined) and R_S
---     (R + S combined) are kept as-is -- the AEA publishes at this level
---     and they cannot be split without a secondary source.
---   * Unit is THS_T (thousands of tonnes CO2-equivalent) throughout.
+--   * Unit is restricted to THS_T (thousands of tonnes CO2-equivalent) --
+--     env_ac_ainah_r2 also reports the same observations in T, per-capita,
+--     and index units, which must be excluded here.
+--   * nace_r2 is restricted to the 21 NACE Rev.2 section letters (A-U).
+--     env_ac_ainah_r2 also publishes division-level breakdowns (e.g. A01,
+--     C20), household/aggregate rows (HH, TOTAL_HH, G-U_X_H) and the
+--     national TOTAL; mixing those into a per-section sum double-counts,
+--     so only the 21 mutually-exclusive section codes are kept.
 --   * AEA uses the residence principle; NL figures will legitimately differ
 --     from CBS 85669NED (territorial) and EU ETS (territorial). See the
 --     bridge dataset env_ac_aibrid_r2 (cited in README) for the quantified
@@ -23,7 +26,11 @@ with ghg as (
     from {{ ref('stg_eurostat__aea') }}
     where
         airpol = 'GHG'
-        and nace_r2 <> 'TOTAL'
+        and unit = 'THS_T'
+        and nace_r2 in (
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+            'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'
+        )
         and value_ths_t_co2eq is not null
 ),
 

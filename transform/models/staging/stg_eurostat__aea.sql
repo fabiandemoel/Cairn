@@ -21,5 +21,5 @@ select
     cast(time_period as integer) as year,
     try_cast(obs_value as double) as value_ths_t_co2eq,
     obs_flag,
-    geo || '|' || nace_r2 || '|' || airpol || '|' || time_period as observation_key
+    geo || '|' || nace_r2 || '|' || airpol || '|' || unit || '|' || time_period as observation_key
 from raw

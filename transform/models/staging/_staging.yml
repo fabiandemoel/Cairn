@@ -88,36 +88,58 @@ models:
       Uses the residence principle (see accounting note in the model file).
     columns:
       - name: observation_key
-        description: Surrogate natural key (country|nace_r2|airpol|year).
+        description: Surrogate natural key (country|nace_r2|airpol|unit|year).
         tests:
           - unique
           - not_null
       - name: country
-        description: ISO 3166-1 alpha-2 country code (e.g. NL, DE, FR).
+        description: ISO 3166-1 alpha-2 country code (e.g. NL, DE, FR), plus EU27_2020.
         tests:
           - not_null
       - name: nace_r2
         description: >
-          NACE Rev.2 section code or Eurostat aggregate (single letter A-T,
-          M_N for M+N combined, R_S for R+S combined, TOTAL for national sum).
+          NACE Rev.2 section or division code, or a Eurostat aggregate (e.g. TOTAL
+          for the national sum, HH for households, G-U_X_H for services excluding
+          transport). The full set actually present in env_ac_ainah_r2, confirmed
+          against the live source (not just NACE section letters).
         tests:
           - not_null
           - accepted_values:
               values:
-                ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
-                 "K", "L", "M_N", "O", "P", "Q", "R_S", "T", "TOTAL"]
+                ["A", "A01", "A02", "A03", "B", "C", "C10-C12", "C13-C15", "C16",
+                 "C17", "C18", "C19", "C20", "C21", "C22", "C23", "C24", "C25",
+                 "C26", "C27", "C28", "C29", "C30", "C31_C32", "C33", "D", "E",
+                 "E36", "E37-E39", "F", "G", "G-U_X_H", "G45", "G46", "G47", "H",
+                 "H49", "H50", "H51", "H52", "H53", "HH", "HH_HEAT", "HH_OTH",
+                 "HH_TRA", "I", "J", "J58", "J59_J60", "J61", "J62_J63", "K",
+                 "K64", "K65", "K66", "L", "L68A", "M", "M69_M70", "M71", "M72",
+                 "M73", "M74_M75", "N", "N77", "N78", "N79", "N80-N82", "O", "P",
+                 "Q", "Q86", "Q87_Q88", "R", "R90-R92", "R93", "S", "S94", "S95",
+                 "S96", "T", "TOTAL", "TOTAL_HH", "U"]
       - name: airpol
-        description: Air pollutant code (CH4, CO2, GHG, N2O).
+        description: >
+          Air pollutant code. The full set actually present in env_ac_ainah_r2
+          (greenhouse gases, CO2-equivalent conversions, and other air pollutants),
+          confirmed against the live source -- not just the four headline GHGs.
         tests:
           - not_null
           - accepted_values:
-              values: ["CH4", "CO2", "GHG", "N2O"]
+              values:
+                ["ACG", "CH4", "CH4_CO2E", "CH4_NMVOCE", "CO", "CO2", "CO2_BIO",
+                 "CO_NMVOCE", "GHG", "HFC_CO2E", "N2O", "N2O_CO2E", "NF3_SF6_CO2E",
+                 "NH3", "NH3_SO2E", "NMVOC", "NOX", "NOX_NMVOCE", "NOX_SO2E",
+                 "O3PR", "PFC_CO2E", "PM10", "PM2_5", "SOX_SO2E"]
       - name: unit
-        description: Unit of measurement; always THS_T (thousands of tonnes CO2-equivalent).
+        description: >
+          Unit of measurement. env_ac_ainah_r2 reports each observation in up to
+          five units: THS_T (thousands of tonnes, the headline unit used for
+          benchmarking), T (tonnes), G_HAB / KG_HAB (per-capita), and I15 (index,
+          2015=100). Downstream consumers must filter to one unit -- comparing
+          across units double-counts/conflates incompatible scales.
         tests:
           - not_null
           - accepted_values:
-              values: ["THS_T"]
+              values: ["G_HAB", "I15", "KG_HAB", "T", "THS_T"]
       - name: year
         description: Reporting year, cast from the source TIME_PERIOD string.
         tests:
