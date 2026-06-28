@@ -1,4 +1,6 @@
--- Singular test: the NL AEA national total (nace_r2 = TOTAL, airpol = GHG)
+-- Singular test: the NL AEA national total (nace_r2 = TOTAL, airpol = GHG,
+-- unit = THS_T -- env_ac_ainah_r2 also reports the same observation in T,
+-- per-capita, and index units, which must be excluded from this comparison)
 -- must be within 5% of the CBS 85669NED national total (category T001616,
 -- gas T001372, Definitief years). The tolerance is wider than the CBS
 -- internal reconciliation check (0.5%) because the two sources use different
@@ -22,6 +24,7 @@ with aea_nl as (
         country = 'NL'
         and nace_r2 = 'TOTAL'
         and airpol = 'GHG'
+        and unit = 'THS_T'
 ),
 
 cbs_nl as (
