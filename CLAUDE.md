@@ -203,6 +203,27 @@ evidence-build, benchmark-diff) is the gate for every code change.
   *scores* on individual figures; that line stays in BACKLOG's _Considered and
   rejected_.
 
+**Prompt priming (cost optimisation).** Both `cairn-implement.yml` and
+`cairn-scout.yml` run no-LLM steps *before* the Claude step so the agent never
+has to re-derive stable facts turn by turn (the dominant repeated cost in the
+run logs):
+- **Pre-build (implement only).** A `continue-on-error` step runs `uv sync`,
+  `dbt build`, `scripts/export_esrs_e1.py`, and `npm ci && npm run sources` —
+  mirroring ci.yml — so the agent starts from a built warehouse
+  (`./cairn.duckdb`), an existing ESRS export bundle, and installed site deps,
+  and only re-runs what it changes. It's `continue-on-error` because a failure
+  just falls back to the agent building it itself; it's an optimisation, not a
+  gate.
+- **Orientation map.** `scripts/repo_orientation.py` (stdlib-only, unit-tested
+  in `tests/test_repo_orientation.py`) emits a compact map — the build/verify
+  sequence, the warehouse↔Evidence wiring, and a filesystem-scanned inventory of
+  which sources / staging models / marts / site queries / pages exist — captured
+  into a step output and injected into the prompt. It scans the tree each run, so
+  it never goes stale. It's the single rendered source for the build sequence
+  (the prompt points at it rather than hardcoding the command list), and it gives
+  scout the layer inventory it uses to pick a candidate's next not-yet-done
+  layer. Keep the map tight: it is re-sent on every agent turn.
+
 The human stays out of the doing for code changes; the manual acts are
 labelling an issue `approved`, manually running `cairn-ingest.yml` when a
 source needs a new pin, and merging a green PR. That merge is the audit
