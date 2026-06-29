@@ -48,6 +48,23 @@ jobs:
         id: run_start
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # Generate the repo-orientation map for the prompt. Backlog dispatch
+      # (task 2) has to know how far a multi-layer candidate has progressed —
+      # does its source manifest / staging model / mart / site query exist yet?
+      # — to pick the next not-yet-done layer. Run logs showed scout spending
+      # almost its whole turn budget re-deriving that inventory by listing
+      # directories. The map (stdlib-only python3, scanned from the tree each
+      # run so it never goes stale) hands it that layer inventory up front.
+      - name: Generate repo orientation map
+        id: orient
+        run: |
+          {
+            echo 'map<<ORIENT_EOF'
+            python3 scripts/repo_orientation.py
+            echo
+            echo 'ORIENT_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - id: claude
         uses: anthropics/claude-code-action@v1
         with:
@@ -87,6 +104,11 @@ jobs:
             "Recurring maintenance" runbooks (for task 1) â€” no need for the rest of
             either file.
 
+            ${{ steps.orient.outputs.map }}
+
+            The orientation map's layer inventory above is authoritative for what
+            already exists — use it for task 2 instead of re-listing directories.
+
             Two tasks:
 
             1. UPSTREAM FRESHNESS. For each source, compare the live upstream release
@@ -117,9 +139,10 @@ jobs:
                one big issue â€” it gets one issue per layer, and because each layer
                depends on the previous one having landed, open an issue ONLY for the
                next not-yet-done layer:
-                 - Inspect the repo to see how far the candidate has progressed
-                   (e.g. does `sources/<name>/manifest.yml` exist yet? the staging
-                   model? the mart? the site query?). The first layer whose artifacts
+                 - Read the orientation map's layer inventory above to see how
+                   far the candidate has progressed (does its
+                   `sources/<name>/manifest.yml`, staging model, mart, or site
+                   query already appear there?). The first layer whose artifacts
                    are absent is the one to dispatch now.
                  - Skip the candidate entirely if that next layer already has an open
                    issue, or if the previous layer's PR is still open/unmerged (its

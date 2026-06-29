@@ -122,6 +122,41 @@ jobs:
             core.setOutput("sha", sha);
             core.setOutput("url", url);
 
+      # Pre-build the environment so the agent starts from a green, fully-built
+      # tree instead of re-discovering and rebuilding it turn by turn. Mirrors
+      # ci.yml's lint/test/dbt-build/evidence-build jobs. Run logs showed the
+      # bulk of an implement run's turns went to re-deriving exactly this — does
+      # cairn.duckdb exist? where? why does build:strict 404 on the export
+      # download? what rebuilds the Evidence source layer? — all eliminated by
+      # having it already done (warehouse at ./cairn.duckdb, ESRS export bundle
+      # under site/static/downloads/esrs_e1/, site deps installed, source layer
+      # built). continue-on-error: a failure here just falls back to the agent
+      # building it itself, exactly as before — this is a pure cost
+      # optimization, not a correctness gate.
+      - name: Pre-build environment (deps, warehouse, ESRS export, site sources)
+        continue-on-error: true
+        run: |
+          uv sync --locked --all-groups
+          uv run dbt build --project-dir transform --profiles-dir transform
+          uv run python scripts/export_esrs_e1.py --out-dir site/static/downloads/esrs_e1
+          cd site && npm ci && npm run sources
+
+      # Generate the repo-orientation map and capture it for the prompt. Uses
+      # plain python3 (the script is stdlib-only) so it works even if the
+      # pre-build step above failed. The map lists the stable facts every run
+      # was re-discovering: the build sequence, the warehouse/Evidence wiring,
+      # and the current layer inventory (which sources/models/site queries
+      # exist). It is scanned from the tree each run, so it never goes stale.
+      - name: Generate repo orientation map
+        id: orient
+        run: |
+          {
+            echo 'map<<ORIENT_EOF'
+            python3 scripts/repo_orientation.py
+            echo
+            echo 'ORIENT_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - id: claude
         uses: anthropics/claude-code-action@v1
         with:
@@ -198,6 +233,13 @@ jobs:
             stash/pop while you try fixes) if this baseline is `unknown`/stale
             or the failing check is in the exact area you changed.
 
+            ${{ steps.orient.outputs.map }}
+
+            The orientation map above is authoritative for repo structure and the
+            build environment — trust it instead of re-listing directories,
+            re-reading connection.yaml, or probing whether cairn.duckdb exists.
+            The environment is already built, so verify only what you change.
+
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.
 
@@ -228,19 +270,15 @@ jobs:
             the next run can resume it instead of losing it when the job's runner is
             torn down. Use conventional commits, one logical change per commit.
 
-            Before opening the PR, run and pass locally what CI runs, in this
-            exact order (the export step writes the ESRS E1 bundle into
-            site/static/downloads/esrs_e1/ — the disclosure page links to it, so
-            skipping this step makes build:strict fail on a 404 and triggers a
-            long, expensive trial-and-error debugging loop; see ci.yml's
-            evidence-build job, which this list mirrors):
-              uv sync --locked --all-groups
-              uv run ruff check . && uv run ruff format --check .
-              uv run sqlfluff lint transform/models transform/tests
-              uv run pytest -q
-              uv run dbt build --project-dir transform
-              uv run python scripts/export_esrs_e1.py --out-dir site/static/downloads/esrs_e1
-              cd site && npm ci && npm run build:strict
+            Before opening the PR, run and pass locally what CI runs, in the
+            exact order given by the orientation map's "Build & verify sequence"
+            above (it mirrors ci.yml). Mind the export step in that sequence: it
+            writes the ESRS E1 bundle into site/static/downloads/esrs_e1/, which
+            the disclosure page links to, so running build:strict before it (or
+            after changing the export without re-running it) makes the strict
+            build fail on a 404 and triggers a long, expensive trial-and-error
+            loop. The environment was pre-built for this run, so in practice you
+            only need to re-run the steps downstream of what you changed.
 
             Open ONE pull request against `main`. The description must open with a
             section headed "## Executive summary": 2-4 plain-language sentences for a
