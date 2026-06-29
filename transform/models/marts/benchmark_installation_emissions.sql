@@ -40,6 +40,15 @@
 --     up to company level. The left join is 1:1 on installation_id (the seed is
 --     unique on it), so it adds no rows and changes no figure. Installations
 --     with no reviewed match carry a NULL lei (never an invented identifier).
+--   * Installation identity context (parent_company, ets_activity_label,
+--     country_label, latitude, longitude) is promoted straight from the
+--     staging layer (stg_euets__installations). These are descriptive context
+--     columns only, not authoritative identifiers:
+--       - parent_company is free text from euets.info; not normalised or
+--         deduplicated -- the LEI seed is the authoritative entity identifier.
+--       - latitude/longitude are euets.info's latitudeGoogle/longitudeGoogle --
+--         source-provided and approximate. Nullable: not all installations
+--         carry coordinates.
 
 with lei_mapping as (
     select
@@ -80,6 +89,11 @@ installation_year as (
     select
         compliance.installation_id,
         installations.installation_name,
+        installations.parent_company,
+        installations.ets_activity_label,
+        installations.country_label,
+        installations.latitude,
+        installations.longitude,
         installations.lei,
         installations.gleif_legal_name,
         installations.nace_section,
@@ -117,6 +131,11 @@ select
     installation_year.year,
     installation_year.installation_id,
     installation_year.installation_name,
+    installation_year.parent_company,
+    installation_year.ets_activity_label,
+    installation_year.country_label,
+    installation_year.latitude,
+    installation_year.longitude,
     installation_year.lei,
     installation_year.gleif_legal_name,
     installation_year.nace_section,

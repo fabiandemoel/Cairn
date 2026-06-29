@@ -101,6 +101,10 @@ models:
         nullable: it is set only where the reviewed lei_mapping_euets seed carries
         a confident GLEIF match; unmatched installations stay NULL (never an
         invented identifier), and seed coverage grows over time via PRs.
+        (8) parent_company is free text from euets.info and is not normalised;
+        the authoritative entity identifier is the LEI. (9) latitude and
+        longitude are euets.info's latitudeGoogle/longitudeGoogle fields:
+        source-provided, approximate, and nullable.
       references:
         installation_source: https://www.euets.info/
         eutl_database_doc: https://euets-info-public.s3.eu-central-1.amazonaws.com/Description_EUTL_database.pdf
@@ -124,6 +128,32 @@ models:
         description: >
           The GLEIF-registered legal name the LEI resolves to (context for the
           mapping). Nullable, paired with lei.
+      - name: parent_company
+        description: >
+          Free-text parent company name from euets.info. Descriptive context
+          only -- not an authoritative entity identifier and not normalised or
+          deduplicated across installations. The authoritative entity mapping
+          is the reviewed lei_mapping_euets seed (lei, gleif_legal_name).
+          Nullable: euets.info does not guarantee this field for every
+          installation.
+      - name: ets_activity_label
+        description: >
+          ETS activity type label from euets.info (e.g. "Combustion of fuels").
+          Descriptive context read straight from the pinned snapshot.
+      - name: country_label
+        description: >
+          Country name from euets.info (e.g. "Netherlands"). Descriptive context
+          for the installation's registry country.
+      - name: latitude
+        description: >
+          Approximate latitude (WGS84) from euets.info's latitudeGoogle field.
+          Source-provided and approximate -- not a surveyed coordinate.
+          Nullable: not all installations carry coordinates in euets.info.
+      - name: longitude
+        description: >
+          Approximate longitude (WGS84) from euets.info's longitudeGoogle field.
+          Source-provided and approximate -- not a surveyed coordinate.
+          Nullable: not all installations carry coordinates in euets.info.
       - name: nace_section
         description: NACE Rev.2 section letter the installation belongs to.
         tests:
