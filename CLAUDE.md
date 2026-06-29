@@ -185,7 +185,13 @@ evidence-build, benchmark-diff) is the gate for every code change.
 - **`cairn-scout.yml`** (daily) — read-only. Checks each source's upstream
   release token (the freshness signals documented above) against
   `sources/*/manifest.yml`, and dispatches the top of BACKLOG.md. Output is
-  GitHub issues labelled `proposal` — never code, never a PR.
+  GitHub issues labelled `proposal` — never code, never a PR. Two no-LLM steps
+  run before the agent: a **freshness precompute** (`scripts/check_freshness.py`,
+  weekly only) that emits the live-vs-pinned table so the agent never probes a
+  source itself, and a **saturation gate** that skips the Claude step entirely
+  on a non-freshness day when the un-approved `proposal` backlog is already at
+  the threshold (Actions variable `SCOUT_BACKLOG_SATURATION`, default 5) — the
+  zero-cost path when there is nothing worth dispatching.
 - **`cairn-implement.yml`** — runs only when a human adds the `approved` label
   to an issue (or via manual dispatch). Implements that one issue on an
   `agent/*` branch and opens a PR against main. It must pass the full local CI
@@ -240,6 +246,17 @@ run logs):
   subagent task (never curl the source from its own turns, and never run the real
   `--offline` ingest — it mutates the manifest with a `file://` snapshot), and to
   avoid the background-task/agent-messaging tools that add turns without value.
+- **Upstream freshness precompute (scout only).** `scripts/check_freshness.py`
+  (stdlib-only, unit-tested in `tests/test_check_freshness.py`) runs on freshness
+  days and emits a live-vs-pinned table for every source, so the scout agent acts
+  on a ready-made diff instead of discovering release tokens by hand. It reads the
+  source-specific bits a human bumps (CBS table id, Eurostat dataset id, euets/EEA
+  `DEFAULT_URL`) from the pipeline files so it can't drift from the pin of record,
+  and treats **euets.info as human-watched** — it has no upstream index, so its
+  live token equals the pin by construction and must never be probed (the agent
+  used to brute-force dozens of S3 filenames discovering exactly that). It is a
+  `continue-on-error` step: a failed probe marks that one source "verify" and the
+  agent falls back, so it is an optimisation, not a gate.
 
 The human stays out of the doing for code changes; the manual acts are
 labelling an issue `approved`, manually running `cairn-ingest.yml` when a
