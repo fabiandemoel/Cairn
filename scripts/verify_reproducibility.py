@@ -106,17 +106,40 @@ def _fetch_release_dir(snapshot: Snapshot, files: tuple[str, ...], dest: Path) -
     return dest
 
 
-def _dbt_build(raw_dir: Path, var: str, duckdb_path: Path) -> None:
+def _dbt_build(var_dirs: dict[str, Path], duckdb_path: Path) -> None:
     env = {**os.environ, "CAIRN_DUCKDB": str(duckdb_path), "DBT_PROFILES_DIR": "transform"}
+    vars_str = "{" + ", ".join(f"{var}: {d}" for var, d in var_dirs.items()) + "}"
     subprocess.run(
-        ["dbt", "build", "--project-dir", "transform", "--vars", f"{{{var}: {raw_dir}}}"],
+        ["dbt", "build", "--project-dir", "transform", "--vars", vars_str],
         check=True,
         cwd=REPO_ROOT,
         env=env,
     )
 
 
-def verify_source(name: str, cfg: dict, release: str | None, skip_build: bool) -> int:
+def _fetch_latest(name: str, cfg: dict, dest_root: Path) -> Path | None:
+    """Fetch a source's latest pinned snapshot into dest_root/<name>.
+
+    Returns None (skip gracefully) if the source has no pin, or its pin is
+    r2-backed and R2 credentials are absent.
+    """
+    manifest = load_manifest(cfg["manifest"])
+    snapshot = manifest.latest
+    if snapshot is None:
+        return None
+    if urlparse(snapshot.storage_url).scheme == "r2" and not all(os.environ.get(k) for k in R2_ENV):
+        return None
+    return _fetch_release_dir(snapshot, cfg["files"], dest_root / name)
+
+
+def verify_source(
+    name: str,
+    cfg: dict,
+    release: str | None,
+    skip_build: bool,
+    other_source_vars: dict[str, Path],
+    tmp_root: Path,
+) -> int:
     manifest = load_manifest(cfg["manifest"])
     if not manifest.snapshots:
         print(f"[{name}] manifest {manifest.source}/{manifest.dataset} pins no snapshots yet.")
@@ -133,18 +156,22 @@ def verify_source(name: str, cfg: dict, release: str | None, skip_build: bool) -
         print("  Skipping reproducibility verification. Set the secrets to enable it.")
         return 0
 
-    with tempfile.TemporaryDirectory(prefix=f"cairn-verify-{name}-") as tmp:
-        release_dir = _fetch_release_dir(snapshot, cfg["files"], Path(tmp) / "raw")
-        actual = compute_sha256(release_dir / primary)
-        if actual != snapshot.sha256:
-            print(f"  HASH MISMATCH: manifest={snapshot.sha256} actual={actual}")
-            return 1
-        print(f"  SHA256 OK: {actual}")
+    release_dir = _fetch_release_dir(snapshot, cfg["files"], tmp_root / name / "raw")
+    actual = compute_sha256(release_dir / primary)
+    if actual != snapshot.sha256:
+        print(f"  HASH MISMATCH: manifest={snapshot.sha256} actual={actual}")
+        return 1
+    print(f"  SHA256 OK: {actual}")
 
-        if skip_build:
-            return 0
-        _dbt_build(release_dir, cfg["var"], Path(tmp) / "verify.duckdb")
-        print("  dbt build OK -- snapshot reproduces.")
+    if skip_build:
+        return 0
+    # Build with every other pinned source's real, current data too -- not just
+    # this one's fixture default -- so a cross-source test (e.g.
+    # assert_eurostat_aea_nl_within_cbs) never compares this source's real data
+    # against another source's frozen CI fixture sample.
+    var_dirs = {**other_source_vars, cfg["var"]: release_dir}
+    _dbt_build(var_dirs, tmp_root / name / "verify.duckdb")
+    print("  dbt build OK -- snapshot reproduces.")
     return 0
 
 
@@ -165,8 +192,22 @@ def main(argv: list[str] | None = None) -> int:
 
     names = [args.source] if args.source else list(SOURCES)
     exit_code = 0
-    for name in names:
-        exit_code |= verify_source(name, SOURCES[name], args.release, args.skip_build)
+    with tempfile.TemporaryDirectory(prefix="cairn-verify-") as tmp:
+        tmp_path = Path(tmp)
+        # Fetch every source's latest pin once, shared across targets, so
+        # verifying one source's build doesn't fall back to fixture defaults
+        # for the others.
+        shared_vars: dict[str, Path] = {}
+        for other_name, other_cfg in SOURCES.items():
+            fetched = _fetch_latest(other_name, other_cfg, tmp_path / "shared")
+            if fetched is not None:
+                shared_vars[other_cfg["var"]] = fetched
+
+        for name in names:
+            other_vars = {v: d for v, d in shared_vars.items() if v != SOURCES[name]["var"]}
+            exit_code |= verify_source(
+                name, SOURCES[name], args.release, args.skip_build, other_vars, tmp_path
+            )
     return exit_code
 
 
