@@ -185,7 +185,13 @@ evidence-build, benchmark-diff) is the gate for every code change.
 - **`cairn-scout.yml`** (daily) — read-only. Checks each source's upstream
   release token (the freshness signals documented above) against
   `sources/*/manifest.yml`, and dispatches the top of BACKLOG.md. Output is
-  GitHub issues labelled `proposal` — never code, never a PR.
+  GitHub issues labelled `proposal` — never code, never a PR. Two no-LLM steps
+  run before the agent: a **freshness precompute** (`scripts/check_freshness.py`,
+  weekly only) that emits the live-vs-pinned table so the agent never probes a
+  source itself, and a **saturation gate** that skips the Claude step entirely
+  on a non-freshness day when the un-approved `proposal` backlog is already at
+  the threshold (Actions variable `SCOUT_BACKLOG_SATURATION`, default 5) — the
+  zero-cost path when there is nothing worth dispatching.
 - **`cairn-implement.yml`** — runs only when a human adds the `approved` label
   to an issue (or via manual dispatch). Implements that one issue on an
   `agent/*` branch and opens a PR against main. It must pass the full local CI
@@ -203,10 +209,9 @@ evidence-build, benchmark-diff) is the gate for every code change.
   *scores* on individual figures; that line stays in BACKLOG's _Considered and
   rejected_.
 
-**Prompt priming (cost optimisation).** Both `cairn-implement.yml` and
-`cairn-scout.yml` run no-LLM steps *before* the Claude step so the agent never
-has to re-derive stable facts turn by turn (the dominant repeated cost in the
-run logs):
+**Prompt priming (cost optimisation).** All three agent workflows run no-LLM
+steps *before* the Claude step so the agent never has to re-derive stable facts
+turn by turn (the dominant repeated cost in the run logs):
 - **Pre-build (implement only).** A `continue-on-error` step runs `uv sync`,
   `dbt build`, `scripts/export_esrs_e1.py`, and `npm ci && npm run sources` —
   mirroring ci.yml — so the agent starts from a built warehouse
@@ -222,7 +227,37 @@ run logs):
   it never goes stale. It's the single rendered source for the build sequence
   (the prompt points at it rather than hardcoding the command list), and it gives
   scout the layer inventory it uses to pick a candidate's next not-yet-done
-  layer. Keep the map tight: it is re-sent on every agent turn.
+  layer and replenish the inventory it uses to retire shipped candidates and
+  score remaining effort. Injected into all three agent prompts. Keep the map
+  tight: it is re-sent on every agent turn.
+- **Per-layer reference (implement only).** `scripts/reference_for_layer.py`
+  (stdlib-only, unit-tested in `tests/test_reference_for_layer.py`) infers the
+  issue's layer from its title/labels and inlines the canonical in-tree
+  exemplar(s) for that layer (e.g. for an ingestion issue: the Eurostat AEA
+  pipeline, its manifest, and its test) straight into the prompt. Cairn's work
+  is templated — each single-layer issue is a near-copy of an existing exemplar
+  — so the agent should copy the pattern, not re-derive it by reading (and
+  re-reading) the references itself. Run-log analysis showed that read-recon
+  front end was the dominant cost (one run spent 42 of 73 tool calls on recon
+  before writing a line). Exemplars are read from the tree each run (never
+  stale) and per-file line-capped (it is re-sent every turn); a missing exemplar
+  or an unrecognised layer degrades to a "find the closest example" note rather
+  than failing the step. The prompt also tells the agent to treat the issue body
+  as the authoritative spec, to do all live-source discovery in one `legwork`
+  subagent task (never curl the source from its own turns, and never run the real
+  `--offline` ingest — it mutates the manifest with a `file://` snapshot), and to
+  avoid the background-task/agent-messaging tools that add turns without value.
+- **Upstream freshness precompute (scout only).** `scripts/check_freshness.py`
+  (stdlib-only, unit-tested in `tests/test_check_freshness.py`) runs on freshness
+  days and emits a live-vs-pinned table for every source, so the scout agent acts
+  on a ready-made diff instead of discovering release tokens by hand. It reads the
+  source-specific bits a human bumps (CBS table id, Eurostat dataset id, euets/EEA
+  `DEFAULT_URL`) from the pipeline files so it can't drift from the pin of record,
+  and treats **euets.info as human-watched** — it has no upstream index, so its
+  live token equals the pin by construction and must never be probed (the agent
+  used to brute-force dozens of S3 filenames discovering exactly that). It is a
+  `continue-on-error` step: a failed probe marks that one source "verify" and the
+  agent falls back, so it is an optimisation, not a gate.
 
 The human stays out of the doing for code changes; the manual acts are
 labelling an issue `approved`, manually running `cairn-ingest.yml` when a
