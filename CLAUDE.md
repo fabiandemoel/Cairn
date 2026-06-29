@@ -223,6 +223,23 @@ run logs):
   (the prompt points at it rather than hardcoding the command list), and it gives
   scout the layer inventory it uses to pick a candidate's next not-yet-done
   layer. Keep the map tight: it is re-sent on every agent turn.
+- **Per-layer reference (implement only).** `scripts/reference_for_layer.py`
+  (stdlib-only, unit-tested in `tests/test_reference_for_layer.py`) infers the
+  issue's layer from its title/labels and inlines the canonical in-tree
+  exemplar(s) for that layer (e.g. for an ingestion issue: the Eurostat AEA
+  pipeline, its manifest, and its test) straight into the prompt. Cairn's work
+  is templated — each single-layer issue is a near-copy of an existing exemplar
+  — so the agent should copy the pattern, not re-derive it by reading (and
+  re-reading) the references itself. Run-log analysis showed that read-recon
+  front end was the dominant cost (one run spent 42 of 73 tool calls on recon
+  before writing a line). Exemplars are read from the tree each run (never
+  stale) and per-file line-capped (it is re-sent every turn); a missing exemplar
+  or an unrecognised layer degrades to a "find the closest example" note rather
+  than failing the step. The prompt also tells the agent to treat the issue body
+  as the authoritative spec, to do all live-source discovery in one `legwork`
+  subagent task (never curl the source from its own turns, and never run the real
+  `--offline` ingest — it mutates the manifest with a `file://` snapshot), and to
+  avoid the background-task/agent-messaging tools that add turns without value.
 
 The human stays out of the doing for code changes; the manual acts are
 labelling an issue `approved`, manually running `cairn-ingest.yml` when a
