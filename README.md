@@ -391,6 +391,30 @@ The **EU ETS** source has its own quirks:
   `stg_eea__ets` collapses exact-grain duplicates, keeping the larger value. It
   sits outside the NL coverage sum, so it does not affect the benchmark.
 
+The **Eurostat `env_air_gge`** source has its own quirks:
+
+- **UNFCCC submission lag: latest available year is 2024 (as of the 2026-06-02
+  release).** UNFCCC national inventory submissions trail the current calendar
+  year by 1–2 years. When CBS has already published a more recent year, the GHG
+  cross-check will be behind by that lag — this is expected. The staging model
+  must filter to the intersection of years available in both sources before
+  running the cross-check test.
+- **CRF sectors are not NACE economic sectors.** `env_air_gge` uses the IPCC
+  Common Reporting Format (CRF) classification (`CRF1` = Energy, `CRF2` =
+  Industrial processes, etc.), which cannot be mapped to NACE without significant
+  assumptions. The national totals (`src_crf = 'TOTXMEMO'`, excluding memo items)
+  are the only grain used for the CBS cross-check; sector-level CRF rows are kept
+  raw for completeness but are not used in any mart.
+- **Territorial principle — same as CBS.** Unlike the AEA (`env_ac_ainah_r2`,
+  which uses the residence principle), `env_air_gge` uses the territorial
+  principle, so the Netherlands total is a direct cross-check of CBS 85669NED
+  without any residence/territorial bridge correction.
+- **Do not conflate with AEA (`env_ac_ainah_r2`).** AEA provides NACE-sector
+  breakdowns for the EU-wide sector benchmark and uses the residence principle;
+  `env_air_gge` provides national GHG totals by CRF sector and uses the
+  territorial principle. They serve different purposes and come from different
+  inventories.
+
 ## References & methodology
 
 The data, the methodology and the classification logic are all grounded in
