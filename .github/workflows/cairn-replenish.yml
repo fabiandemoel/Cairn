@@ -35,6 +35,21 @@ jobs:
         id: run_start
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # No-LLM: the same orientation map the other two agents get. Curation needs
+      # to know what already exists — to retire a candidate that has shipped and
+      # to score a candidate's remaining effort by which of its layers are still
+      # absent. The map's layer inventory hands that over up front so replenish
+      # doesn't re-derive it by listing directories.
+      - name: Generate repo orientation map
+        id: orient
+        run: |
+          {
+            echo 'map<<ORIENT_EOF'
+            python3 scripts/repo_orientation.py
+            echo
+            echo 'ORIENT_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - id: claude
         uses: anthropics/claude-code-action@v1
         with:
@@ -59,6 +74,13 @@ jobs:
             You are Cairn's backlog curator. Read CLAUDE.md, all of BACKLOG.md
             (including "Considered and rejected"), and the open + recently closed
             issues and PRs. Edit ONLY BACKLOG.md. Do not touch any other file.
+
+            ${{ steps.orient.outputs.map }}
+
+            The orientation map's layer inventory above is authoritative for what
+            already exists — use it to spot candidates that have fully shipped
+            (retire them) and to judge a candidate's remaining effort, instead of
+            listing directories yourself.
 
             Then, as a docs-only change:
             - Propose at most 3 NEW candidates that pass every "Rules of the game"

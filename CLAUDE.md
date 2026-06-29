@@ -209,10 +209,9 @@ evidence-build, benchmark-diff) is the gate for every code change.
   *scores* on individual figures; that line stays in BACKLOG's _Considered and
   rejected_.
 
-**Prompt priming (cost optimisation).** Both `cairn-implement.yml` and
-`cairn-scout.yml` run no-LLM steps *before* the Claude step so the agent never
-has to re-derive stable facts turn by turn (the dominant repeated cost in the
-run logs):
+**Prompt priming (cost optimisation).** All three agent workflows run no-LLM
+steps *before* the Claude step so the agent never has to re-derive stable facts
+turn by turn (the dominant repeated cost in the run logs):
 - **Pre-build (implement only).** A `continue-on-error` step runs `uv sync`,
   `dbt build`, `scripts/export_esrs_e1.py`, and `npm ci && npm run sources` —
   mirroring ci.yml — so the agent starts from a built warehouse
@@ -228,7 +227,9 @@ run logs):
   it never goes stale. It's the single rendered source for the build sequence
   (the prompt points at it rather than hardcoding the command list), and it gives
   scout the layer inventory it uses to pick a candidate's next not-yet-done
-  layer. Keep the map tight: it is re-sent on every agent turn.
+  layer and replenish the inventory it uses to retire shipped candidates and
+  score remaining effort. Injected into all three agent prompts. Keep the map
+  tight: it is re-sent on every agent turn.
 - **Per-layer reference (implement only).** `scripts/reference_for_layer.py`
   (stdlib-only, unit-tested in `tests/test_reference_for_layer.py`) infers the
   issue's layer from its title/labels and inlines the canonical in-tree

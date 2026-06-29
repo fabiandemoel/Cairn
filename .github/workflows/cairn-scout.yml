@@ -131,13 +131,14 @@ jobs:
           # --allowedTools REPLACES the action's default tool set, so list
           # everything the prompt needs â€” including TodoWrite (Claude Code's
           # default progress tracker); omitting any of it silently denies the
-          # call and burns turns to error_max_turns. Bash is unrestricted
-          # because scout probes release tokens with shell loops/functions
-          # that prefix matching can't recognise (run 28053500486); with
-          # contents:read and no file edits, it's read-only in effect.
+          # call and burns turns to error_max_turns. Freshness is now
+          # precomputed by the no-LLM step above, so scout should not probe
+          # sources itself; Bash/WebFetch/WebSearch stay only for the rare
+          # fallback when a probe row says it failed (with contents:read and no
+          # file edits, it's read-only in effect).
           # mcp__github__create_issue is the bundled github-mcp-server's
           # actual tool name (issue_write does not exist and silently denies).
-          # --add-dir /tmp lets Read/Grep follow scratch probe files.
+          # --add-dir /tmp lets Read/Grep follow scratch fallback files.
           # show_full_output surfaces denied tool calls in the job log.
           # --model Sonnet: a mechanical freshness/duplicate check needs no
           # Opus-level judgement.
@@ -227,10 +228,13 @@ jobs:
             already tracked, do nothing and say so.
 
       # Cost visibility (best-effort; never fails the run). Parse the action's
-      # execution_file into a markdown summary + the total cost in USD.
+      # execution_file into a markdown summary + the total cost in USD. Skipped
+      # when the saturation gate skipped the Claude step — there is no cost to
+      # report, and running it would risk a spurious comment on an unrelated
+      # proposal issue created during the run window.
       - name: Summarise run cost
         id: cost
-        if: always()
+        if: always() && steps.claude.outcome != 'skipped'
         run: |
           python3 scripts/ai_cost_summary.py \
             --execution-file "${{ steps.claude.outputs.execution_file }}" \
@@ -242,7 +246,7 @@ jobs:
       # then post the cost comment and set the Projects v2 Number field on each.
       # A multi-issue run sets the full run cost on each (accepted double-count).
       - name: Attribute run cost
-        if: always()
+        if: always() && steps.claude.outcome != 'skipped'
         uses: actions/github-script@v7
         env:
           RUN_START: ${{ steps.run_start.outputs.ts }}
