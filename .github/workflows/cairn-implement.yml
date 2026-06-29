@@ -67,6 +67,8 @@ jobs:
           script: |
             const issueNumber = ${{ github.event.issue.number || github.event.inputs.issue_number }};
             let model = "claude-sonnet-4-6";
+            let title = "";
+            let labelsCsv = "";
             try {
               const { data: issue } = await github.rest.issues.get({
                 owner: context.repo.owner,
@@ -74,12 +76,19 @@ jobs:
                 issue_number: issueNumber,
               });
               const labels = issue.labels.map(l => (typeof l === "string" ? l : l.name));
+              labelsCsv = labels.join(",");
+              title = issue.title || "";
               model = labels.includes("data-refresh") ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
-              core.info(`Issue #${issueNumber} labels: ${labels.join(", ")} -> model ${model}`);
+              core.info(`Issue #${issueNumber} labels: ${labelsCsv} -> model ${model}`);
             } catch (err) {
               core.warning(`Could not read labels for #${issueNumber}, defaulting to Sonnet: ${err}`);
             }
+            // title/labels feed the per-layer reference generator below; on a
+            // read failure they stay empty and the generator falls back to a
+            // "find the closest example" note rather than crashing.
             core.setOutput("model", model);
+            core.setOutput("title", title);
+            core.setOutput("labels", labelsCsv);
 
       # Timestamp the run start so the cost step can find the PR this run opens
       # (branch agent/<issue>-*) without grabbing an older one.
@@ -155,6 +164,28 @@ jobs:
             python3 scripts/repo_orientation.py
             echo
             echo 'ORIENT_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # No-LLM: inline the canonical exemplar(s) for THIS issue's layer so the
+      # agent starts with the exact pattern to copy already in context, instead
+      # of spending many turns reading (and re-reading) the reference files to
+      # re-derive it — the dominant cost in run logs (run 28391012503 spent 42 of
+      # 73 tool calls on recon before writing a line). The layer is inferred from
+      # the issue title/labels; an unknown layer or a missing exemplar degrades
+      # to a "find the closest example" note, so this is a pure cost
+      # optimization, never a correctness gate. Scanned from the tree each run,
+      # so the template never goes stale.
+      - name: Generate canonical reference for the issue's layer
+        id: reference
+        env:
+          ISSUE_TITLE: ${{ steps.model.outputs.title }}
+          ISSUE_LABELS: ${{ steps.model.outputs.labels }}
+        run: |
+          {
+            echo 'ref<<REF_EOF'
+            python3 scripts/reference_for_layer.py --title "$ISSUE_TITLE" --labels "$ISSUE_LABELS"
+            echo
+            echo 'REF_EOF'
           } >> "$GITHUB_OUTPUT"
 
       - id: claude
@@ -239,6 +270,41 @@ jobs:
             build environment — trust it instead of re-listing directories,
             re-reading connection.yaml, or probing whether cairn.duckdb exists.
             The environment is already built, so verify only what you change.
+
+            ${{ steps.reference.outputs.ref }}
+
+            The reference above is the authoritative template for this issue's
+            layer — your change is a near-copy of it. Adapt only the
+            source-specific parts. Do NOT re-read those exemplar files, and do
+            NOT read neighbouring layers' files that are out of scope for this
+            issue (e.g. for an ingestion issue, don't open the staging models or
+            marts). Every file you read rides in every later turn's context, so
+            unnecessary reading is the single biggest driver of this run's cost.
+
+            Treat the ISSUE BODY as the authoritative spec. cairn-scout already
+            writes it with the exact files to touch, the fixture requirements,
+            and the watch caveats — execute that spec directly rather than
+            re-deriving a plan it already gives you. Investigate the codebase
+            only where the spec is genuinely insufficient or ambiguous.
+
+            For a NEW data source, do all live-source discovery in ONE legwork
+            task up front (Task tool, subagent_type: legwork): hand it the source
+            URL and ask it to return the column layout, the release-token field,
+            the relevant aggregate/code values, and a handful of representative
+            fixture rows. Do NOT curl or probe the source from your own turns —
+            that output then rides in every later turn's context. Do NOT run the
+            real `--offline` ingest as a check either: it downloads the full
+            dataset and writes a machine-specific `file://` snapshot into the
+            manifest that you then have to detect and reset (pure wasted turns).
+            Rely on the unit test against the committed fixture; the manifest
+            ships `snapshots: []`.
+
+            Keep your own turn count low. Do NOT use the background-task or
+            agent-messaging tools (TaskCreate / TaskUpdate / SendMessage) for
+            this single-layer issue — they add round trips without value. Use
+            TodoWrite if you want a checklist, and reserve the Task tool solely
+            for delegating reconnaissance to the legwork subagent. If you must
+            look up tool schemas, batch the lookups into one step.
 
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.

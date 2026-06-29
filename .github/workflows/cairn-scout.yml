@@ -65,20 +65,80 @@ jobs:
             echo 'ORIENT_EOF'
           } >> "$GITHUB_OUTPUT"
 
+      # No-LLM: on freshness days, compare each source's live upstream release
+      # token against its manifest pin and emit a ready-made table, so the agent
+      # opens data-refresh issues for the sources marked STALE instead of
+      # discovering tokens by hand. Run logs showed that discovery dominated a
+      # scout run — euets.info has no upstream index, so the agent brute-forced
+      # dozens of S3 filenames before concluding there was nothing to find (run
+      # 28368467174: ~20 of 33 turns). check_freshness.py reads the live-vs-pin
+      # constants from the pipeline files (never drifts) and treats euets as
+      # human-watched. continue-on-error: a probe failure marks that source
+      # "verify" and the agent falls back — an optimisation, not a gate.
+      - name: Check upstream freshness
+        id: freshness
+        if: steps.scope.outputs.freshness == 'true'
+        continue-on-error: true
+        run: |
+          {
+            echo 'report<<FRESH_EOF'
+            python3 scripts/check_freshness.py
+            echo
+            echo 'FRESH_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # No-LLM saturation gate: backlog dispatch (task 2) is pointless when the
+      # human-triage queue is already full, but scout still pays a whole run to
+      # conclude "nothing to do". Count open `proposal` issues not yet `approved`;
+      # if that is at/above the threshold AND this is not a freshness day, skip
+      # the Claude step entirely (zero token cost that day). This self-regulates
+      # dispatch to the real backlog depth — cheaper and more adaptive than a
+      # fixed cadence. continue-on-error + a safe default (run on any failure).
+      - name: Backlog saturation gate
+        id: gate
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          THRESHOLD: ${{ vars.SCOUT_BACKLOG_SATURATION || '5' }}
+        with:
+          script: |
+            const threshold = parseInt(process.env.THRESHOLD, 10) || 5;
+            let untriaged = 0;
+            try {
+              const issues = await github.paginate(github.rest.issues.listForRepo, {
+                owner: context.repo.owner, repo: context.repo.repo,
+                state: 'open', labels: 'proposal', per_page: 100,
+              });
+              untriaged = issues.filter(
+                (i) => !i.pull_request &&
+                  !i.labels.some((l) => (typeof l === 'string' ? l : l.name) === 'approved'),
+              ).length;
+            } catch (err) {
+              core.warning(`Saturation gate could not count issues, will not skip: ${err}`);
+            }
+            const saturated = untriaged >= threshold;
+            core.info(`Open un-approved proposals: ${untriaged} (threshold ${threshold}) -> saturated=${saturated}`);
+            core.setOutput('saturated', saturated ? 'true' : 'false');
+
       - id: claude
+        # Run when there is real work: a freshness day (must probe), or a
+        # dispatch day whose backlog is not already saturated. Skipping here is
+        # the zero-cost path on a saturated, non-freshness day.
+        if: steps.scope.outputs.freshness == 'true' || steps.gate.outputs.saturated != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # --allowedTools REPLACES the action's default tool set, so list
           # everything the prompt needs â€” including TodoWrite (Claude Code's
           # default progress tracker); omitting any of it silently denies the
-          # call and burns turns to error_max_turns. Bash is unrestricted
-          # because scout probes release tokens with shell loops/functions
-          # that prefix matching can't recognise (run 28053500486); with
-          # contents:read and no file edits, it's read-only in effect.
+          # call and burns turns to error_max_turns. Freshness is now
+          # precomputed by the no-LLM step above, so scout should not probe
+          # sources itself; Bash/WebFetch/WebSearch stay only for the rare
+          # fallback when a probe row says it failed (with contents:read and no
+          # file edits, it's read-only in effect).
           # mcp__github__create_issue is the bundled github-mcp-server's
           # actual tool name (issue_write does not exist and silently denies).
-          # --add-dir /tmp lets Read/Grep follow scratch probe files.
+          # --add-dir /tmp lets Read/Grep follow scratch fallback files.
           # show_full_output surfaces denied tool calls in the job log.
           # --model Sonnet: a mechanical freshness/duplicate check needs no
           # Opus-level judgement.
@@ -109,22 +169,22 @@ jobs:
             The orientation map's layer inventory above is authoritative for what
             already exists — use it for task 2 instead of re-listing directories.
 
+            ${{ steps.freshness.outputs.report }}
+
             Two tasks:
 
-            1. UPSTREAM FRESHNESS. For each source, compare the live upstream release
-               token against the pin in its manifest, using the exact signals
-               documented in CLAUDE.md's "Recurring maintenance" runbooks:
-                 - CBS 85669NED: the OData `Properties` `Modified` date vs
-                   sources/cbs/manifest.yml.
-                 - euets.info: the current zip filename token vs sources/euets/manifest.yml.
-                 - EEA bulk: the datashare token vs sources/eea/manifest.yml.
-               Use curl, WebFetch, and read-only shell tools (grep/head/tail/file/
-               unzip) to find the live token — no env build, no file edits in the
-               repo. Scratch files (downloads, probes) may go in /tmp. If a source
-               has a NEWER release than the pin, open ONE issue titled
-               "data: <source> new release <token>",
-               labelled `proposal` and `data-refresh`, body referencing the relevant
-               CLAUDE.md checklist. If a similar open issue already exists, skip it.
+            1. UPSTREAM FRESHNESS (only if FRESHNESS_PROBE is true). The freshness
+               table above was already computed for you — it compared each source's
+               live upstream release against its manifest pin. Do NOT probe any
+               source yourself (no curl, no WebFetch, no guessing euets.info zip
+               filenames — euets has no upstream index and is human-watched). Just
+               act on the table: for each source marked **STALE**, open ONE issue
+               titled "data: <source> new release <token>", labelled `proposal` and
+               `data-refresh`, body referencing the relevant CLAUDE.md checklist —
+               unless a similar open issue already exists, in which case skip it. If
+               no source is marked STALE, open no data-refresh issue. (If the table
+               is missing or a row says the probe failed, fall back to the
+               CLAUDE.md "Recurring maintenance" signal for that one source only.)
 
             2. BACKLOG DISPATCH. Take the single highest item in BACKLOG.md "Live
                candidates" and dispatch it as one SMALL, single-layer issue that a
@@ -168,10 +228,13 @@ jobs:
             already tracked, do nothing and say so.
 
       # Cost visibility (best-effort; never fails the run). Parse the action's
-      # execution_file into a markdown summary + the total cost in USD.
+      # execution_file into a markdown summary + the total cost in USD. Skipped
+      # when the saturation gate skipped the Claude step — there is no cost to
+      # report, and running it would risk a spurious comment on an unrelated
+      # proposal issue created during the run window.
       - name: Summarise run cost
         id: cost
-        if: always()
+        if: always() && steps.claude.outcome != 'skipped'
         run: |
           python3 scripts/ai_cost_summary.py \
             --execution-file "${{ steps.claude.outputs.execution_file }}" \
@@ -183,7 +246,7 @@ jobs:
       # then post the cost comment and set the Projects v2 Number field on each.
       # A multi-issue run sets the full run cost on each (accepted double-count).
       - name: Attribute run cost
-        if: always()
+        if: always() && steps.claude.outcome != 'skipped'
         uses: actions/github-script@v7
         env:
           RUN_START: ${{ steps.run_start.outputs.ts }}
