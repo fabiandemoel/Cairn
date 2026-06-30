@@ -100,6 +100,59 @@ Checklist:
    don't suppress the test.
 5. `dbt build`, `pytest`, linters green. Note the release in the README.
 
+### When Eurostat publishes a new release of `env_ac_ainah_r2` (AEA)
+Eurostat publishes Air Emissions Accounts roughly annually (the last-update date
+is available via the SDMX metadata API). The pipeline detects the release
+automatically from that date.
+
+Checklist:
+1. Run `uv run python -m ingestion.eurostat_aea_pipeline` (with R2 creds, or
+   `--offline` to dry-run locally). The pipeline fetches `METADATA_URL` in
+   `ingestion/eurostat_aea_pipeline.py` for the current last-update date and exits
+   "no new release" if it matches the latest manifest snapshot.
+   `cairn-ingest.yml` (source `eurostat_aea`) can run this in CI and open the
+   manifest-pin PR.
+2. Confirm a **new** append-only snapshot landed in `sources/eurostat/manifest.yml`
+   (new `release`, new `sha256`). The old snapshot stays.
+3. Update the `eurostat_aea_raw_dir` default in `transform/dbt_project.yml` and
+   the matching fixture path in `scripts/verify_reproducibility.py` to the new
+   release date. Refresh the CI fixture under
+   `tests/fixtures/eurostat/env_ac_ainah_r2/<release>/` if columns or available
+   countries changed (keep a small, representative slice — NL, DE, FR at minimum).
+4. **Re-check the AEA schema assumptions.** If Eurostat changed column names,
+   available NACE codes, or the country dimension, `stg_eurostat__aea` and
+   `benchmark_country_sector_emissions` may drift. The `assert_eurostat_aea_nl_within_cbs`
+   tolerance test (<5% for the NL total) will surface unit errors or gross
+   pipeline mistakes; fix the model rather than suppressing the test.
+5. `dbt build`, `pytest`, linters green. Note the release in the README
+   (`Source quirks` section if a new quirk appears).
+
+### When Eurostat publishes a new release of `env_air_gge` (GGE)
+Eurostat publishes GHG emission national totals (from UNFCCC submissions)
+annually; the last-update date is available via the same SDMX metadata API.
+
+Checklist:
+1. Run `uv run python -m ingestion.eurostat_gge_pipeline` (with R2 creds, or
+   `--offline` to dry-run). The pipeline reads `METADATA_URL` in
+   `ingestion/eurostat_gge_pipeline.py` for the current last-update date and exits
+   "no new release" if it matches the latest manifest snapshot.
+   `cairn-ingest.yml` (source `eurostat_gge`) can run this in CI.
+2. Confirm a **new** append-only snapshot landed in `sources/eurostat_gge/manifest.yml`
+   (new `release`, new `sha256`).
+3. Update `eurostat_gge_raw_dir` in `transform/dbt_project.yml` and the matching
+   path in `scripts/verify_reproducibility.py`. Refresh the CI fixture under
+   `tests/fixtures/eurostat/env_air_gge/<release>/` if the schema or coverage
+   changed (keep NL, DE, FR × TOTXMEMO+CRF1 at minimum so the staging tests
+   and cross-check test still exercise the right rows).
+4. **Verify the cross-check test.** `assert_gge_nl_total_within_cbs` must still
+   pass at its 10% tolerance (set wide to accommodate UNFCCC submission lag vs.
+   CBS revision cycles — the observed gap for recently-revised years can reach ~7%).
+   If a newly released year shows >10%, investigate before widening — it likely
+   indicates a genuine revision rather than a timing artefact.
+5. `dbt build`, `pytest`, linters green. Note the release in the README
+   (UNFCCC submissions trail by 1–2 years; update the "latest available year" note
+   in the `env_air_gge` Source quirks).
+
 ### Classification updates (medium-term, real)
 The mapping rests on SBI 2008 ⊃ NACE Rev.2. Both are migrating:
 - **NACE Rev.2.1** — EU statistics move to it from 2025.

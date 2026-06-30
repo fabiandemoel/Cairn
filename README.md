@@ -11,17 +11,16 @@ auditability.
 
 **Live site:** <https://cairn.fabiandemoel.net/>
 
-> **Status**: Phase 4 — the CSRD export. Phase 1 delivered one CBS dataset
-> end-to-end (sector averages, the *denominator*). Phase 2 added the **EU ETS at
-> installation level** (the *numerator*): per Dutch installation, its verified
-> emissions benchmarked against its NACE-sector peers. Phase 3 added the
-> **Evidence site** (`site/`) — a read-only, queryable view over the dbt marts.
-> Phase 4 adds the **CSRD/ESRS E1 export** (`mart_esrs_e1`) — verified EU ETS
-> emissions provided as the verified basis for the ESRS E1-6 *gross Scope 1 GHG
-> emissions* datapoint, with the sector benchmark as context. All run on the
-> same architecture
-> (ingestion, manifest-based versioning, dbt, tests, CI). Still no agent
-> automation.
+> **Status**: Phases 1–4 complete; automated maintenance running. Phase 1
+> delivered CBS `85669NED` end-to-end (sector averages, the *denominator*). Phase 2
+> added **EU ETS at installation level** (the *numerator*): per Dutch installation,
+> its verified emissions benchmarked against its NACE-sector peers. Phase 3 added
+> the **Evidence site** (`site/`). Phase 4 added the **CSRD/ESRS E1 export**
+> (`mart_esrs_e1`). Additional sources since added: **Eurostat AEA**
+> (`env_ac_ainah_r2`, cross-country NACE sector benchmarks) and **Eurostat GGE**
+> (`env_air_gge`, national GHG totals cross-check). Three scheduled agent
+> workflows handle scout (daily freshness check), implement (issue → PR on
+> approval), and replenish (weekly backlog curation) — see [`CLAUDE.md`](CLAUDE.md).
 
 > **Maintainers & agents**: see [`CLAUDE.md`](CLAUDE.md) for the upkeep routine
 > (handling new CBS releases, refreshing fixtures, the classification migration
@@ -45,7 +44,7 @@ auditability.
 Cairn builds reproducible climate datasets from official public sources with
 complete lineage. CSRD/ESRS reporting is one application of that auditability —
 the same data answers, per sector: "how do your emissions compare to the
-sector average?" It now ingests two sources end-to-end.
+sector average?" It ingests four sources end-to-end.
 
 **Source 1 — CBS (sector averages, the denominator).**
 
@@ -73,6 +72,32 @@ sector average?" It now ingests two sources end-to-end.
   the pinned snapshot) and the verified-vs-allocated ratio — who emits above or
   below their free grant. A coverage test reconciles the ETS total against the
   EEA aggregate (both derive from the EUTL; they match to ~0.02%).
+
+**Source 3 — Eurostat AEA (`env_ac_ainah_r2`, cross-country sector benchmark).**
+
+- Eurostat dataset
+  [`env_ac_ainah_r2`](https://ec.europa.eu/eurostat/databrowser/view/env_ac_ainah_r2)
+  — *Air emissions accounts by NACE Rev. 2 activity*: GHG and air-pollutant
+  emissions per country, NACE section and year, covering all EU member states
+  plus Norway, Iceland and the UK.
+- **Principle:** residence (emissions by resident producers, regardless of where
+  they occur). Diverges from the territorial CBS/ETS total for sectors with
+  significant cross-border activity (transport, multinationals).
+- **Transformation**: `benchmark_country_sector_emissions` — national GHG per
+  NACE section and year for each country, enabling cross-country sector
+  comparison.
+
+**Source 4 — Eurostat GGE (`env_air_gge`, national GHG cross-check).**
+
+- Eurostat dataset
+  [`env_air_gge`](https://ec.europa.eu/eurostat/databrowser/view/env_air_gge)
+  — *Greenhouse gas emissions by source sector*: national GHG totals from UNFCCC
+  national inventory submissions, by country, CRF sector and year.
+- **Principle:** territorial (same as CBS 85669NED), enabling a direct
+  cross-check of the NL national total (`assert_gge_nl_total_within_cbs`,
+  ±10% tolerance to accommodate UNFCCC submission-vs-CBS revision cycles).
+- **Transformation**: `mart_gge_national_totals` — national GHG per country and
+  year (`TOTXMEMO`, GHG, MIO_T), used on the country GHG page.
 
 **Common spine** ([`ingestion/`](ingestion/), [`transform/`](transform/)): every
 source writes immutable per-release parquet and pins each snapshot in its own
@@ -157,6 +182,25 @@ uv run dbt build --project-dir transform --profiles-dir transform \
   --vars "{euets_raw_dir: .localstack/euets/eutl/<release>, eea_raw_dir: .localstack/eea/eu-ets/<release>}"
 ```
 
+**The Eurostat sources** work the same way:
+
+```bash
+uv run python -m ingestion.eurostat_aea_pipeline --offline  # AEA (cross-country sector benchmark)
+uv run python -m ingestion.eurostat_gge_pipeline --offline  # GGE (national GHG cross-check)
+```
+
+Each fetches the dataset's last-update date from the Eurostat SDMX API and
+exits cleanly if that release is already pinned. Build against a freshly
+ingested local AEA or GGE snapshot by passing the matching `--vars`:
+
+```bash
+uv run dbt build --project-dir transform --profiles-dir transform \
+  --vars "{eurostat_aea_raw_dir: .localstack/eurostat/env_ac_ainah_r2/<release>}"
+
+uv run dbt build --project-dir transform --profiles-dir transform \
+  --vars "{eurostat_gge_raw_dir: .localstack/eurostat/env_air_gge/<release>}"
+```
+
 **Run the tests and linters** (what CI runs):
 
 ```bash
@@ -208,15 +252,17 @@ The site is served at the **root** of the custom subdomain
 each Actions deploy reapplies the custom domain. DNS: a `CNAME` record for
 `cairn` → `fabiandemoel.github.io`.
 
-All three sources are pinned to R2 (CBS `85669NED`, euets.info, and the EEA
-bulk), so every push to `main` republishes the site from the pinned data. When a
-source publishes a new release, re-run its pipeline to establish the new pin and
-commit the manifest change in a PR — see the per-source checklists in
-[`CLAUDE.md`](CLAUDE.md):
+All four sources are pinned to R2 (CBS `85669NED`, euets.info, the EEA bulk,
+Eurostat AEA, and Eurostat GGE), so every push to `main` republishes the site
+from the pinned data. When a source publishes a new release, re-run its pipeline
+to establish the new pin and commit the manifest change in a PR — see the
+per-source checklists in [`CLAUDE.md`](CLAUDE.md):
 
 ```bash
-uv run python -m ingestion.euets_pipeline      # -> R2 + sources/euets/manifest.yml
-uv run python -m ingestion.eea_ets_pipeline    # -> R2 + sources/eea/manifest.yml
+uv run python -m ingestion.euets_pipeline             # -> R2 + sources/euets/manifest.yml
+uv run python -m ingestion.eea_ets_pipeline           # -> R2 + sources/eea/manifest.yml
+uv run python -m ingestion.eurostat_aea_pipeline      # -> R2 + sources/eurostat/manifest.yml
+uv run python -m ingestion.eurostat_gge_pipeline      # -> R2 + sources/eurostat_gge/manifest.yml
 ```
 
 Each pipeline is idempotent — it exits "no new release" if the current release
@@ -531,10 +577,12 @@ export R2_ACCESS_KEY_ID="..."
 export R2_SECRET_ACCESS_KEY="..."
 export R2_BUCKET="cairn-raw"
 
-uv run python -m ingestion.cbs_pipeline           # CBS -> R2 + append manifest snapshot
-uv run python -m ingestion.euets_pipeline         # EU ETS installations (euets.info)
-uv run python -m ingestion.eea_ets_pipeline       # EU ETS official aggregate (EEA)
-uv run python scripts/verify_reproducibility.py   # re-download, check SHA256, rebuild (all sources)
+uv run python -m ingestion.cbs_pipeline              # CBS -> R2 + append manifest snapshot
+uv run python -m ingestion.euets_pipeline            # EU ETS installations (euets.info)
+uv run python -m ingestion.eea_ets_pipeline          # EU ETS official aggregate (EEA)
+uv run python -m ingestion.eurostat_aea_pipeline     # Eurostat AEA (cross-country sector benchmark)
+uv run python -m ingestion.eurostat_gge_pipeline     # Eurostat GGE (national GHG cross-check)
+uv run python scripts/verify_reproducibility.py      # re-download, check SHA256, rebuild (all sources)
 ```
 
 Each pipeline uploads its immutable raw files to `<source>/<dataset>/<release>/`
