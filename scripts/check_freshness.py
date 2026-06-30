@@ -56,12 +56,25 @@ def _http_get(url: str, *, timeout: int = 25) -> tuple[str, str | None]:
 
 
 def _read_const(root: Path, rel: str, name: str) -> str | None:
-    """Read a simple ``NAME = "value"`` string constant out of a source file."""
+    """Read a ``NAME = "value"`` string constant out of a source file.
+
+    Handles both a single-line literal and a parenthesised multi-line
+    concatenation (``NAME = (\\n "a"\\n "b"\\n)``) -- the latter is how the
+    longer EEX/Eurostat URLs are written.
+    """
     path = root / rel
     if not path.is_file():
         return None
-    m = re.search(rf'^{name}\s*=\s*[\'"]([^\'"]+)[\'"]', path.read_text(encoding="utf-8"), re.M)
-    return m.group(1) if m else None
+    text = path.read_text(encoding="utf-8")
+    m = re.search(rf'^{name}\s*=\s*[\'"]([^\'"]+)[\'"]', text, re.M)
+    if m:
+        return m.group(1)
+    block = re.search(rf"^{name}\s*=\s*\((.*?)\)", text, re.M | re.S)
+    if block:
+        parts = re.findall(r'[\'"]([^\'"]*)[\'"]', block.group(1))
+        if parts:
+            return "".join(parts)
+    return None
 
 
 # ---- pure parsers (mirrored from the ingestion pipelines) -------------------
@@ -97,6 +110,17 @@ def token_from_eea_filename(filename: str) -> str | None:
     """
     stem = filename[:-4] if filename.lower().endswith(".zip") else filename
     match = re.search(r"_p_(.+)$", stem)
+    return match.group(1) if match else None
+
+
+def token_from_eua_url(url: str) -> str | None:
+    """``...-auction-report-2012-2025-data.zip`` -> ``2012-2025``.
+
+    Mirrors ``ingestion.eua_pipeline._release_from_url``.
+    """
+    name = url.rstrip("/").rsplit("/", 1)[-1]
+    stem = name[:-4] if name.lower().endswith(".zip") else name
+    match = re.search(r"(\d{4}-\d{4})", stem)
     return match.group(1) if match else None
 
 
@@ -160,6 +184,18 @@ def _live_eurostat(root: Path, fetch: Fetcher) -> str:
     return token
 
 
+def _live_eurostat_gge(root: Path, fetch: Fetcher) -> str:
+    dataset = _read_const(root, "ingestion/eurostat_gge_pipeline.py", "DATASET")
+    if not dataset:
+        raise ValueError("could not read Eurostat GGE DATASET constant")
+    body, _ = fetch(f"{EUROSTAT_DATAFLOW}/{dataset}?format=json")
+    raw = _eurostat_update_date(json.loads(body))
+    token = normalize_eurostat_date(raw) if raw else None
+    if not token:
+        raise ValueError("no UPDATE_DATA annotation in Eurostat GGE dataflow response")
+    return token
+
+
 def _live_eea(root: Path, fetch: Fetcher) -> str:
     url = _read_const(root, "ingestion/eea_ets_pipeline.py", "DEFAULT_URL")
     if not url:
@@ -180,8 +216,13 @@ def build_report(root: Path, *, fetch: Fetcher = _http_get) -> str:
         path = root / "sources" / name / "manifest.yml"
         return parse_pin(path.read_text(encoding="utf-8")) if path.is_file() else None
 
-    # CBS / Eurostat / EEA: probe the live token and compare to the pin.
-    for name, prober in (("cbs", _live_cbs), ("eurostat", _live_eurostat), ("eea", _live_eea)):
+    # CBS / Eurostat (AEA + GGE) / EEA: probe the live token and compare to the pin.
+    for name, prober in (
+        ("cbs", _live_cbs),
+        ("eurostat", _live_eurostat),
+        ("eurostat_gge", _live_eurostat_gge),
+        ("eea", _live_eea),
+    ):
         pin = manifest_pin(name)
         try:
             live = prober(root, fetch)
@@ -206,6 +247,21 @@ def build_report(root: Path, *, fetch: Fetcher = _http_get) -> str:
             euets_pin or "unpinned",
             euets_live or "?",
             "human-watched (no upstream index) — never probe S3",
+        )
+    )
+
+    # eua (EEX auction reports): no upstream release index either; the live token
+    # is encoded in DEFAULT_URL's filename, bumped by a human when EEX publishes a
+    # new archive. Live equals the pin by construction — never probe EEX.
+    eua_url = _read_const(root, "ingestion/eua_pipeline.py", "DEFAULT_URL")
+    eua_live = token_from_eua_url(eua_url) if eua_url else None
+    eua_pin = manifest_pin("eua")
+    rows.append(
+        (
+            "eua",
+            eua_pin or "unpinned",
+            eua_live or "?",
+            "human-watched (no upstream index) — never probe EEX",
         )
     )
 
