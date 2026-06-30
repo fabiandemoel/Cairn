@@ -228,8 +228,13 @@ npm run dev        # live preview at http://localhost:3000
 job runs `npm run build:strict`, which fails on any query error. Pages: an
 overview, the **CBS sector benchmark**, the interactive **EU ETS installation
 benchmark**, a **methodology & sources** page documenting the provenance of
-every figure, and a **data quality** page reporting the live pin status of each
-source (from `mart_data_provenance`, a read-only view over the manifests). See
+every figure, a **data quality** page reporting the live pin status of each
+source (from `mart_data_provenance`, a read-only view over the manifests), and a
+**data dictionary & glossary** page listing every model and column with the
+tests that guard it (from `mart_data_dictionary`, generated from the dbt schema
+files) alongside definitions of the cross-cutting concepts (from
+`mart_business_glossary`, a read-only view over the reviewed
+[`transform/glossary.yml`](transform/glossary.yml)). See
 [`site/README.md`](site/README.md) for details.
 
 ### Live deployment (GitHub Pages)
