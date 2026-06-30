@@ -1,3 +1,11 @@
 source: eua
 dataset: auction-results
-snapshots: []
+snapshots:
+- release: 2012-2025
+  ingested_at: '2026-06-30T18:43:45.716842Z'
+  storage_url: r2://cairn-raw/eua/auction-results/2012-2025/data.parquet
+  sha256: 3d6e6498811bfb1250ba5abfce339cc67e17f9557a6b1a3e04fdf412ee94fa3f
+  row_count: 1327
+  periods_covered:
+  - '2020'
+  - '2025'
