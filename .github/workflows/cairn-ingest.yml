@@ -21,12 +21,13 @@ on:
         description: "Source to ingest"
         required: true
         type: choice
-        options: [cbs, euets, eea, eurostat, eurostat_gge]
+        options: [cbs, euets, eea, eurostat, eurostat_gge, eua]
       url:
         description: >-
-          Override URL (euets/eea only -- point at the new release zip, e.g.
-          the euets.info or EEA datashare link from the CLAUDE.md checklist).
-          Leave blank for cbs/eurostat, which auto-detect their latest release.
+          Override URL (euets/eea/eua only -- point at the new release zip, e.g.
+          the euets.info, EEA datashare, or EEX auction-report link from the
+          CLAUDE.md checklist). Leave blank for cbs/eurostat, which auto-detect
+          their latest release.
         required: false
         type: string
 
@@ -70,13 +71,14 @@ jobs:
             eea)      module=ingestion.eea_ets_pipeline ;;
             eurostat)     module=ingestion.eurostat_aea_pipeline ;;
             eurostat_gge) module=ingestion.eurostat_gge_pipeline ;;
+            eua)      module=ingestion.eua_pipeline ;;
             *) echo "Unknown source: $SOURCE" >&2; exit 1 ;;
           esac
 
           args=()
           if [ -n "$URL" ]; then
             case "$SOURCE" in
-              euets|eea) args+=(--url "$URL") ;;
+              euets|eea|eua) args+=(--url "$URL") ;;
               *) echo "::warning::--url is ignored for $SOURCE (it auto-detects its release)" ;;
             esac
           fi
