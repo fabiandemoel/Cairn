@@ -153,6 +153,35 @@ Checklist:
    (UNFCCC submissions trail by 1–2 years; update the "latest available year" note
    in the `env_air_gge` Source quirks).
 
+### When EEX publishes a new EU ETS auction report (`eua`)
+EEX (the appointed Phase 4 auctioneer) republishes the historical
+*Emission Spot Primary Market Auction Report* archive on its own cadence. There
+is no `Modified` endpoint or upstream index — the release is the year-range
+token in the archive filename (e.g. `...-2012-2025-data.zip` → `2012-2025`), so
+`eua` is **human-watched** like euets: bump `DEFAULT_URL` when EEX publishes a
+newer archive. The freshness check derives the live token from that URL by
+construction; it must never probe EEX.
+
+Checklist:
+1. Find the new archive URL on EEX and ingest with it:
+   `uv run python -m ingestion.eua_pipeline --url <new zip>` (with R2 creds, or
+   `--offline` to dry-run locally). Point `DEFAULT_URL` in
+   `ingestion/eua_pipeline.py` at the newer zip. It is idempotent — it exits
+   "no new release" if the filename token is already pinned. `cairn-ingest.yml`
+   (source `eua`, with the new URL as the `url` input) can run the ingest in CI
+   and open the manifest-pin PR for you.
+2. Confirm a **new** append-only snapshot landed in `sources/eua/manifest.yml`
+   (new `release`, new `sha256`). The old snapshot stays.
+3. **Scope note (invariant 5).** `eua` is currently **ingestion-only**: the
+   auction *clearing price* has no dbt staging model, no `*_raw_dir` var, and no
+   CI fixture yet, so there is no fixture/`dbt_project.yml`/mart step to refresh
+   and `eua` is intentionally absent from `verify_reproducibility.py`. The price
+   is context for a future site overlay only — it must **never** appear in a dbt
+   mart figure or the ESRS E1 export. If it ever grows a transform layer, add it
+   to `verify_reproducibility.py` and follow the same fixture/`*_raw_dir` steps
+   as the other sources.
+4. `pytest`, linters green. Note the release in the README (Source quirks).
+
 ### Classification updates (medium-term, real)
 The mapping rests on SBI 2008 ⊃ NACE Rev.2. Both are migrating:
 - **NACE Rev.2.1** — EU statistics move to it from 2025.
