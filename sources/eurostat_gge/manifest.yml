@@ -1,3 +1,11 @@
 source: eurostat_gge
 dataset: env_air_gge
-snapshots: []
+snapshots:
+- release: '2026-06-02'
+  ingested_at: '2026-06-30T13:53:11.892881Z'
+  storage_url: r2://cairn-raw/eurostat_gge/env_air_gge/2026-06-02/data.parquet
+  sha256: d773ef51d836f56765fadfb9fb933b385ba6277b6550138c25b1573bad200bf6
+  row_count: 1852442
+  periods_covered:
+  - '1990'
+  - '2024'
