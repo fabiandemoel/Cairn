@@ -233,8 +233,8 @@ jobs:
             --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Task,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
           prompt: |
             CLAUDE.md and BACKLOG.md are authoritative and override this prompt, but
-            they are long, so read them narrowly: every turn re-sends the whole
-            conversation, so a big upfront read inflates every later turn. Read
+            they are long, so read them narrowly -- a big upfront read inflates
+            every later turn. Read
             CLAUDE.md's "Non-negotiable invariants" in full, then grep both files for
             the issue at hand and read only the matching section (a `data-refresh`
             issue's "Recurring maintenance" checklist, or a `feat` issue's BACKLOG.md
@@ -259,10 +259,10 @@ jobs:
                 live-source discovery.
             Code reaches the remote through exactly ONE path - `runner`'s git - and
             there is no second path, no matter how small the change: a one-line edit
-            ships the same way a new source does. A subagent's many turns are discarded
-            and never ride in your later context, which is the whole point - keeping
-            execution out of your context is the dominant cost lever. Neither subagent
-            decides methodology or authors edits; those stay with you. Keep your own
+            ships the same way a new source does. A subagent's many turns stay in
+            its own context, never yours - which is the point of the split. Neither
+            subagent decides methodology or authors edits; those stay with you. Keep
+            your own
             turns low: use only the Task tool (for runner/legwork) and TodoWrite, not
             the background-task / agent-messaging tools (TaskCreate / TaskUpdate /
             SendMessage), which add round trips without value; batch any tool-schema
