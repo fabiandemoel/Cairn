@@ -198,29 +198,39 @@ jobs:
           # --allowedTools is required: claude-code-action ships no default
           # allowlist, so with none set every tool call is denied and the run
           # still reports success â€” a quiet false-green where the agent just
-          # explains it's blocked (run 28079588272). Bash is unrestricted
-          # because this job's real work (uv/dbt/npm/git/ruff/sqlfluff/pytest)
-          # runs through shell control flow that prefix matching can't see.
+          # explains it's blocked (run 28079588272).
+          #
+          # ORCHESTRATOR/EXECUTOR SPLIT. Bash, WebFetch and WebSearch are
+          # deliberately ABSENT here: this Claude is the *orchestrator*. It reads
+          # the spec, authors file edits (Read/Write/Edit), and decides â€” but it
+          # cannot run a shell command or fetch a URL itself. All command
+          # execution (uv/dbt/npm/ruff/sqlfluff/pytest + git stage/commit/push)
+          # is delegated via Task to the `runner` subagent, and all bulk
+          # search / live-source discovery to the `legwork` subagent â€” each runs
+          # in its OWN conversation (.claude/agents/{runner,legwork}.md, both
+          # pinned to Haiku). The point is context isolation: a 30-turn
+          # build/test/debug loop inside a subagent collapses to one summary in
+          # the orchestrator's context instead of riding in every later turn.
+          # Run 28447652743 spent $5.67 / 82 turns with 6.86M cache-read tokens,
+          # almost entirely an inline debug loop re-sent each turn; this split
+          # moves that loop out of the expensive orchestrator context. Removing
+          # Bash is what *enforces* the split â€” a prompt asking nicely does not
+          # (the agent kept debugging inline despite being told to delegate).
           # mcp__github__get_issue / mcp__github__create_pull_request are the
           # bundled github-mcp-server's actual tool names (run 28085542460);
           # guessing wrong (issue_read, issue_write) silently denies them.
           #
           # --max-turns 100: a full new-source slice (ingestion + mart + test
           # + site) needs room; 20 then 60 both hit error_max_turns mid-work
-          # (runs 28085542460, 28173119243). --model: Sonnet is ~5x cheaper
-          # than Opus ($5.16 -> ~$1 on run 28173119243); the model step above
-          # drops to Haiku for data-refresh issues, which follow a fixed
-          # checklist and need no Sonnet-level judgement. Task is allowed so
-          # the orchestrator (whichever model it runs as) can hand bulk
-          # reconnaissance to the `legwork` subagent
-          # (.claude/agents/legwork.md, pinned to Haiku regardless of
-          # --model), instead of burning the orchestrator's own context/cost
-          # on it.
+          # (runs 28085542460, 28173119243). --model sets the ORCHESTRATOR model:
+          # the model step above runs it as Sonnet for feat issues (design
+          # judgement) and drops to Haiku for data-refresh (a fixed checklist).
+          # The runner and legwork subagents are pinned to Haiku regardless.
           show_full_output: true
           claude_args: >-
             --max-turns 100
             --model ${{ steps.model.outputs.model }}
-            --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,WebSearch,Task,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
+            --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Task,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
           prompt: |
             CLAUDE.md and BACKLOG.md are authoritative and override anything in this
             prompt, but they are long â€” read them narrowly, not cover to cover, since
@@ -233,36 +243,41 @@ jobs:
             entry. Consult "Gotchas" or other sections only if you hit something they
             plausibly cover.
 
-            Delegate bulk reconnaissance to the `legwork` subagent (Task tool,
-            subagent_type: legwork) instead of doing it inline yourself: digesting
-            long `dbt build`/`pytest`/`npm run build:strict` output, summarizing a
-            large raw file or manifest, or multi-file/multi-term codebase search.
-            It runs on a cheaper model and only reports findings back — it does not
-            decide mappings, model design, or methodology, and it never edits files.
-            Keep those decisions, and all file edits, in your own turns.
-
-            This also applies when a command fails for a reason you don't
-            understand yet: hand the "figure out why this is failing" step to
-            `legwork` too, even if any single failed command's output is short.
-            Every extra turn you spend trial-and-error-ing in your own context
-            re-sends the entire conversation so far (this is the dominant cost
-            driver, not any single large tool output) — diagnosing a failure
-            across several of your own turns is expensive precisely because it's
-            several turns, regardless of output size. Give `legwork` the failing
-            command, the error, and a pointed question ("why does build:strict
-            404 on this path — check what generates that file and whether a
-            prior step was skipped"); let it iterate and come back with a
-            diagnosis, then make the fix yourself in one turn.
+            EXECUTION MODEL — read this first. You are the ORCHESTRATOR. You have
+            NO shell access and cannot fetch URLs: you read files, author edits
+            (Write/Edit), and make every decision yourself, but every *action* runs
+            in a separate subagent conversation via the Task tool:
+              - `runner` (subagent_type: runner) executes ALL shell commands — the
+                build/verify sequence (ruff, sqlfluff, pytest, `dbt build`, the ESRS
+                export, `npm run build:strict`) and every git operation (stage the
+                files you wrote, commit with your message, push the branch). On a
+                failing command it iterates IN ITS OWN context to find the root
+                cause and reports back facts + a hypothesis; you then make the fix
+                as a file edit and ask it to re-run. Hand it batched work ("run the
+                full verify sequence and report what fails"), not one command at a
+                time.
+              - `legwork` (subagent_type: legwork) does bulk search/reading and all
+                live-source discovery.
+            Why: each subagent runs in its own conversation, so its many turns of
+            command output and debugging are discarded and never ride in your later
+            turns. That re-sent context is the dominant cost (the last run spent
+            most of $5.67 / 82 turns on exactly this inline loop), so keeping
+            execution out of your context is the whole point. There is no Bash tool
+            to fall back on — do NOT try to work around its absence; route every
+            command through `runner`. Neither subagent decides mappings, model
+            design, or methodology, and neither authors file edits (apart from
+            `runner` running git on files you already wrote); those stay with you.
 
             Baseline: CI on `main` (commit ${{ steps.main_ci.outputs.sha }})
             was last ${{ steps.main_ci.outputs.conclusion }}
             (${{ steps.main_ci.outputs.url }}). Trust this by default: if a
             check fails after your change and it isn't obviously related to
             what you touched, treat it as pre-existing and note it in the PR
-            rather than re-verifying against `main` yourself. Only check
-            directly (one `git stash` / `git worktree`, not a repeated
-            stash/pop while you try fixes) if this baseline is `unknown`/stale
-            or the failing check is in the exact area you changed.
+            rather than re-verifying against `main` yourself. Only verify
+            against `main` (ask `runner` for one `git stash` / `git worktree`
+            check, not a repeated stash/pop while you try fixes) if this baseline
+            is `unknown`/stale or the failing check is in the exact area you
+            changed.
 
             ${{ steps.orient.outputs.map }}
 
@@ -302,9 +317,9 @@ jobs:
             Keep your own turn count low. Do NOT use the background-task or
             agent-messaging tools (TaskCreate / TaskUpdate / SendMessage) for
             this single-layer issue — they add round trips without value. Use
-            TodoWrite if you want a checklist, and reserve the Task tool solely
-            for delegating reconnaissance to the legwork subagent. If you must
-            look up tool schemas, batch the lookups into one step.
+            TodoWrite if you want a checklist, and use the Task tool only for the
+            `runner` and `legwork` subagents described above. If you must look up
+            tool schemas, batch the lookups into one step.
 
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.
@@ -323,28 +338,32 @@ jobs:
             â€” the issue number makes a previous run's branch unambiguous to find.
 
             Before starting, check whether a previous run already made progress on
-            this issue: list open PRs (`mcp__github__list_pull_requests`) and remote
-            branches (`git branch -r`) for one matching `agent/<issue-number>-*`. If
-            one exists, check it out and continue from its last commit instead of
-            starting over â€” read its existing commits first so you don't redo or
-            contradict finished work. Otherwise, start fresh on a new branch named
-            `agent/<issue-number>-<short-slug>`.
+            this issue: list open PRs yourself (`mcp__github__list_pull_requests`)
+            and ask `runner` for remote branches (`git branch -r`) matching
+            `agent/<issue-number>-*`. If one exists, have `runner` check it out and
+            report its recent commits, then continue from there instead of starting
+            over â€” so you don't redo or contradict finished work. Otherwise, have
+            `runner` create a fresh branch named `agent/<issue-number>-<short-slug>`.
 
             Commit after each logical milestone as you finish it rather than saving
-            everything for one commit at the end â€” a run that hits the turn limit
-            mid-task should still leave committed, pushed progress on its branch so
-            the next run can resume it instead of losing it when the job's runner is
-            torn down. Use conventional commits, one logical change per commit.
+            everything for one commit at the end: once you have written the files for
+            a milestone, ask `runner` to stage them, commit with a conventional-commit
+            message (one logical change per commit), and push. A run that hits the
+            turn limit mid-task should still leave committed, pushed progress on its
+            branch so the next run can resume it instead of losing it when the job's
+            runner is torn down.
 
-            Before opening the PR, run and pass locally what CI runs, in the
+            Before opening the PR, have `runner` run and pass what CI runs, in the
             exact order given by the orientation map's "Build & verify sequence"
-            above (it mirrors ci.yml). Mind the export step in that sequence: it
-            writes the ESRS E1 bundle into site/static/downloads/esrs_e1/, which
+            above (it mirrors ci.yml) — give it that as one batched task and act on
+            the pass/fail summary it returns. Mind the export step in that sequence:
+            it writes the ESRS E1 bundle into site/static/downloads/esrs_e1/, which
             the disclosure page links to, so running build:strict before it (or
-            after changing the export without re-running it) makes the strict
-            build fail on a 404 and triggers a long, expensive trial-and-error
-            loop. The environment was pre-built for this run, so in practice you
-            only need to re-run the steps downstream of what you changed.
+            after changing the export without re-running it) makes the strict build
+            fail on a 404 and triggers a long, expensive trial-and-error loop. The
+            environment was pre-built for this run, so in practice `runner` only
+            needs to re-run the steps downstream of what you changed. Open the PR
+            only once `runner` reports the sequence green.
 
             Open ONE pull request against `main`. The description must open with a
             section headed "## Executive summary": 2-4 plain-language sentences for a
