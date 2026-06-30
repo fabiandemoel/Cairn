@@ -339,6 +339,56 @@ models:
         tests:
           - not_null
 
+  - name: mart_gge_national_totals
+    description: >
+      National greenhouse-gas totals (million tonnes CO2-equivalent) per country
+      and year, from the Eurostat env_air_gge dataset. Grain: country × year.
+      Territorial principle -- same as CBS 85669NED and EU ETS, so NL figures are
+      a direct cross-check of the CBS national total (asserted at < 1% via
+      assert_gge_nl_total_within_cbs). CRF sector breakdowns are kept in the staging
+      layer but are not surfaced here: CRF (Energy, Industrial processes, Agriculture,
+      Waste, LULUCF) is an IPCC/UNFCCC classification, not NACE, and cannot be mapped
+      without significant assumptions.
+    meta:
+      source_manifest: sources/eurostat_gge/manifest.yml
+      source_dataset: "env_air_gge"
+      methodology: >
+        env_air_gge national total (src_crf = 'TOTXMEMO', airpol = 'GHG',
+        unit = 'MIO_T'). TOTXMEMO excludes international aviation and shipping
+        (memo items), matching the national-total definition of CBS 85669NED and
+        the 2006 IPCC guidelines. NULL observation cells are excluded (never
+        replaced with placeholder zeros). No recomputation.
+      known_limitations: >
+        (1) env_air_gge lags the current year by 1-2 years (UNFCCC submission
+        timeline). (2) CRF sectors are not surfaced here and cannot be mapped to
+        NACE without significant assumptions. (3) NL figures may differ from CBS
+        85669NED by up to ~1% due to submission-timing and revision-cycle
+        differences (see assert_gge_nl_total_within_cbs).
+      references:
+        source_table: https://ec.europa.eu/eurostat/databrowser/view/env_air_gge
+        unfccc_inventories: https://unfccc.int/ghg-inventories-annex-i-parties/2025
+    columns:
+      - name: country_year_key
+        description: Surrogate natural key (country|year).
+        tests:
+          - unique
+          - not_null
+      - name: country
+        description: ISO 3166-1 alpha-2 country code (e.g. NL, DE, FR).
+        tests:
+          - not_null
+      - name: year
+        description: Reporting year.
+        tests:
+          - not_null
+      - name: national_ghg_mt_co2eq
+        description: >
+          National GHG total (million tonnes CO2-equivalent = megatonnes) excluding
+          international aviation and shipping (memo items). Comparable to CBS
+          85669NED's national total (same territorial principle, same exclusions).
+        tests:
+          - not_null
+
   - name: mart_data_provenance
     description: >
       Provenance-integrity view over the source manifests: one row per pinned

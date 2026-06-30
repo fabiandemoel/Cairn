@@ -152,6 +152,58 @@ models:
       - name: obs_flag
         description: Eurostat quality/observation flag. Nullable -- most cells are unflagged.
 
+  - name: stg_eurostat__gge
+    description: >
+      Typed 1:1 view of the raw Eurostat env_air_gge snapshot: national greenhouse-gas
+      totals and CRF-sector breakdowns for all EU27 member states plus Norway, Iceland,
+      and the UK, drawn from UNFCCC national inventory reports. All countries, CRF sectors,
+      pollutants, and years are kept; filtering to national totals (src_crf = 'TOTXMEMO',
+      airpol = 'GHG', unit = 'MIO_T') is applied downstream. Uses the territorial
+      principle -- the same accounting base as CBS 85669NED and the EU ETS, so NL
+      national totals are a direct cross-check of the CBS figure (see
+      assert_gge_nl_total_within_cbs).
+    columns:
+      - name: observation_key
+        description: Surrogate natural key (country|src_crf|airpol|unit|year).
+        tests:
+          - unique
+          - not_null
+      - name: country
+        description: ISO 3166-1 alpha-2 country code (e.g. NL, DE, FR).
+        tests:
+          - not_null
+      - name: src_crf
+        description: >
+          IPCC Common Reporting Format sector code. 'TOTXMEMO' = national total
+          excluding international aviation and shipping (memo items); CRF1-CRF5 are
+          the sector breakdowns. CRF is not NACE -- no sector-to-NACE mapping is
+          possible without significant assumptions.
+        tests:
+          - not_null
+      - name: airpol
+        description: >
+          Air pollutant code. 'GHG' = total greenhouse gases in CO2-equivalent.
+          env_air_gge reports only GHG-aggregate totals (unlike AEA, which also
+          covers individual pollutants).
+        tests:
+          - not_null
+      - name: unit
+        description: >
+          Unit of measurement. 'MIO_T' = million tonnes CO2-equivalent (= megatonnes),
+          the same unit as CBS 85669NED's emissions_mt_co2eq column. No unit
+          conversion is needed to compare NL national totals against CBS.
+        tests:
+          - not_null
+      - name: year
+        description: Reporting year, cast from the source TIME_PERIOD string.
+        tests:
+          - not_null
+      - name: value_mio_t_co2eq
+        description: >
+          Emission value in million tonnes CO2-equivalent (= megatonnes). Nullable --
+          some source cells carry no observation; NULL is left as NULL, never a
+          placeholder zero.
+
   - name: stg_eea__ets
     description: >
       Typed 1:1 view of the EEA EU ETS aggregate (country x main activity x year
