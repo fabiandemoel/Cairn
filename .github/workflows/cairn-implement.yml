@@ -232,151 +232,130 @@ jobs:
             --model ${{ steps.model.outputs.model }}
             --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Task,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
           prompt: |
-            CLAUDE.md and BACKLOG.md are authoritative and override anything in this
-            prompt, but they are long â€” read them narrowly, not cover to cover, since
-            every turn re-sends the whole conversation so far and a big upfront read
-            inflates every later turn's cost. Read CLAUDE.md's "Non-negotiable
-            invariants" section in full (short, always applies). Then grep CLAUDE.md
-            and BACKLOG.md for the specific issue/candidate at hand and read only the
-            matching section: for a `data-refresh` issue, just its "Recurring
-            maintenance" checklist; for a `feat` issue, just its BACKLOG.md candidate
-            entry. Consult "Gotchas" or other sections only if you hit something they
-            plausibly cover.
+            CLAUDE.md and BACKLOG.md are authoritative and override this prompt, but
+            they are long, so read them narrowly -- a big upfront read inflates
+            every later turn. Read
+            CLAUDE.md's "Non-negotiable invariants" in full, then grep both files for
+            the issue at hand and read only the matching section (a `data-refresh`
+            issue's "Recurring maintenance" checklist, or a `feat` issue's BACKLOG.md
+            candidate). Consult "Gotchas" only when you hit something it covers.
 
-            EXECUTION MODEL — read this first. You are the ORCHESTRATOR. You have
-            NO shell access and cannot fetch URLs: you read files, author edits
-            (Write/Edit), and make every decision yourself, but every *action* runs
-            in a separate subagent conversation via the Task tool:
-              - `runner` (subagent_type: runner) executes ALL shell commands — the
+            EXECUTION MODEL - read this first. You are the ORCHESTRATOR: you read
+            files, author edits (Write/Edit), and make every decision. But these are
+            hard limits, not preferences - you cannot act on the world yourself: you
+            have NO shell, NO git, NO URL fetch, and NO create_branch / push_files
+            tools. Your only github MCP tools are get_issue, create_pull_request, and
+            list_pull_requests. Every action runs in a separate subagent conversation
+            via the Task tool:
+              - `runner` (subagent_type: runner) runs ALL shell commands and git: the
                 build/verify sequence (ruff, sqlfluff, pytest, `dbt build`, the ESRS
-                export, `npm run build:strict`) and every git operation (stage the
-                files you wrote, commit with your message, push the branch). On a
-                failing command it iterates IN ITS OWN context to find the root
-                cause and reports back facts + a hypothesis; you then make the fix
-                as a file edit and ask it to re-run. Hand it batched work ("run the
-                full verify sequence and report what fails"), not one command at a
-                time.
+                export, `npm run build:strict`) and every git op (stage the files you
+                wrote, commit, push). On a failing command it iterates in its own
+                context to find the root cause and reports facts + a hypothesis; you
+                make the fix as an edit and ask it to re-run. Hand it batched work
+                ("run the full verify sequence and report what fails"), not one command
+                at a time.
               - `legwork` (subagent_type: legwork) does bulk search/reading and all
                 live-source discovery.
-            Why: each subagent runs in its own conversation, so its many turns of
-            command output and debugging are discarded and never ride in your later
-            turns. That re-sent context is the dominant cost (the last run spent
-            most of $5.67 / 82 turns on exactly this inline loop), so keeping
-            execution out of your context is the whole point. There is no Bash tool
-            to fall back on — do NOT try to work around its absence; route every
-            command through `runner`. Neither subagent decides mappings, model
-            design, or methodology, and neither authors file edits (apart from
-            `runner` running git on files you already wrote); those stay with you.
+            Code reaches the remote through exactly ONE path - `runner`'s git - and
+            there is no second path, no matter how small the change: a one-line edit
+            ships the same way a new source does. A subagent's many turns stay in
+            its own context, never yours - which is the point of the split. Neither
+            subagent decides methodology or authors edits; those stay with you. Keep
+            your own
+            turns low: use only the Task tool (for runner/legwork) and TodoWrite, not
+            the background-task / agent-messaging tools (TaskCreate / TaskUpdate /
+            SendMessage), which add round trips without value; batch any tool-schema
+            lookups into one step.
 
-            Baseline: CI on `main` (commit ${{ steps.main_ci.outputs.sha }})
-            was last ${{ steps.main_ci.outputs.conclusion }}
-            (${{ steps.main_ci.outputs.url }}). Trust this by default: if a
-            check fails after your change and it isn't obviously related to
-            what you touched, treat it as pre-existing and note it in the PR
-            rather than re-verifying against `main` yourself. Only verify
-            against `main` (ask `runner` for one `git stash` / `git worktree`
-            check, not a repeated stash/pop while you try fixes) if this baseline
-            is `unknown`/stale or the failing check is in the exact area you
-            changed.
+            This run is non-interactive - no human is watching to approve a tool call.
+            If a tool returns "requires approval" or "you haven't granted it", that is
+            TERMINAL: the tool is simply not available to you. Do NOT retry it, do NOT
+            wait or ask the user to approve it, and do NOT use /update-config or any
+            skill to self-grant. Re-route the action through `runner` (for any command
+            or git) and continue. Burning turns on an approval that will never arrive
+            is the most expensive failure there is.
+
+            Baseline: CI on `main` (commit ${{ steps.main_ci.outputs.sha }}) was last
+            ${{ steps.main_ci.outputs.conclusion }} (${{ steps.main_ci.outputs.url }}).
+            Trust it: if a check fails after your change and isn't obviously related to
+            what you touched, treat it as pre-existing and note it in the PR. Only
+            re-verify against `main` (ask `runner` for one `git stash` / `git worktree`
+            check, not a repeated stash/pop) if this baseline is unknown/stale or the
+            failing check is in the exact area you changed.
 
             ${{ steps.orient.outputs.map }}
 
-            The orientation map above is authoritative for repo structure and the
-            build environment — trust it instead of re-listing directories,
-            re-reading connection.yaml, or probing whether cairn.duckdb exists.
-            The environment is already built, so verify only what you change.
+            The orientation map above is authoritative for repo structure and the build
+            environment - trust it instead of re-listing directories or probing whether
+            cairn.duckdb exists. The environment is already built; verify only what you
+            change.
 
             ${{ steps.reference.outputs.ref }}
 
-            The reference above is the authoritative template for this issue's
-            layer — your change is a near-copy of it. Adapt only the
-            source-specific parts. Do NOT re-read those exemplar files, and do
-            NOT read neighbouring layers' files that are out of scope for this
-            issue (e.g. for an ingestion issue, don't open the staging models or
-            marts). Every file you read rides in every later turn's context, so
-            unnecessary reading is the single biggest driver of this run's cost.
+            The reference above is the authoritative template for this issue's layer -
+            your change is a near-copy of it. Adapt only the source-specific parts. Do
+            NOT re-read those exemplars, and do NOT read neighbouring layers' files that
+            are out of scope. Every file you read rides in every later turn, so
+            unnecessary reading is the single biggest cost driver.
 
-            Treat the ISSUE BODY as the authoritative spec. cairn-scout already
-            writes it with the exact files to touch, the fixture requirements,
-            and the watch caveats — execute that spec directly rather than
-            re-deriving a plan it already gives you. Investigate the codebase
-            only where the spec is genuinely insufficient or ambiguous.
-
-            For a NEW data source, do all live-source discovery in ONE legwork
-            task up front (Task tool, subagent_type: legwork): hand it the source
-            URL and ask it to return the column layout, the release-token field,
-            the relevant aggregate/code values, and a handful of representative
-            fixture rows. Do NOT curl or probe the source from your own turns —
-            that output then rides in every later turn's context. Do NOT run the
-            real `--offline` ingest as a check either: it downloads the full
-            dataset and writes a machine-specific `file://` snapshot into the
-            manifest that you then have to detect and reset (pure wasted turns).
-            Rely on the unit test against the committed fixture; the manifest
-            ships `snapshots: []`.
-
-            Keep your own turn count low. Do NOT use the background-task or
-            agent-messaging tools (TaskCreate / TaskUpdate / SendMessage) for
-            this single-layer issue — they add round trips without value. Use
-            TodoWrite if you want a checklist, and use the Task tool only for the
-            `runner` and `legwork` subagents described above. If you must look up
-            tool schemas, batch the lookups into one step.
+            Treat the ISSUE BODY as the authoritative spec - cairn-scout writes it with
+            the exact files to touch, fixture requirements, and watch caveats. Execute
+            it directly; investigate the codebase only where it is genuinely
+            insufficient or ambiguous.
 
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.
+            - `data-refresh`: follow the matching CLAUDE.md "Recurring maintenance"
+              checklist exactly (idempotent ingest, new append-only snapshot, refresh CI
+              fixtures, bump release dirs, re-check the assumptions the models lean on).
+            - `feat`: implement the BACKLOG.md candidate within its stated scope and
+              "watch" caveats. New numbers go in a dbt mart (tested there); the
+              site/export only read. Never invent figures - real source categories or
+              explicit NULL + a note. A new source gets its own append-only manifest
+              under sources/.
+            Never weaken a test to make a change pass.
 
-            - If it is a `data-refresh` issue, follow the matching CLAUDE.md
-              "Recurring maintenance" checklist exactly (idempotent ingest, new
-              append-only snapshot, refresh CI fixtures, bump release dirs, re-check
-              the assumptions the models lean on). Never weaken a test to pass.
-            - If it is a `feat` issue, implement the corresponding BACKLOG.md
-              candidate within its stated scope and "watch" caveats. New numbers go
-              in a dbt mart (tested there); the site/export only read. Never invent
-              figures â€” real source categories or explicit NULL + a note. New source
-              => its own append-only manifest under sources/.
+            For a NEW data source, do all live-source discovery in ONE legwork task up
+            front: hand it the source URL and ask for the column layout, the
+            release-token field, the relevant aggregate/code values, and a handful of
+            representative fixture rows. Do NOT curl or probe the source from your own
+            turns, and do NOT run the real `--offline` ingest as a check - it downloads
+            the full dataset and writes a machine-specific `file://` snapshot into the
+            manifest that you would then have to detect and reset. Rely on the unit test
+            against the committed fixture; the manifest ships `snapshots: []`.
 
-            Branch naming: `agent/<issue-number>-<short-slug>`, e.g. `agent/38-eurostat-ingestion`
-            â€” the issue number makes a previous run's branch unambiguous to find.
+            Branch naming: `agent/<issue-number>-<short-slug>`. First check whether a
+            previous run already made progress: list open PRs
+            (mcp__github__list_pull_requests) and ask `runner` for remote branches
+            (`git branch -r`) matching `agent/<issue-number>-*`. If one exists, have
+            `runner` check it out and report its recent commits, then continue from
+            there instead of starting over; otherwise have `runner` create a fresh
+            branch. Commit each logical milestone as you finish it - ask `runner` to
+            stage the files you wrote, commit with a conventional-commit message (one
+            logical change per commit), and push - rather than saving everything for the
+            end, so a run that hits the turn limit still leaves pushed progress the next
+            run can resume.
 
-            Before starting, check whether a previous run already made progress on
-            this issue: list open PRs yourself (`mcp__github__list_pull_requests`)
-            and ask `runner` for remote branches (`git branch -r`) matching
-            `agent/<issue-number>-*`. If one exists, have `runner` check it out and
-            report its recent commits, then continue from there instead of starting
-            over â€” so you don't redo or contradict finished work. Otherwise, have
-            `runner` create a fresh branch named `agent/<issue-number>-<short-slug>`.
+            Before opening the PR, have `runner` run and pass what CI runs, in the exact
+            order from the orientation map's "Build & verify sequence" (it mirrors
+            ci.yml) - one batched task, then act on the pass/fail summary. The export
+            step writes the ESRS E1 bundle into site/static/downloads/esrs_e1/, which
+            the disclosure page links to, so running build:strict before it (or after
+            changing the export without re-running it) fails the strict build on a 404
+            and triggers a long, expensive loop. The environment is pre-built, so
+            `runner` usually only re-runs steps downstream of what you changed. Open the
+            PR only once `runner` reports the sequence green.
 
-            Commit after each logical milestone as you finish it rather than saving
-            everything for one commit at the end: once you have written the files for
-            a milestone, ask `runner` to stage them, commit with a conventional-commit
-            message (one logical change per commit), and push. A run that hits the
-            turn limit mid-task should still leave committed, pushed progress on its
-            branch so the next run can resume it instead of losing it when the job's
-            runner is torn down.
-
-            Before opening the PR, have `runner` run and pass what CI runs, in the
-            exact order given by the orientation map's "Build & verify sequence"
-            above (it mirrors ci.yml) — give it that as one batched task and act on
-            the pass/fail summary it returns. Mind the export step in that sequence:
-            it writes the ESRS E1 bundle into site/static/downloads/esrs_e1/, which
-            the disclosure page links to, so running build:strict before it (or
-            after changing the export without re-running it) makes the strict build
-            fail on a 404 and triggers a long, expensive trial-and-error loop. The
-            environment was pre-built for this run, so in practice `runner` only
-            needs to re-run the steps downstream of what you changed. Open the PR
-            only once `runner` reports the sequence green.
-
-            Open ONE pull request against `main`. The description must open with a
-            section headed "## Executive summary": 2-4 plain-language sentences for a
-            reader with no Cairn context, explaining what changed and why it matters.
-            Spell out every acronym or piece of internal jargon the first time it
-            appears there (e.g. "CBS (Statistics Netherlands)", "EU ETS (the EU's
-            Emissions Trading System)", "NACE (the EU's industry classification)",
-            "manifest (the append-only file that pins which source snapshot Cairn
-            uses)"). Below that section, keep the existing technical content: link the
-            issue, summarise the change, state the data/methodology impact, and list
-            any assumption you made. Do NOT merge. If you cannot make CI pass within
-            scope, open a draft PR explaining exactly what blocks it instead of
-            forcing it green.
+            Open ONE pull request against `main`, opening with a section headed
+            "## Executive summary": 2-4 plain-language sentences for a reader with no
+            Cairn context, spelling out each acronym or jargon term on first use (e.g.
+            "EU ETS (the EU's Emissions Trading System)", "manifest (the append-only
+            file that pins which source snapshot Cairn uses)"). Below it, keep the
+            technical content: link the issue, summarise the change, state the
+            data/methodology impact, and list any assumptions. Do NOT merge. If you
+            cannot make CI pass within scope, open a DRAFT PR explaining exactly what
+            blocks it rather than forcing it green.
         # BASH_MAX_OUTPUT_LENGTH (default 30,000 chars): hard-caps any single
         # Bash result regardless of whether the command was piped through
         # head/tail. This truncates at the harness level after the command's
@@ -384,6 +363,43 @@ jobs:
         # check the way rewriting commands with a shell pipe could.
         env:
           BASH_MAX_OUTPUT_LENGTH: "10000"
+
+      # Guard against the "quiet false-green": claude-code-action reports success
+      # even when the agent shipped nothing -- e.g. it hit a permission denial and
+      # just explained it was blocked instead of routing through `runner`
+      # (run 28469212788). Turn that into a loud failure: unless this run left a
+      # pushed agent/<issue>-* branch OR an open PR for the issue, fail the job. A
+      # draft PR (the sanctioned "I'm blocked" exit) satisfies it; silence does
+      # not. Only runs when the action itself claimed success, so it doesn't pile
+      # onto an already-failed run.
+      - name: Require pushed branch or PR
+        if: ${{ always() && steps.claude.outcome == 'success' }}
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const issue = process.env.ISSUE_NUMBER;
+            const prefix = `agent/${issue}-`;
+            const { owner, repo } = context.repo;
+            const branches = await github.paginate(github.rest.repos.listBranches, {
+              owner, repo, per_page: 100,
+            });
+            const hasBranch = branches.some((b) => b.name.startsWith(prefix));
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'all', per_page: 100,
+            });
+            const hasPr = prs.some((p) => p.head.ref.startsWith(prefix));
+            if (hasBranch || hasPr) {
+              core.info(`Shipped work for #${issue}: branch=${hasBranch} pr=${hasPr}`);
+            } else {
+              core.setFailed(
+                `No agent/${issue}-* branch was pushed and no PR was opened: the ` +
+                `run reported success but shipped nothing (a blocked/false-green ` +
+                `run). Check the agent's final message in the job log.`
+              );
+            }
 
       # Cost visibility (best-effort; never fails the run). Parse the action's
       # execution_file into a markdown summary + the total cost in USD.
