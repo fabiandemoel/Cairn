@@ -1,0 +1,242 @@
+# Business glossary -- curated definitions of Cairn's cross-cutting concepts.
+#
+# This is a reviewed methodology artefact, like the seeds: every change goes
+# through a PR. It is deliberately kept OUTSIDE the dbt model-paths/seed-paths so
+# dbt does not parse it as a schema file; mart_business_glossary.py reads it and
+# materialises it verbatim (no recomputation, no invented terms).
+#
+# Each term carries a fixed `category` (the accepted set is pinned by the
+# accepted_values test on mart_business_glossary), an optional list of `aliases`,
+# the `related_models` it shows up in (every name must be a real dbt model/seed
+# -- the guard test enforces this), and a single official `reference` URL.
+
+version: 1
+
+terms:
+  - term: Territorial principle
+    category: Accounting principle
+    aliases: [territoriaal principe]
+    definition: >
+      Greenhouse-gas emissions are attributed to the geographic territory where
+      they physically occur. CBS 85669NED, the EU ETS, and Eurostat env_air_gge
+      all use this basis, so their national totals are directly comparable.
+    related_models:
+      [benchmark_sector_emissions, mart_gge_national_totals, benchmark_installation_emissions]
+    reference: https://www.ipcc.ch/report/2006-ipcc-guidelines-for-national-greenhouse-gas-inventories/
+
+  - term: Residence principle
+    category: Accounting principle
+    aliases: [residentieprincipe]
+    definition: >
+      Emissions are attributed to resident producer units (the national economy),
+      regardless of where they physically occur. Eurostat Air Emissions Accounts
+      (env_ac_ainah_r2) use this basis, so its NL figures legitimately differ
+      from the territorial CBS and EU ETS totals.
+    related_models: [benchmark_country_sector_emissions, stg_eurostat__aea]
+    reference: https://ec.europa.eu/eurostat/web/environment/air-emissions-accounts
+
+  - term: NACE Rev.2 section
+    category: Classification
+    aliases: [NACE section, NACE section letter]
+    definition: >
+      The top level (single letter A-U) of the EU statistical classification of
+      economic activities. Cairn's common sector axis: every benchmark rolls
+      emissions up to the NACE section that produced them.
+    related_models:
+      [benchmark_sector_emissions, benchmark_installation_emissions, benchmark_country_sector_emissions]
+    reference: https://ec.europa.eu/eurostat/web/nace
+
+  - term: SBI 2008
+    category: Classification
+    aliases: [Standaard Bedrijfsindeling 2008]
+    definition: >
+      The Dutch standard industrial classification, a superset of NACE Rev.2.
+      It underpins the version-controlled CBS-category-to-NACE seed mapping.
+    related_models: [sector_mapping_cbs]
+    reference: https://www.cbs.nl/nl-nl/onze-diensten/methoden/classificaties/activiteiten/sbi-2008-standaard-bedrijfsindeling-2008
+
+  - term: CO2-equivalent
+    category: Emissions & units
+    aliases: [CO2-eq, CO2eq, CO2-equivalent]
+    definition: >
+      A common unit that expresses the warming effect of all greenhouse gases as
+      the amount of CO2 with the same 100-year global-warming potential, so the
+      headline gas total (CO2, CH4, N2O, F-gases) can be summed on one scale.
+    related_models: [benchmark_sector_emissions, benchmark_installation_emissions, mart_gge_national_totals]
+    reference: https://www.ipcc.ch/report/2006-ipcc-guidelines-for-national-greenhouse-gas-inventories/
+
+  - term: Megatonne
+    category: Emissions & units
+    aliases: [Mt, "miljard kg CO2-equivalent"]
+    definition: >
+      One million tonnes (1 Mt = 1e6 t = 1e9 kg). CBS reports 85669NED in
+      "miljard kg CO2-equivalent", which equals megatonnes; the EU ETS marts are
+      in tonnes. Mixing the two scales without converting double-counts.
+    related_models: [benchmark_sector_emissions, mart_gge_national_totals]
+    reference: https://www.ipcc.ch/report/2006-ipcc-guidelines-for-national-greenhouse-gas-inventories/
+
+  - term: Scope 1 GHG emissions
+    category: Disclosure
+    aliases: [gross Scope 1, direct emissions]
+    definition: >
+      Direct greenhouse-gas emissions from sources owned or controlled by an
+      undertaking (GHG Protocol). Cairn provides the verified EU ETS installation
+      figure as the verified basis for the ESRS E1-6 "gross Scope 1" datapoint --
+      the two usually align but can diverge on consolidation scope and boundary.
+    related_models: [mart_esrs_e1, benchmark_installation_emissions]
+    reference: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
+
+  - term: Verified emissions
+    category: EU ETS / EUTL
+    aliases: [verified CO2 emissions]
+    definition: >
+      The annual emissions an EU ETS installation reports and a third-party
+      verifier confirms, recorded in the EU Transaction Log. Cairn benchmarks
+      only verified emissions -- never an estimate.
+    related_models: [benchmark_installation_emissions, stg_euets__compliance]
+    reference: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087
+
+  - term: Free allocation
+    category: EU ETS / EUTL
+    aliases: [allocated allowances, allocatedTotal]
+    definition: >
+      The emission allowances granted to an installation for free for a
+      compliance year. Cairn reads it as a labelled measure (who emits above or
+      below their free grant); it is nullable and never a placeholder zero.
+    related_models: [benchmark_installation_emissions, stg_euets__compliance]
+    reference: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087
+
+  - term: Surrendered allowances
+    category: EU ETS / EUTL
+    aliases: [surrendered]
+    definition: >
+      The allowances an operator actually hands back to cover a year's verified
+      emissions -- the third leg of the EUTL compliance triple. Presented as a
+      labelled measure, not a recomputed running balance or a compliance verdict;
+      surrender can lag, so some installation-years legitimately carry NULL.
+    related_models: [benchmark_installation_emissions, stg_euets__compliance]
+    reference: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087
+
+  - term: EUTL
+    category: EU ETS / EUTL
+    aliases: [EU Transaction Log]
+    definition: >
+      The EU Transaction Log, the central registry recording every EU ETS
+      installation, its allocation, surrender, and verified emissions. Cairn's
+      installation data comes from euets.info, a reprocessed copy of the EUTL.
+    related_models: [stg_euets__installations, stg_euets__compliance]
+    reference: https://euets-info-public.s3.eu-central-1.amazonaws.com/Description_EUTL_database.pdf
+
+  - term: EU ETS
+    category: EU ETS / EUTL
+    aliases: [EU Emissions Trading System]
+    definition: >
+      The EU's cap-and-trade system for large stationary emitters and aviation.
+      It covers only large emitters, so Cairn's installation benchmark is the ETS
+      large-emitter average, not the whole-economy sector average.
+    related_models: [benchmark_installation_emissions, stg_eea__ets]
+    reference: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087
+
+  - term: Installation
+    category: EU ETS / EUTL
+    aliases: [stationary installation]
+    definition: >
+      A regulated stationary site (the EU ETS reporting boundary) identified by
+      an EUTL id such as NL_200580. Cairn keeps stationary installations only,
+      excluding aircraft and maritime operators from the benchmark.
+    related_models: [benchmark_installation_emissions, stg_euets__installations]
+    reference: https://www.euets.info/
+
+  - term: Legal Entity Identifier
+    category: Entity identity
+    aliases: [LEI, ISO 17442]
+    definition: >
+      A 20-character GLEIF code (ISO 17442) identifying the operating legal
+      entity, letting the installation benchmark roll up to company level. Set
+      only where the reviewed lei_mapping_euets seed carries a confident match;
+      otherwise NULL, never invented.
+    related_models: [benchmark_installation_emissions, lei_mapping_euets]
+    reference: https://www.gleif.org/en/about-lei/introducing-the-legal-entity-identifier-lei
+
+  - term: ESRS E1-6
+    category: Disclosure
+    aliases: [E1-6]
+    definition: >
+      The ESRS E1 datapoint for gross Scope 1, 2, and 3 greenhouse-gas emissions
+      under the CSRD. Cairn's export supplies the verified EU ETS figure as the
+      Scope 1 basis; Scope 2/3 are omitted (no source), never zero-filled.
+    related_models: [mart_esrs_e1]
+    reference: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
+
+  - term: CSRD
+    category: Disclosure
+    aliases: [Corporate Sustainability Reporting Directive]
+    definition: >
+      The EU directive mandating sustainability reporting under the ESRS
+      standards. Cairn is a verified data source for one ESRS E1 datapoint, not a
+      CSRD reporting platform.
+    related_models: [mart_esrs_e1]
+    reference: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022L2464
+
+  - term: Definitief versus provisional
+    category: Provenance
+    aliases: [Definitief, period_status, voorlopig]
+    definition: >
+      CBS marks each year's figures Definitief (final) or provisional. Provisional
+      years lack the full sector breakdown, so the sector mart filters to
+      Definitief years to keep the national-total reconciliation exact.
+    related_models: [benchmark_sector_emissions, stg_cbs__emissions]
+    reference: https://opendata.cbs.nl/statline/#/CBS/nl/dataset/85669NED
+
+  - term: Bunkers (memo items)
+    category: Emissions & units
+    aliases: [international bunkers, memo items]
+    definition: >
+      Emissions from international aviation and shipping. The IPCC reports them as
+      memo items outside the national total; Cairn flags them aggregate and
+      excludes them so they are not double-counted.
+    related_models: [benchmark_sector_emissions, sector_mapping_cbs]
+    reference: https://www.ipcc.ch/report/2006-ipcc-guidelines-for-national-greenhouse-gas-inventories/
+
+  - term: Common Reporting Format
+    category: Classification
+    aliases: [CRF]
+    definition: >
+      The IPCC/UNFCCC sector classification (Energy, Industrial processes,
+      Agriculture, Waste, LULUCF) used in env_air_gge. CRF is not NACE and cannot
+      be mapped to it without significant assumptions, so Cairn keeps only the
+      national total, not the CRF breakdown.
+    related_models: [stg_eurostat__gge, mart_gge_national_totals]
+    reference: https://unfccc.int/ghg-inventories-annex-i-parties/2025
+
+  - term: Leaf versus aggregate category
+    category: Classification
+    aliases: [leaf category, aggregate category]
+    definition: >
+      In the CBS seed, leaf categories are the finest climate sectors that
+      partition the national total exactly once; aggregate categories are CBS
+      totals/subtotals and bunker memo items, excluded from the sector sum to
+      avoid double counting.
+    related_models: [sector_mapping_cbs, benchmark_sector_emissions]
+    reference: https://opendata.cbs.nl/statline/#/CBS/nl/dataset/85669NED
+
+  - term: UNMAPPED
+    category: Classification
+    definition: >
+      The bucket for CBS leaf categories that cannot be attributed to a single
+      NACE section (households, land use, transport, the G-U services aggregate).
+      Still counted in the national total -- shown honestly as UNMAPPED rather
+      than force-fitted to a section.
+    related_models: [benchmark_sector_emissions, sector_mapping_cbs]
+    reference: https://ec.europa.eu/eurostat/web/nace
+
+  - term: Pin of record
+    category: Provenance
+    aliases: [manifest pin, append-only manifest]
+    definition: >
+      The append-only per-source manifest that pins each raw release by sha256.
+      A data change without a manifest change is impossible; mart_data_provenance
+      is a second reader of these manifests, reporting pin integrity as
+      observable fact.
+    related_models: [mart_data_provenance]
+    reference: https://github.com/fabiandemoel/Cairn/blob/main/ingestion/manifest.py

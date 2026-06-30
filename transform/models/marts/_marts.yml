@@ -482,3 +482,130 @@ models:
         description: Earliest period the snapshot covers. NULL when unpinned.
       - name: period_end
         description: Latest period the snapshot covers. NULL when unpinned.
+
+  - name: mart_data_dictionary
+    description: >
+      Data dictionary over the dbt schema files: one row per documented (model,
+      column) across the staging models, marts, and seeds, with the column's
+      description and the data tests that guard it. A read-only consolidation of
+      the documentation Cairn already keeps in its _staging.yml / _marts.yml /
+      _seeds.yml schema files -- a second reader of the schema, not a second
+      source of truth.
+    config:
+      tags: ["documentation"]
+    meta:
+      source_manifest: transform/models
+      methodology: >
+        Built by transform/models/marts/mart_data_dictionary.py, which reads the
+        dbt schema files (models/staging/_staging.yml, models/marts/_marts.yml,
+        seeds/_seeds.yml) and materialises one row per documented column verbatim
+        -- nothing is recomputed and no documentation is invented. layer is the
+        dbt layer the resource lives in (staging / mart / seed). data_tests is
+        the comma-joined list of the column's dbt tests; accepted_values carries
+        the allowed value list when the column has an accepted_values test. A
+        column with no description or no tests carries NULL, never a placeholder.
+      known_limitations: >
+        (1) This mart documents only what the schema files document -- a column
+        absent from the yml is absent here (the relationships and not_null tests
+        elsewhere guard schema completeness). (2) It reflects the committed schema
+        at build time, not the live database catalogue. (3) data_tests lists test
+        names, not their full configuration.
+      references:
+        dbt_schema_docs: https://docs.getdbt.com/reference/resource-properties/description
+        nace_rev2: https://ec.europa.eu/eurostat/web/nace
+    columns:
+      - name: dictionary_key
+        description: Surrogate natural key (model_name|column_name).
+        tests:
+          - unique
+          - not_null
+      - name: layer
+        description: The dbt layer the resource lives in.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["staging", "mart", "seed"]
+      - name: model_name
+        description: Name of the dbt model or seed the column belongs to.
+        tests:
+          - not_null
+      - name: model_description
+        description: The model/seed-level description from its schema file.
+      - name: column_name
+        description: Name of the documented column.
+        tests:
+          - not_null
+      - name: column_description
+        description: The column's description from the schema file. NULL when undocumented.
+      - name: data_tests
+        description: >
+          Comma-joined list of the dbt tests guarding the column (e.g.
+          "unique, not_null"). NULL when the column carries no tests.
+      - name: is_tested
+        description: Whether the column has at least one dbt test.
+        tests:
+          - not_null
+      - name: accepted_values
+        description: >
+          Comma-joined allowed-value list when the column has an accepted_values
+          test, else NULL.
+
+  - name: mart_business_glossary
+    description: >
+      Business glossary: one row per curated definition of a cross-cutting Cairn
+      concept (territorial vs. residence principle, Scope 1, verified emissions,
+      free allocation, LEI, ESRS E1-6, ...). A read-only view over the reviewed
+      transform/glossary.yml; it defines terms, it does not compute figures.
+    config:
+      tags: ["documentation"]
+    meta:
+      source_manifest: transform/glossary.yml
+      methodology: >
+        Built by transform/models/marts/mart_business_glossary.py, which reads
+        the reviewed transform/glossary.yml and materialises each term verbatim
+        -- nothing is recomputed and no term is invented. The glossary is a
+        methodology artefact like the seeds: every change goes through a PR.
+        category is a fixed taxonomy; related_models lists the models/seeds the
+        term shows up in (each a real dbt resource, enforced by the guard test);
+        aliases and reference_url are nullable.
+      known_limitations: >
+        (1) The glossary is curated, not exhaustive -- it covers the concepts
+        Cairn's marts actually lean on, not every term in the domain. (2) related_models
+        is a hand-maintained cross-reference, kept honest by the test that every
+        entry names a real model. (3) Definitions are Cairn's working
+        definitions for this dataset, with an official reference where one
+        applies; they are not legal definitions.
+      references:
+        esrs_e1: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
+        eu_ets_directive: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087
+        nace_rev2: https://ec.europa.eu/eurostat/web/nace
+    columns:
+      - name: glossary_key
+        description: Surrogate natural key (slug of the term).
+        tests:
+          - unique
+          - not_null
+      - name: term
+        description: The business term being defined.
+        tests:
+          - not_null
+      - name: category
+        description: Fixed thematic category the term belongs to.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                ["Accounting principle", "Classification", "Emissions & units",
+                 "EU ETS / EUTL", "Entity identity", "Disclosure", "Provenance"]
+      - name: definition
+        description: The curated definition of the term.
+        tests:
+          - not_null
+      - name: aliases
+        description: Comma-joined alternative names for the term. NULL when none.
+      - name: related_models
+        description: >
+          Comma-joined dbt models/seeds the term appears in. Each is a real
+          resource (enforced by the guard test). NULL when none.
+      - name: reference_url
+        description: Official reference URL for the term. NULL when none.
