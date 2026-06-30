@@ -5,7 +5,7 @@ description: An auditable, queryable benchmark over official EU/NL climate data 
 
 <div class="flex flex-wrap items-center gap-2">
 <a href="https://fabiandemoel.nl" class="inline-flex items-center gap-1.5 rounded-full bg-blue-600 dark:bg-blue-500 px-3 py-1 text-sm font-medium text-white no-underline shadow-sm transition-colors hover:bg-blue-700 dark:hover:bg-blue-600"><span aria-hidden="true">←</span><span>Back to fabiandemoel.nl</span></a>
-<a href="https://github.com/fabiandemoel/Cairn" class="inline-flex items-center gap-1.5 rounded-full border border-gray-300 dark:border-gray-700 px-2.5 py-0.5 text-sm text-gray-600 dark:text-gray-300 no-underline hover:border-gray-400 dark:hover:border-gray-500"><span class="font-medium">Cairn v1.1.0</span><span class="text-gray-400">·</span><span>Phase 4</span></a>
+<a href="https://github.com/fabiandemoel/Cairn" class="inline-flex items-center gap-1.5 rounded-full border border-gray-300 dark:border-gray-700 px-2.5 py-0.5 text-sm text-gray-600 dark:text-gray-300 no-underline hover:border-gray-400 dark:hover:border-gray-500"><span class="font-medium">Cairn v1.2.0</span><span class="text-gray-400">·</span><span>Phase 4</span></a>
 </div>
 
 **Cairn turns public climate data into auditable, reproducible datasets with
@@ -101,7 +101,9 @@ from its source:
 See **[Methodology & sources →](/methodology)** for the full provenance of
 every figure on this site, or **[Data quality →](/data-quality)** for the live
 pin status of each source — whether every figure is still chained, by hash, to
-an immutable official source.
+an immutable official source. The **[Data dictionary & glossary →](/data-dictionary)**
+lists every model and column with the tests that guard it, and defines the
+cross-cutting concepts behind the numbers.
 
 The **[CSRD / ESRS E1 disclosure →](/disclosure)** supports ESRS E1-6 reporting
 by providing an auditable source for the verified Scope 1 emissions of EU ETS
