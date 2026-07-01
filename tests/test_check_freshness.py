@@ -1,4 +1,4 @@
-"""Tests for the no-LLM upstream-freshness check injected into cairn-scout."""
+"""Tests for the no-LLM upstream-freshness check consumed by cairn-dispatch."""
 
 from __future__ import annotations
 
