@@ -69,6 +69,7 @@ jobs:
             let model = "claude-sonnet-5";
             let title = "";
             let labelsCsv = "";
+            let body = "";
             try {
               const { data: issue } = await github.rest.issues.get({
                 owner: context.repo.owner,
@@ -78,17 +79,20 @@ jobs:
               const labels = issue.labels.map(l => (typeof l === "string" ? l : l.name));
               labelsCsv = labels.join(",");
               title = issue.title || "";
+              body = issue.body || "";
               model = labels.includes("data-refresh") ? "claude-haiku-4-5-20251001" : "claude-sonnet-5";
               core.info(`Issue #${issueNumber} labels: ${labelsCsv} -> model ${model}`);
             } catch (err) {
               core.warning(`Could not read labels for #${issueNumber}, defaulting to Sonnet: ${err}`);
             }
-            // title/labels feed the per-layer reference generator below; on a
-            // read failure they stay empty and the generator falls back to a
-            // "find the closest example" note rather than crashing.
+            // title/labels feed the per-layer reference generator below, and
+            // title/labels/body feed the layer-scaffold step; on a read
+            // failure they stay empty and both generators fall back to a
+            // "write it yourself" note rather than crashing.
             core.setOutput("model", model);
             core.setOutput("title", title);
             core.setOutput("labels", labelsCsv);
+            core.setOutput("body", body);
 
       # Timestamp the run start so the cost step can find the PR this run opens
       # (branch agent/<issue>-*) without grabbing an older one.
@@ -186,6 +190,34 @@ jobs:
             python3 scripts/reference_for_layer.py --title "$ISSUE_TITLE" --labels "$ISSUE_LABELS"
             echo
             echo 'REF_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # No-LLM: for an ingestion/staging issue whose body carries a cairn-scout
+      # "Scaffold parameters" source/dataset slug block, pre-write the fixed
+      # boilerplate that layer's exemplar above shows (scaffold_ingestion.py /
+      # scaffold_staging.py) so the agent starts editing TODO markers instead of
+      # typing the plumbing from scratch. A mart/site/export/data-refresh issue,
+      # a missing/malformed slug block, or a target that already exists (partial
+      # progress from an earlier run) all degrade to an explanatory note (or no
+      # note at all) rather than touching the tree -- run as a module
+      # (`-m scripts.scaffold_for_layer`, not `scripts/scaffold_for_layer.py`)
+      # because it cross-imports the other scaffold_*.py modules, which only
+      # resolve as a package when the repo root is on sys.path. This is a cost
+      # optimisation, never a correctness gate: it never fails the job, and its
+      # absence just reproduces today's copy-the-exemplar behaviour.
+      - name: Scaffold this issue's layer (if applicable)
+        id: scaffold
+        continue-on-error: true
+        env:
+          ISSUE_TITLE: ${{ steps.model.outputs.title }}
+          ISSUE_LABELS: ${{ steps.model.outputs.labels }}
+          ISSUE_BODY: ${{ steps.model.outputs.body }}
+        run: |
+          {
+            echo 'note<<SCAFFOLD_EOF'
+            python3 -m scripts.scaffold_for_layer --title "$ISSUE_TITLE" --labels "$ISSUE_LABELS" --body "$ISSUE_BODY"
+            echo
+            echo 'SCAFFOLD_EOF'
           } >> "$GITHUB_OUTPUT"
 
       - id: claude
@@ -312,6 +344,8 @@ jobs:
             NOT re-read those exemplars, and do NOT read neighbouring layers' files that
             are out of scope. Every file you read rides in every later turn, so
             unnecessary reading is the single biggest cost driver.
+
+            ${{ steps.scaffold.outputs.note }}
 
             Treat the ISSUE BODY as the authoritative spec - cairn-scout writes it with
             the exact files to touch, fixture requirements, and watch caveats. Execute
