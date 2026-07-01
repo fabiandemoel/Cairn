@@ -124,6 +124,17 @@ def token_from_eua_url(url: str) -> str | None:
     return match.group(1) if match else None
 
 
+def token_from_emissieregistratie_url(url: str) -> str | None:
+    """``.../NLD-CRT-2026-V1.0.zip`` -> ``2026-V1.0``.
+
+    Mirrors ``ingestion.emissieregistratie_pipeline._release_from_url``.
+    """
+    name = url.rstrip("/").rsplit("/", 1)[-1]
+    stem = name[:-4] if name.lower().endswith(".zip") else name
+    match = re.match(r"NLD-CRT-(.+)$", stem)
+    return match.group(1) if match else None
+
+
 def normalize_eurostat_date(raw: str) -> str | None:
     """Normalise a Eurostat date to YYYY-MM-DD / YYYY-MM.
 
@@ -262,6 +273,23 @@ def build_report(root: Path, *, fetch: Fetcher = _http_get) -> str:
             eua_pin or "unpinned",
             eua_live or "?",
             "human-watched (no upstream index) — never probe EEX",
+        )
+    )
+
+    # emissieregistratie (UNFCCC CRF submission): no upstream release index
+    # either (di.unfccc.int is JS-only); the live token is encoded in
+    # DEFAULT_URL's filename, bumped by a human when UNFCCC/RVO publish a new
+    # annual submission. Live equals the pin by construction -- never probe
+    # UNFCCC.
+    er_url = _read_const(root, "ingestion/emissieregistratie_pipeline.py", "DEFAULT_URL")
+    er_live = token_from_emissieregistratie_url(er_url) if er_url else None
+    er_pin = manifest_pin("emissieregistratie")
+    rows.append(
+        (
+            "emissieregistratie",
+            er_pin or "unpinned",
+            er_live or "?",
+            "human-watched (no upstream index) — never probe UNFCCC",
         )
     )
 

@@ -68,6 +68,15 @@ pinned-snapshot, read/relabel model.
 
 The authoritative source under NL's UNFCCC submission; finer per substance/
 sector/region than CBS. Lets a CBS-derived figure be traced one layer deeper.
+- *Status:* the **ingestion layer shipped** — merged via issue #83 (2026-07-01):
+  `ingestion/emissieregistratie_pipeline.py` + `sources/emissieregistratie/manifest.yml`,
+  pinned from the Netherlands' UNFCCC CRF (Common Reporting Format) national
+  inventory submission archive (emissieregistratie.nl's own portal has no
+  headless-fetchable data API — see the pipeline's module docstring). Ships
+  unpinned (`snapshots: []`) — the first real ingest via `cairn-ingest.yml`
+  establishes the pin. Remaining scope (a staging model + reconciliation test
+  against the CBS national total, any site integration) is still undone —
+  dispatch as a follow-up issue once this one merges.
 - *Watch:* it partly overlaps CBS national totals — keep it as a cross-check /
   provenance layer, **not** a second authority for the same figure. Add a
   reconciliation test against the CBS national total.

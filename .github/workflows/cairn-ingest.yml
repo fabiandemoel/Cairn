@@ -21,13 +21,13 @@ on:
         description: "Source to ingest"
         required: true
         type: choice
-        options: [cbs, euets, eea, eurostat, eurostat_gge, eua]
+        options: [cbs, euets, eea, eurostat, eurostat_gge, eua, emissieregistratie]
       url:
         description: >-
-          Override URL (euets/eea/eua only -- point at the new release zip, e.g.
-          the euets.info, EEA datashare, or EEX auction-report link from the
-          CLAUDE.md checklist). Leave blank for cbs/eurostat, which auto-detect
-          their latest release.
+          Override URL (euets/eea/eua/emissieregistratie only -- point at the new
+          release zip, e.g. the euets.info, EEA datashare, EEX auction-report, or
+          UNFCCC CRF submission link from the CLAUDE.md checklist). Leave blank
+          for cbs/eurostat, which auto-detect their latest release.
         required: false
         type: string
 
@@ -72,13 +72,14 @@ jobs:
             eurostat)     module=ingestion.eurostat_aea_pipeline ;;
             eurostat_gge) module=ingestion.eurostat_gge_pipeline ;;
             eua)      module=ingestion.eua_pipeline ;;
+            emissieregistratie) module=ingestion.emissieregistratie_pipeline ;;
             *) echo "Unknown source: $SOURCE" >&2; exit 1 ;;
           esac
 
           args=()
           if [ -n "$URL" ]; then
             case "$SOURCE" in
-              euets|eea|eua) args+=(--url "$URL") ;;
+              euets|eea|eua|emissieregistratie) args+=(--url "$URL") ;;
               *) echo "::warning::--url is ignored for $SOURCE (it auto-detects its release)" ;;
             esac
           fi
