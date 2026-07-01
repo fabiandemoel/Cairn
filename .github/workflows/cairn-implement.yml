@@ -200,22 +200,32 @@ jobs:
           # still reports success â€” a quiet false-green where the agent just
           # explains it's blocked (run 28079588272).
           #
-          # ORCHESTRATOR/EXECUTOR SPLIT. Bash, WebFetch and WebSearch are
-          # deliberately ABSENT here: this Claude is the *orchestrator*. It reads
-          # the spec, authors file edits (Read/Write/Edit), and decides â€” but it
-          # cannot run a shell command or fetch a URL itself. All command
+          # ORCHESTRATOR/EXECUTOR SPLIT. This Claude is the *orchestrator*: it
+          # reads the spec, authors file edits (Read/Write/Edit), and decides,
+          # then delegates via Task to the `runner` subagent for all command
           # execution (uv/dbt/npm/ruff/sqlfluff/pytest + git stage/commit/push)
-          # is delegated via Task to the `runner` subagent, and all bulk
-          # search / live-source discovery to the `legwork` subagent â€” each runs
-          # in its OWN conversation (.claude/agents/{runner,legwork}.md, both
-          # pinned to Haiku). The point is context isolation: a 30-turn
-          # build/test/debug loop inside a subagent collapses to one summary in
-          # the orchestrator's context instead of riding in every later turn.
-          # Run 28447652743 spent $5.67 / 82 turns with 6.86M cache-read tokens,
-          # almost entirely an inline debug loop re-sent each turn; this split
-          # moves that loop out of the expensive orchestrator context. Removing
-          # Bash is what *enforces* the split â€” a prompt asking nicely does not
-          # (the agent kept debugging inline despite being told to delegate).
+          # and to the `legwork` subagent for all bulk search / live-source
+          # discovery â€” each runs in its OWN conversation
+          # (.claude/agents/{runner,legwork}.md, both pinned to Haiku). The point
+          # is context isolation: a 30-turn build/test/debug loop inside a
+          # subagent collapses to one summary in the orchestrator's context
+          # instead of riding in every later turn. Run 28447652743 spent
+          # $5.67 / 82 turns with 6.86M cache-read tokens, almost entirely an
+          # inline debug loop re-sent each turn; this split moves that loop out
+          # of the expensive orchestrator context.
+          #
+          # WHY Bash/WebFetch/WebSearch ARE listed here even though the
+          # orchestrator must not call them directly: --allowedTools is the
+          # SESSION-WIDE permission allowlist, and subagents inherit it â€” a
+          # subagent's frontmatter `tools:` only restricts WHICH tools it may
+          # attempt, it does NOT grant permission. A tool absent from this list
+          # is denied for EVERYONE, including `runner`/`legwork`. Dropping Bash
+          # here to "enforce" the split (commit f7a3c94) is exactly what broke
+          # run 28517372275: `runner`'s git writes came back "requires approval"
+          # and `legwork`'s WebFetch "you haven't granted it yet", so the run
+          # shipped nothing and the ship-guard failed. So these MUST stay listed;
+          # the split is enforced by the prompt + subagent definitions, not by
+          # withholding the tool from the allowlist.
           # mcp__github__get_issue / mcp__github__create_pull_request are the
           # bundled github-mcp-server's actual tool names (run 28085542460);
           # guessing wrong (issue_read, issue_write) silently denies them.
@@ -230,7 +240,7 @@ jobs:
           claude_args: >-
             --max-turns 100
             --model ${{ steps.model.outputs.model }}
-            --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Task,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
+            --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Task,Bash,WebFetch,WebSearch,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
           prompt: |
             CLAUDE.md and BACKLOG.md are authoritative and override this prompt, but
             they are long, so read them narrowly -- a big upfront read inflates
@@ -241,10 +251,14 @@ jobs:
             candidate). Consult "Gotchas" only when you hit something it covers.
 
             EXECUTION MODEL - read this first. You are the ORCHESTRATOR: you read
-            files, author edits (Write/Edit), and make every decision. But these are
-            hard limits, not preferences - you cannot act on the world yourself: you
-            have NO shell, NO git, NO URL fetch, and NO create_branch / push_files
-            tools. Your only github MCP tools are get_issue, create_pull_request, and
+            files, author edits (Write/Edit), and make every decision. You do NOT act
+            on the world yourself. Bash, WebFetch and WebSearch appear in your
+            allowlist ONLY so your subagents can use them - you must NOT call them
+            directly: routing a command or a fetch through a subagent is a hard rule,
+            not a preference, because a subagent's many turns of output stay in its own
+            context instead of riding in every later turn of yours (that re-sent
+            context is the dominant cost). You also have NO create_branch / push_files
+            tools; your only github MCP tools are get_issue, create_pull_request, and
             list_pull_requests. Every action runs in a separate subagent conversation
             via the Task tool:
               - `runner` (subagent_type: runner) runs ALL shell commands and git: the
