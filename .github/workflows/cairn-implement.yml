@@ -59,14 +59,14 @@ jobs:
       # ingest, confirm a new snapshot, refresh fixtures, run dbt/pytest) â€”
       # Haiku is sufficient and ~much cheaper. feat issues require design
       # judgement (new dbt models, mappings, site queries) and stay on
-      # Sonnet. Falls back to Sonnet if the label can't be read.
+      # Sonnet 5. Falls back to Sonnet 5 if the label can't be read.
       - name: Determine model based on issue labels
         id: model
         uses: actions/github-script@v7
         with:
           script: |
             const issueNumber = ${{ github.event.issue.number || github.event.inputs.issue_number }};
-            let model = "claude-sonnet-4-6";
+            let model = "claude-sonnet-5";
             let title = "";
             let labelsCsv = "";
             try {
@@ -78,7 +78,7 @@ jobs:
               const labels = issue.labels.map(l => (typeof l === "string" ? l : l.name));
               labelsCsv = labels.join(",");
               title = issue.title || "";
-              model = labels.includes("data-refresh") ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+              model = labels.includes("data-refresh") ? "claude-haiku-4-5-20251001" : "claude-sonnet-5";
               core.info(`Issue #${issueNumber} labels: ${labelsCsv} -> model ${model}`);
             } catch (err) {
               core.warning(`Could not read labels for #${issueNumber}, defaulting to Sonnet: ${err}`);
@@ -223,7 +223,7 @@ jobs:
           # --max-turns 100: a full new-source slice (ingestion + mart + test
           # + site) needs room; 20 then 60 both hit error_max_turns mid-work
           # (runs 28085542460, 28173119243). --model sets the ORCHESTRATOR model:
-          # the model step above runs it as Sonnet for feat issues (design
+          # the model step above runs it as Sonnet 5 for feat issues (design
           # judgement) and drops to Haiku for data-refresh (a fixed checklist).
           # The runner and legwork subagents are pinned to Haiku regardless.
           show_full_output: true
@@ -315,6 +315,33 @@ jobs:
               explicit NULL + a note. A new source gets its own append-only manifest
               under sources/.
             Never weaken a test to make a change pass.
+
+            BACKLOG.md upkeep (for a `feat` issue only - skip this for `data-refresh`):
+            this issue is one layer of a BACKLOG.md candidate, and that file is stale
+            more often than not right now - a fully-shipped candidate has repeatedly sat
+            in "Live candidates" for days after merging, and cairn-scout then re-dispatches
+            the same already-done work (wasting a full implement run each time, no PR to
+            show for it). Break that loop from this side too:
+              - Identify which numbered candidate in BACKLOG.md's "Live candidates" this
+                issue implements (the issue body names it).
+              - If this issue completes that candidate's LAST remaining layer (check the
+                candidate's "Touches" line against what actually exists after your change -
+                use the orientation map's layer inventory), move that candidate's entry, in
+                the SAME PR, from "Live candidates" to "Considered and rejected", following
+                the exact style already there: `- **<candidate name>.** Shipped: merged in
+                PR #<this PR's number once known - if not yet known, say "this PR"> (<date>).
+                <one sentence naming the concrete artifact - column/mart/page - now live>.`
+                Renumber the remaining "Live candidates" headers and fix any internal
+                `candidate #N` / `(#N)` cross-references so they still point at the right
+                item - grep the file for `candidate #` and `(#` before finishing.
+              - If this issue only completes ONE layer of a multi-layer candidate (e.g. the
+                mart layer, with a site layer still to come), do NOT move it - instead
+                add/update a one-line `*Status:*` note under that candidate (mirroring
+                candidate #1's existing status note as a template) naming what shipped and
+                what layer is still open, so cairn-scout dispatches the next layer instead
+                of repeating this one.
+              - Do this as a normal part of the PR diff (one more file changed), not a
+              separate PR - `runner` stages and commits it with the rest of your change.
 
             For a NEW data source, do all live-source discovery in ONE legwork task up
             front: hand it the source URL and ask for the column layout, the
