@@ -51,28 +51,19 @@ Adds "these emissions = €X at the current EUA price" — directly addresses th
 commercial-positioning gap. **Lowest spine-fit:** the price is volatile and
 time-varying, and tonnes × price is a computation, both in tension with the
 pinned-snapshot, read/relabel model.
+- *Status:* the **ingestion layer shipped** — merged via issue #72 (2026-06-30):
+  `ingestion/eua_pipeline.py` + `sources/eua/manifest.yml`, pinned from the EEX
+  auction archive. Per CLAUDE.md invariant 5 / the "eua" recurring-maintenance
+  entry it stays **ingestion-only by design** — no staging model, no mart
+  column, no site overlay, and it must never enter a dbt mart or the ESRS E1
+  export. Remaining scope here (the labelled site overlay below) is still
+  undone and gated on the watch note, not on missing plumbing.
 - *Watch:* keep it strictly as a **labelled context overlay** in the site, sourced
   from official auction results, pinned per release like any other source. Never
   a stored mart figure, never in the ESRS E1 export. Defer unless commercial
   positioning becomes the active priority.
 
-### 2. EUTL surrendered allowances → verified-vs-surrendered compliance-integrity axis
-**Value: M · Effort: L · Spine-fit: H**
-
-The third leg of the EUTL triple, after allocation and verified emissions:
-allowances actually surrendered per installation-year. Already staged —
-`stg_euets__compliance` exposes `surrendered`. Surfacing "surrendered vs
-verified" is a pure read/relabel provenance axis over the pinned snapshot; no
-new source, no recomputation. Natural to ship alongside verified-vs-allocated.
-- *Watch:* surrender can lag and a single surrender may cover multiple years —
-  present it as a **labelled measure**, not a recomputed running balance, and
-  never as a compliance *verdict* (that would drift toward the assurance scope
-  rule 4 forbids). Missing values stay `NULL` + a note.
-- *Touches:* one mart measure on `benchmark_installation_emissions` (or sibling),
-  `site/sources/cairn/*.sql`, a page. Column already in the fixture's
-  `compliance.parquet`.
-
-### 3. Emissieregistratie (RIVM) → deepen NL provenance + granularity
+### 2. Emissieregistratie (RIVM) → deepen NL provenance + granularity
 **Value: M · Effort: M · Spine-fit: H**
 
 The authoritative source under NL's UNFCCC submission; finer per substance/
@@ -82,7 +73,7 @@ sector/region than CBS. Lets a CBS-derived figure be traced one layer deeper.
   reconciliation test against the CBS national total.
 - *Touches:* new pipeline + manifest, staging, a provenance/cross-check model.
 
-### 4. EU ETS aviation & maritime verified emissions → transport benchmark axis
+### 3. EU ETS aviation & maritime verified emissions → transport benchmark axis
 **Value: M · Effort: M · Spine-fit: H**
 
 `benchmark_installation_emissions` deliberately excludes aircraft and maritime
@@ -100,7 +91,7 @@ same pinned snapshot. Read/relabel; the flags are already staged.
 - *Touches:* euets staging (flags present), a sibling mart + its own coverage
   handling/test, `site/sources/cairn/*.sql`, a page, CI fixture check.
 
-### 5. EU ETS carbon leakage list (Delegated Regulation 2019/708) → installation sector-exposure flag
+### 4. EU ETS carbon leakage list (Delegated Regulation 2019/708) → installation sector-exposure flag
 **Value: M · Effort: M · Spine-fit: H**
 
 Commission Delegated Regulation (EU) 2019/708 (OJ L 120, 11.5.2019, and
@@ -110,8 +101,8 @@ allocation. Pinning the list as a reviewed seed — like `sector_mapping_cbs.csv
 — lets the mart label every installation with its carbon-leakage-exposure status:
 a pure policy-context read/relabel, no computation. Answers "why does this sector
 receive more free allocation?" directly from official EU law, providing a
-provenance bridge between candidate #2 (surrendered allowances) and the
-allocation picture shipped in PR #31.
+provenance bridge between the shipped surrendered-vs-verified axis (PR #42/#54)
+and the allocation picture shipped in PR #31.
 - *Watch:* the list is versioned to a specific Regulation and OJ citation — pin
   it there; if an amending regulation is issued, open a new seed version rather
   than overwriting. Never derive a free-allocation **entitlement** from this flag
@@ -121,7 +112,7 @@ allocation picture shipped in PR #31.
 - *Touches:* reviewed seed `seeds/carbon_leakage_list.csv` (NACE/PRODCOM codes +
   regulation citation), a mart dimension column, `site/sources/cairn/*.sql`, a page.
 
-### 6. CBS NAMEA air emission accounts — residence-principle sector breakdown
+### 5. CBS NAMEA air emission accounts — residence-principle sector breakdown
 **Value: M · Effort: M · Spine-fit: H**
 
 CBS publishes NAMEA (National Accounting Matrix including Environmental Accounts)
@@ -130,20 +121,20 @@ NACE sector, using the **residence principle**. Unlike 85669NED
 (territorial/production principle), NAMEA attributes emissions to the industry of
 the emitting company's registered residence. The two methodologies diverge for
 transport, shipping, and multinationals with cross-border activity. Surfacing
-NAMEA as a provenance layer explains why 85669NED and the Eurostat AEA (#2)
-diverge for the same sector — it is the Dutch side of the AEA picture, directly
-from CBS via the same OData v4 API.
+NAMEA as a provenance layer explains why 85669NED and the Eurostat AEA (shipped,
+`benchmark_country_sector_emissions`) diverge for the same sector — it is the
+Dutch side of the AEA picture, directly from CBS via the same OData v4 API.
 - *Watch:* because it uses the residence principle, NAMEA national totals do
   **not** directly reconcile with 85669NED — document the bridge explicitly in a
   note rather than a `<0.5%` test (the divergence is methodological by design,
   not an error). Avoid duplicating AEA's cross-country story here; keep this as a
-  provenance-depth / methodology-bridge layer for NL only. RIVM (#7) also
+  provenance-depth / methodology-bridge layer for NL only. RIVM (#2) also
   deepens NL provenance but from the territorial side — these are complementary,
   not redundant.
 - *Touches:* `ingestion/cbs_namea_pipeline.py`, `sources/cbs_namea/manifest.yml`,
   staging model, a provenance/cross-check model, `site/sources/cairn/*.sql`.
 
-### 7. Coverage & completeness observability — surface the reconciliation drift the tests already compute
+### 6. Coverage & completeness observability — surface the reconciliation drift the tests already compute
 **Value: M · Effort: L · Spine-fit: M**
 
 The provenance-integrity view (`mart_data_provenance`) and its **Data quality**
@@ -166,7 +157,7 @@ chain pinned?" to "how complete is the coverage?".
   `benchmark_installation_emissions` (+ the EEA aggregate), `site/sources/cairn/*.sql`
   + the existing Data quality page, dbt tests.
 
-### 8. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
+### 7. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
 **Value: M · Effort: L · Spine-fit: H**
 
 Several mart columns are deliberately nullable — `lei`, `allocated_total`,
@@ -184,7 +175,7 @@ coverage (e.g. the LEI mapping) be watched as it grows over time.
 - *Touches:* a read-only completeness mart over the existing marts,
   `site/sources/cairn/*.sql` + the Data quality page, dbt tests.
 
-### 9. Freshness / staleness observability — how current is each source?
+### 8. Freshness / staleness observability — how current is each source?
 **Value: M · Effort: L · Spine-fit: H**
 
 The manifests pin each source's release and ingest date; the marts know the
@@ -208,6 +199,10 @@ the Data quality page.
 *(Don't re-propose these. If circumstances change, move an item back up with the
 new reason it now fits.)*
 
+- **EUTL surrendered allowances → verified-vs-surrendered compliance-integrity
+  axis.** Shipped: mart layer merged in PR #42 (2026-06-26), site layer merged in
+  PR #54 (2026-06-27). `surrendered_allowances_t_co2eq` is live on
+  `benchmark_installation_emissions` and surfaced on the installations page.
 - **GLEIF / LEI → installation → legal-entity mapping.** Shipped: merged in
   PR #66 (2026-06-27). The `lei_mapping_euets` seed is live; `benchmark_installation_emissions`
   carries `lei`, `gleif_legal_name`, and `parent_company`; the ESRS E1 export
