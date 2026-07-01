@@ -63,12 +63,12 @@ jobs:
           # Bash is unrestricted because git branch/commit/push runs through
           # shell control flow that prefix matching can't see.
           # mcp__github__create_pull_request is the bundled github-mcp-server's
-          # actual tool name. --model Sonnet: re-scoring one markdown file
+          # actual tool name. --model Sonnet 5: re-scoring one markdown file
           # against an explicit rubric needs no Opus-level judgement.
           show_full_output: true
           claude_args: >-
             --max-turns 20
-            --model claude-sonnet-4-6
+            --model claude-sonnet-5
             --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,mcp__github__list_issues,mcp__github__list_pull_requests,mcp__github__search_pull_requests,mcp__github__create_pull_request"
           prompt: |
             You are Cairn's backlog curator. Read CLAUDE.md, all of BACKLOG.md

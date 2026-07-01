@@ -140,13 +140,13 @@ jobs:
           # actual tool name (issue_write does not exist and silently denies).
           # --add-dir /tmp lets Read/Grep follow scratch fallback files.
           # show_full_output surfaces denied tool calls in the job log.
-          # --model Sonnet: a mechanical freshness/duplicate check needs no
+          # --model Sonnet 5: a mechanical freshness/duplicate check needs no
           # Opus-level judgement.
           show_full_output: true
           claude_args: >-
             --max-turns 20
             --add-dir /tmp
-            --model claude-sonnet-4-6
+            --model claude-sonnet-5
             --allowedTools "Read,Glob,Grep,TodoWrite,WebFetch,WebSearch,Bash,mcp__github__list_issues,mcp__github__create_issue"
           prompt: |
             You are Cairn's daily scout. CLAUDE.md and BACKLOG.md are authoritative,

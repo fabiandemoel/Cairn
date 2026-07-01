@@ -59,14 +59,14 @@ jobs:
       # ingest, confirm a new snapshot, refresh fixtures, run dbt/pytest) â€”
       # Haiku is sufficient and ~much cheaper. feat issues require design
       # judgement (new dbt models, mappings, site queries) and stay on
-      # Sonnet. Falls back to Sonnet if the label can't be read.
+      # Sonnet 5. Falls back to Sonnet 5 if the label can't be read.
       - name: Determine model based on issue labels
         id: model
         uses: actions/github-script@v7
         with:
           script: |
             const issueNumber = ${{ github.event.issue.number || github.event.inputs.issue_number }};
-            let model = "claude-sonnet-4-6";
+            let model = "claude-sonnet-5";
             let title = "";
             let labelsCsv = "";
             try {
@@ -78,7 +78,7 @@ jobs:
               const labels = issue.labels.map(l => (typeof l === "string" ? l : l.name));
               labelsCsv = labels.join(",");
               title = issue.title || "";
-              model = labels.includes("data-refresh") ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+              model = labels.includes("data-refresh") ? "claude-haiku-4-5-20251001" : "claude-sonnet-5";
               core.info(`Issue #${issueNumber} labels: ${labelsCsv} -> model ${model}`);
             } catch (err) {
               core.warning(`Could not read labels for #${issueNumber}, defaulting to Sonnet: ${err}`);
@@ -223,7 +223,7 @@ jobs:
           # --max-turns 100: a full new-source slice (ingestion + mart + test
           # + site) needs room; 20 then 60 both hit error_max_turns mid-work
           # (runs 28085542460, 28173119243). --model sets the ORCHESTRATOR model:
-          # the model step above runs it as Sonnet for feat issues (design
+          # the model step above runs it as Sonnet 5 for feat issues (design
           # judgement) and drops to Haiku for data-refresh (a fixed checklist).
           # The runner and legwork subagents are pinned to Haiku regardless.
           show_full_output: true

@@ -25,7 +25,7 @@ RESULT = {
         "cache_creation_input_tokens": 100,
     },
     "modelUsage": {
-        "claude-sonnet-4-6": {
+        "claude-sonnet-5": {
             "inputTokens": 1000,
             "outputTokens": 500,
             "cacheReadInputTokens": 8000,
@@ -67,8 +67,8 @@ def test_summarize_pulls_figures_and_model_breakdown() -> None:
     assert s.duration_ms == 34500
     assert s.input_tokens == 1200
     assert s.cache_read == 8900
-    assert [m.model for m in s.models] == ["claude-haiku-4-5", "claude-sonnet-4-6"]
-    sonnet = next(m for m in s.models if m.model == "claude-sonnet-4-6")
+    assert [m.model for m in s.models] == ["claude-haiku-4-5", "claude-sonnet-5"]
+    sonnet = next(m for m in s.models if m.model == "claude-sonnet-5")
     assert sonnet.cost_usd == 0.10
     assert sonnet.cache_write == 80
 
@@ -85,7 +85,7 @@ def test_render_markdown_has_cost_and_table_and_footer() -> None:
     assert "$0.1234" in md
     assert "12 turns" in md
     assert "34.5s" in md
-    assert "| claude-sonnet-4-6 |" in md
+    assert "| claude-sonnet-5 |" in md
     assert "Cairn Implement" in md
     assert "[run](https://x/run)" in md
 
