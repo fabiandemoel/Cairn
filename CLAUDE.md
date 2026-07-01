@@ -248,10 +248,12 @@ which is a real integrity alarm, not flakiness.
 
 
 ### Agent automation (CI maintenance loop)
-Three scheduled workflows run Claude against this repo, plus one manually
-triggered, non-LLM workflow that performs the actual R2 write. They never
-bypass the invariants above, and the existing CI (lint, test, dbt-build,
-evidence-build, benchmark-diff) is the gate for every code change.
+Two workflows run Claude against this repo (implement, replenish), plus two
+non-LLM workflows: the manually triggered ingest that performs the actual R2
+write, and the deterministic dispatcher that turns freshness diffs and the
+backlog into issues. None of them ever bypass the invariants above, and the
+existing CI (lint, test, dbt-build, evidence-build, benchmark-diff) is the
+gate for every code change.
 
 - **`cairn-ingest.yml`** — manual only (`workflow_dispatch`, pick a source from
   the dropdown). No LLM runs in this job; it directly invokes that source's
@@ -263,17 +265,23 @@ evidence-build, benchmark-diff) is the gate for every code change.
   (the rest of the matching "Recurring maintenance" checklist below) still
   need doing before it's safe to merge — a bare manifest bump alone is
   expected to fail `dbt build`/`pytest` in that PR's CI run. A `data-refresh`
-  issue from `cairn-scout.yml` is the usual trigger to run this by hand.
-- **`cairn-scout.yml`** (daily) — read-only. Checks each source's upstream
-  release token (the freshness signals documented above) against
-  `sources/*/manifest.yml`, and dispatches the top of BACKLOG.md. Output is
-  GitHub issues labelled `proposal` — never code, never a PR. Two no-LLM steps
-  run before the agent: a **freshness precompute** (`scripts/check_freshness.py`,
-  weekly only) that emits the live-vs-pinned table so the agent never probes a
-  source itself, and a **saturation gate** that skips the Claude step entirely
-  on a non-freshness day when the un-approved `proposal` backlog is already at
-  the threshold (Actions variable `SCOUT_BACKLOG_SATURATION`, default 5) — the
-  zero-cost path when there is nothing worth dispatching.
+  issue from `cairn-dispatch.yml` is the usual trigger to run this by hand.
+- **`cairn-dispatch.yml`** (on every merge to main + weekly Monday cron) —
+  **no LLM at all**; it replaced the former cairn-scout agent once both scout
+  tasks turned out to be deterministic. `scripts/dispatch.py` (stdlib-only,
+  unit-tested in `tests/test_dispatch.py`) makes every decision: the weekly
+  freshness check turns `scripts/check_freshness.py`'s live-vs-pinned diff
+  into one templated `data-refresh` issue per STALE source (euets/eua stay
+  human-watched, never probed), and the backlog dispatcher opens at most one
+  issue per run for the top BACKLOG.md candidate's next not-yet-built layer,
+  determined by the sentinel paths in that candidate's `<!-- dispatch -->`
+  block (schema in BACKLOG.md's "Dispatch metadata" section, maintained by
+  replenish). Dedup against open issues/PRs and the saturation gate (Actions
+  variable `SCOUT_BACKLOG_SATURATION`, default 5 un-approved proposals) live
+  in the same tested script. Output is GitHub issues labelled `proposal` —
+  never code, never a PR. Event-driven on purpose: the next layer becomes
+  dispatchable exactly when the previous one merges, so `push` to main is the
+  trigger and no daily polling (or LLM spend) is needed.
 - **`cairn-implement.yml`** — runs only when a human adds the `approved` label
   to an issue (or via manual dispatch). Implements that one issue on an
   `agent/*` branch and opens a PR against main. It must pass the full local CI
@@ -291,9 +299,9 @@ evidence-build, benchmark-diff) is the gate for every code change.
   *scores* on individual figures; that line stays in BACKLOG's _Considered and
   rejected_.
 
-**Prompt priming (cost optimisation).** All three agent workflows run no-LLM
-steps *before* the Claude step so the agent never has to re-derive stable facts
-turn by turn (the dominant repeated cost in the run logs):
+**Prompt priming (cost optimisation).** Both agent workflows run no-LLM steps
+*before* the Claude step so the agent never has to re-derive stable facts turn
+by turn (the dominant repeated cost in the run logs):
 - **Pre-build (implement only).** A `continue-on-error` step runs `uv sync`,
   `dbt build`, `scripts/export_esrs_e1.py`, and `npm ci && npm run sources` —
   mirroring ci.yml — so the agent starts from a built warehouse
@@ -307,11 +315,11 @@ turn by turn (the dominant repeated cost in the run logs):
   which sources / staging models / marts / site queries / pages exist — captured
   into a step output and injected into the prompt. It scans the tree each run, so
   it never goes stale. It's the single rendered source for the build sequence
-  (the prompt points at it rather than hardcoding the command list), and it gives
-  scout the layer inventory it uses to pick a candidate's next not-yet-done
-  layer and replenish the inventory it uses to retire shipped candidates and
-  score remaining effort. Injected into all three agent prompts. Keep the map
-  tight: it is re-sent on every agent turn.
+  (the prompt points at it rather than hardcoding the command list), and it
+  gives replenish the layer inventory it uses to retire shipped candidates and
+  score remaining effort. Injected into both agent prompts. Keep the map
+  tight: it is re-sent on every agent turn. (The dispatcher does not need it —
+  it checks the candidate's sentinel paths against the tree directly.)
 - **Per-layer reference (implement only).** `scripts/reference_for_layer.py`
   (stdlib-only, unit-tested in `tests/test_reference_for_layer.py`) infers the
   issue's layer from its title/labels and inlines the canonical in-tree
@@ -329,17 +337,19 @@ turn by turn (the dominant repeated cost in the run logs):
   subagent task (never curl the source from its own turns, and never run the real
   `--offline` ingest — it mutates the manifest with a `file://` snapshot), and to
   avoid the background-task/agent-messaging tools that add turns without value.
-- **Upstream freshness precompute (scout only).** `scripts/check_freshness.py`
-  (stdlib-only, unit-tested in `tests/test_check_freshness.py`) runs on freshness
-  days and emits a live-vs-pinned table for every source, so the scout agent acts
-  on a ready-made diff instead of discovering release tokens by hand. It reads the
-  source-specific bits a human bumps (CBS table id, Eurostat dataset id, euets/EEA
-  `DEFAULT_URL`) from the pipeline files so it can't drift from the pin of record,
-  and treats **euets.info as human-watched** — it has no upstream index, so its
-  live token equals the pin by construction and must never be probed (the agent
-  used to brute-force dozens of S3 filenames discovering exactly that). It is a
-  `continue-on-error` step: a failed probe marks that one source "verify" and the
-  agent falls back, so it is an optimisation, not a gate.
+- **Upstream freshness (now fully no-LLM).** `scripts/check_freshness.py`
+  (stdlib-only, unit-tested in `tests/test_check_freshness.py`) computes the
+  live-vs-pinned diff per source; `scripts/dispatch.py` consumes its structured
+  `collect_statuses` output directly, so no agent is involved anywhere in the
+  freshness path anymore. It reads the source-specific bits a human bumps (CBS
+  table id, Eurostat dataset id, euets/EEA `DEFAULT_URL`) from the pipeline
+  files so it can't drift from the pin of record, and treats **euets.info and
+  eua as human-watched** — they have no upstream index, so their live token
+  equals the pin by construction and must never be probed (the former scout
+  agent used to brute-force dozens of S3 filenames discovering exactly that).
+  A failed probe marks that one source "probe failed" in the dispatch run
+  summary for a human to verify — it never opens an issue and never crashes
+  the run.
 
 The human stays out of the doing for code changes; the manual acts are
 labelling an issue `approved`, manually running `cairn-ingest.yml` when a
@@ -348,17 +358,16 @@ checkpoint — keep it. BACKLOG.md is the curated menu these agents draw from;
 its "Rules of the game" restate these invariants as admission criteria for new
 sources.
 
-**Cost visibility.** Each of the three workflows ends with two best-effort steps
-that surface what the run cost. `scripts/ai_cost_summary.py` (stdlib-only,
-unit-tested in `tests/test_ai_cost_summary.py`) parses the action's
+**Cost visibility.** Both agent workflows end with two best-effort steps
+that surface what the run cost (the dispatcher runs no model, so it has no
+cost step). `scripts/ai_cost_summary.py` (stdlib-only, unit-tested in
+`tests/test_ai_cost_summary.py`) parses the action's
 `execution_file` output — its `total_cost_usd`, `usage`, `modelUsage`,
 `num_turns`, `duration_ms` — into a markdown comment and the total cost in USD.
 The shared `.github/scripts/attribute_run_cost.js` github-script module then
-posts that comment and sets a Projects v2 Number field for each issue/PR the run
-touched: implement/replenish resolve the PR they opened by branch prefix
-(`agent/<issue>-*`, `replenish/*`); scout timestamps its start and resolves the
-0–3 issues it opened via Search (a multi-issue run double-attributes the run's
-cost — accepted). Both steps run `if: always()` and the Projects v2 update is
+posts that comment and sets a Projects v2 Number field for the PR the run
+opened, resolved by branch prefix (`agent/<issue>-*`, `replenish/*`).
+Both steps run `if: always()` and the Projects v2 update is
 wrapped in try/catch, so a missing board/field or a token without `project`
 scope **warns** rather than failing the run. Configuration:
   - Board defaults to `fabiandemoel` project **#1** ("AI Management"), field
