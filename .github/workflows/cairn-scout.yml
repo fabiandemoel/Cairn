@@ -208,7 +208,25 @@ jobs:
                    issue, or if the previous layer's PR is still open/unmerged (its
                    prerequisite hasn't landed â€” nothing to dispatch yet).
                Title the issue "feat: <candidate name> â€” <layer>" (e.g.
-               "â€” ingestion", "â€” dbt mart", "â€” site"), labelled `proposal`. Scope the
+               "â€” ingestion", "â€” dbt mart", "â€” site"), labelled `proposal`. If -- and
+               only if -- <layer> is "ingestion" or a dbt *staging* model (not a mart,
+               not site/export), a no-LLM step in cairn-implement can pre-scaffold that
+               layer's fixed boilerplate for you, so add this exact block near the top
+               of the body, right after the executive summary, with the source/dataset
+               as lowercase_with_underscores slugs (derived from the candidate name --
+               e.g. "RIVM Emissieregistratie" -> source `rivm`, dataset
+               `emissieregistratie`):
+
+                 Scaffold parameters:
+                 - source: <slug>
+                 - dataset: <slug>
+
+               Get the slugs right or omit the block entirely -- a wrong/malformed slug
+               just falls back to the agent writing the file itself, so there's no harm
+               in leaving it out when you're unsure, but never invent a slug that isn't a
+               clean read of the candidate's actual source/dataset name. Omit the block
+               entirely for a mart, site, export, or data-refresh issue -- there is no
+               scaffold for those layers. Scope the
                body to that layer ONLY: the slice of the backlog entry's
                value/effort/spine-fit and "watch" caveats relevant to it, the repo
                paths it touches, and which earlier layers it assumes are already
