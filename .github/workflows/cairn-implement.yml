@@ -328,6 +328,20 @@ jobs:
             or git) and continue. Burning turns on an approval that will never arrive
             is the most expensive failure there is.
 
+            Run every subagent task SYNCHRONOUSLY and block on its result: dispatch a
+            runner/legwork Task and use its returned summary in the SAME turn. NEVER
+            launch a subagent in the background, and NEVER end your turn while a
+            subagent is still running. This run is a single non-interactive process -
+            when your turn ends, the run ends: there is no scheduled wakeup and no "the
+            runner will report back later". If you hand build/commit/push to `runner`
+            and then stop your turn to "wait", the process terminates with nothing
+            pushed and the ship-guard fails the job with "shipped nothing" - that is
+            exactly what sank run #42 (the orchestrator dispatched the runner, then
+            ended its turn saying it would pick the result up when a wakeup fired; no
+            wakeup exists here). Only end your turn once `runner` has CONFIRMED the
+            branch is pushed and the PR is open (or you have opened a draft PR
+            explaining the blocker).
+
             Baseline: CI on `main` (commit ${{ steps.main_ci.outputs.sha }}) was last
             ${{ steps.main_ci.outputs.conclusion }} (${{ steps.main_ci.outputs.url }}).
             Trust it: if a check fails after your change and isn't obviously related to
