@@ -6,7 +6,7 @@ that raw file. This is the end-to-end proof behind every benchmark figure:
 commit + manifest + immutable raw file reproduce the numbers.
 
 By default it verifies every source with a transform layer (CBS, euets.info, EEA,
-Eurostat AEA, Eurostat GGE); pass --source to
+Eurostat AEA, Eurostat GGE, EEX auction prices); pass --source to
 target one. Each source skips gracefully -- if its manifest pins no snapshot
 yet, or its snapshot lives in R2 and the R2_* secrets are absent -- so CI stays
 green without credentials.
@@ -76,9 +76,11 @@ SOURCES: dict[str, dict] = {
         "var": "eurostat_gge_raw_dir",
         "files": ("data.parquet",),
     },
-    # eua (EEX auction prices) is intentionally absent: it is ingestion-only
-    # (no dbt staging model / no *_raw_dir var consuming it), so there is no
-    # rebuilt mart to reproduce. Add it here when it grows a transform layer.
+    "eua": {
+        "manifest": REPO_ROOT / "sources" / "eua" / "manifest.yml",
+        "var": "eua_raw_dir",
+        "files": ("data.parquet",),
+    },
 }
 
 
