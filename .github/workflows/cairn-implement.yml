@@ -262,6 +262,9 @@ jobs:
           # mcp__github__get_issue / mcp__github__create_pull_request are the
           # bundled github-mcp-server's actual tool names (run 28085542460);
           # guessing wrong (issue_read, issue_write) silently denies them.
+          # get_issue is only a fallback now - the model step already fetches
+          # the issue and the prompt inlines its title/body, saving the
+          # fetch turn every run started with.
           #
           # --max-turns 100: a full new-source slice (ingestion + mart + test
           # + site) needs room; 20 then 60 both hit error_max_turns mid-work
@@ -350,15 +353,21 @@ jobs:
 
             ${{ steps.scaffold.outputs.note }}
 
-            Treat the ISSUE BODY as the authoritative spec - the no-LLM dispatcher
-            (cairn-dispatch.yml) generates it from the BACKLOG.md candidate: it names
-            the layer's sentinel artifact, the earlier/later layers, and quotes the
-            candidate entry with its watch caveats verbatim. Execute it directly;
-            investigate the codebase only where it is genuinely insufficient or
-            ambiguous.
-
             Implement issue
-            #${{ github.event.issue.number || github.event.inputs.issue_number }}.
+            #${{ github.event.issue.number || github.event.inputs.issue_number }},
+            titled "${{ steps.model.outputs.title }}". Its body is inlined between the
+            <issue-body> tags below, fetched at the start of this run - do NOT spend a
+            turn re-fetching it with get_issue (that tool is a fallback for the rare
+            case the block below is empty because the fetch failed). Treat it as the
+            authoritative spec - the no-LLM dispatcher (cairn-dispatch.yml) generates
+            it from the BACKLOG.md candidate: it names the layer's sentinel artifact,
+            the earlier/later layers, and quotes the candidate entry with its watch
+            caveats verbatim. Execute it directly; investigate the codebase only where
+            it is genuinely insufficient or ambiguous.
+
+            <issue-body>
+            ${{ steps.model.outputs.body }}
+            </issue-body>
             - `data-refresh`: follow the matching CLAUDE.md "Recurring maintenance"
               checklist exactly (idempotent ingest, new append-only snapshot, refresh CI
               fixtures, bump release dirs, re-check the assumptions the models lean on).
