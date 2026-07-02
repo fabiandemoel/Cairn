@@ -172,15 +172,20 @@ Checklist:
    and open the manifest-pin PR for you.
 2. Confirm a **new** append-only snapshot landed in `sources/eua/manifest.yml`
    (new `release`, new `sha256`). The old snapshot stays.
-3. **Scope note (invariant 5).** `eua` is currently **ingestion-only**: the
-   auction *clearing price* has no dbt staging model, no `*_raw_dir` var, and no
-   CI fixture yet, so there is no fixture/`dbt_project.yml`/mart step to refresh
-   and `eua` is intentionally absent from `verify_reproducibility.py`. The price
-   is context for a future site overlay only — it must **never** appear in a dbt
-   mart figure or the ESRS E1 export. If it ever grows a transform layer, add it
-   to `verify_reproducibility.py` and follow the same fixture/`*_raw_dir` steps
+3. **Refresh the staging layer's fixture.** `eua` now has a read-only transform
+   layer — `stg_eua__auction_results` (a straight read/relabel view over the
+   pinned auction parquet via the `eua_raw_dir` var), a CI fixture under
+   `tests/fixtures/eua/<release>/`, and an entry in `verify_reproducibility.py`.
+   So when the release token changes, refresh that fixture and bump the
+   `eua_raw_dir` default in `transform/dbt_project.yml`, the fixture release dir,
+   and the `verify_reproducibility.py` path — the same fixture/`*_raw_dir` steps
    as the other sources.
-4. `pytest`, linters green. Note the release in the README (Source quirks).
+4. **Scope note (invariant 5).** The auction *clearing price* the staging view
+   exposes is context for a future site overlay only — it must **never** appear
+   in a dbt **mart** figure or the ESRS E1 export. `stg_eua__auction_results` is
+   deliberately not `ref`'d by any benchmark mart; keep it that way (no
+   `tonnes × price`, no currency conversion — a straight typed pass-through).
+5. `dbt build`, `pytest`, linters green. Note the release in the README (Source quirks).
 
 ### Classification updates (medium-term, real)
 The mapping rests on SBI 2008 ⊃ NACE Rev.2. Both are migrating:

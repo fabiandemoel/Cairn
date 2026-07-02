@@ -204,6 +204,33 @@ models:
           some source cells carry no observation; NULL is left as NULL, never a
           placeholder zero.
 
+  - name: stg_eua__auction_results
+    description: >
+      Typed 1:1 view of the pinned EEX EU ETS primary-market auction results
+      (auction clearing price and outcome per auction event). A straight
+      read/relabel of the pinned snapshot: no computation, no row filtering. Per
+      CLAUDE.md invariant 5 this is context for a future site overlay only -- it
+      must never be ref'd by a benchmark mart or the ESRS E1 export.
+    columns:
+      - name: auction_key
+        description: Surrogate natural key (auction date serial | auction name).
+        tests:
+          - unique
+          - not_null
+      - name: auction_date
+        description: Auction date, decoded from the Excel serial-date Time column.
+        tests:
+          - not_null
+      - name: auction_name
+        description: Auction platform / name (e.g. T3PA, PL, DE).
+        tests:
+          - not_null
+      - name: auction_price_eur_per_tco2
+        description: >
+          Auction clearing price in EUR per tonne CO2. Nullable -- a cancelled or
+          non-numeric auction row carries no price; NULL is left as NULL, never a
+          placeholder zero.
+
   - name: stg_eea__ets
     description: >
       Typed 1:1 view of the EEA EU ETS aggregate (country x main activity x year

@@ -111,6 +111,7 @@ Order _Live candidates_ by value, then spine-fit, then (inverse) effort.
 hold: site-overlay-only; deferred unless commercial positioning becomes the active priority
 layers:
   ingestion: sources/eua/manifest.yml
+  staging: transform/models/staging/stg_eua__auction_results.sql
   site: site/sources/cairn/eua_price.sql
 -->
 **Value: H (commercial) · Effort: M · Spine-fit: L**
@@ -122,16 +123,20 @@ pinned-snapshot, read/relabel model.
 - *Layers:*
   - ingestion — **shipped** (issue #72, 2026-06-30): `ingestion/eua_pipeline.py`
     + `sources/eua/manifest.yml`, pinned from the EEX auction-report archive.
-    Per CLAUDE.md invariant 5 and the `eua` recurring-maintenance entry the
-    source stays **ingestion-only by design** — no staging model, no mart
-    column, no `*_raw_dir` var, no CI fixture.
+  - staging — **shipped** (issue #84, this PR): `stg_eua__auction_results`, a
+    read-only read/relabel view over the pinned auction parquet via the
+    `eua_raw_dir` var (CI fixture under `tests/fixtures/eua/<release>/`, `not_null`/
+    `unique` on the natural key, and `eua` added to `verify_reproducibility.py`).
+    Deliberately **not** `ref`'d by any mart — a strictly-labelled context table,
+    not a benchmark figure (this was the "revisit invariant 5 first" the site
+    layer was gated behind; the price still never enters a mart or the export).
   - site (the only remaining scope, gated on the hold) — a strictly **labelled
-    context overlay** on the site, sourced from the pinned auction results and
-    versioned per release like any other source.
-- *Watch:* never a stored mart figure, never in the ESRS E1 export, and no dbt
-  staging model without revisiting CLAUDE.md invariant 5 first. The hold is
-  positioning, not missing plumbing — lift it only when the € overlay becomes
-  the active priority.
+    context overlay** on the site, sourced from the pinned auction results (now
+    queryable via `stg_eua__auction_results`) and versioned per release.
+- *Watch:* never a stored mart figure, never in the ESRS E1 export, and no
+  `tonnes × price` / currency computation anywhere — the staging view is a plain
+  typed pass-through. The hold is positioning, not missing plumbing — lift it
+  only when the € overlay becomes the active priority.
 
 ### 2. Emissieregistratie (RIVM) → deepen NL provenance + granularity
 <!-- dispatch
