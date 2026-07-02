@@ -277,7 +277,7 @@ gate for every code change.
   determined by the sentinel paths in that candidate's `<!-- dispatch -->`
   block (schema in BACKLOG.md's "Dispatch metadata" section, maintained by
   replenish). Dedup against open issues/PRs and the saturation gate (Actions
-  variable `SCOUT_BACKLOG_SATURATION`, default 5 un-approved proposals) live
+  variable `DISPATCH_BACKLOG_SATURATION`, default 5 un-approved proposals) live
   in the same tested script. Output is GitHub issues labelled `proposal` —
   never code, never a PR. Event-driven on purpose: the next layer becomes
   dispatchable exactly when the previous one merges, so `push` to main is the

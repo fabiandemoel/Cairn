@@ -14,7 +14,7 @@ name: Cairn Dispatch
 #      declaring one sentinel path per layer. The first layer whose sentinel
 #      does not exist on main is the next issue — opened at most one per run,
 #      after dedup against open issues/PRs and the saturation gate
-#      (SCOUT_BACKLOG_SATURATION, default 5 un-approved proposals).
+#      (DISPATCH_BACKLOG_SATURATION, default 5 un-approved proposals).
 #
 # Event-driven on purpose: the next layer of a candidate becomes dispatchable
 # at exactly the moment the previous layer merges to main, so `push` is the
@@ -93,7 +93,7 @@ jobs:
       - name: Compute dispatch decisions
         env:
           SCOPE: ${{ steps.scope.outputs.scope }}
-          THRESHOLD: ${{ vars.SCOUT_BACKLOG_SATURATION || '5' }}
+          THRESHOLD: ${{ vars.DISPATCH_BACKLOG_SATURATION || '5' }}
         run: |
           python3 -m scripts.dispatch \
             --scope "$SCOPE" \
