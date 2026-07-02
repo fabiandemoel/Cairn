@@ -289,7 +289,11 @@ gate for every code change.
   `CAIRN_BOT_TOKEN` (not `GITHUB_TOKEN`) so CI actually fires on them.
 - **`cairn-replenish.yml`** (weekly) — curates BACKLOG.md only, as a docs-only
   PR: new candidates, re-scoring, retiring off-spine ideas to "Considered and
-  rejected". Never merges. **Data-quality observability is a standing candidate
+  rejected". Never merges. Its docs-only PRs skip ci.yml's matrix
+  (paths-ignore), so `backlog-check.yml` gates them instead: on any BACKLOG.md
+  change it runs the dispatch-block guard test (`tests/test_dispatch.py`),
+  catching a malformed `<!-- dispatch -->` block before it can silently starve
+  the dispatcher. **Data-quality observability is a standing candidate
   theme here** alongside new sources and benchmark axes: read-only marts that
   surface coverage/completeness, field-completeness (NULL-rates), and freshness
   as *observable facts* over the manifests and existing marts. The shipped

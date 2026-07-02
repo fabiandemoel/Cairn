@@ -100,10 +100,25 @@ jobs:
               layers in dependency order, each with a sentinel path (a NEW file
               that layer will create, mirroring the entry's *Layers* plan), plus
               source/dataset slugs when the candidate adds a new source, or
-              `hold: <reason>` when it must not be dispatched yet. For existing
-              candidates, check the sentinel paths against the orientation map's
-              layer inventory: a candidate whose sentinels all exist has fully
-              shipped — retire it.
+              `hold: <reason>` when it must not be dispatched yet (a held
+              candidate keeps its `layers:` list so it dispatches correctly the
+              moment the hold lifts). For existing candidates, check the sentinel
+              paths against the orientation map's layer inventory:
+              - A candidate whose sentinels all exist has fully shipped — retire it.
+              - A partially shipped candidate keeps its shipped layers in the
+                block (their sentinels exist, so they're skipped); rewrite that
+                layer's *Layers* bullet into the one-line shipped record
+                (issue/PR + the pointers later layers still need), per the
+                Entry format.
+              - If a layer's artifact shipped under a DIFFERENT path than its
+                sentinel (the layer looks unbuilt, but the inventory shows its
+                artifact under another name), fix the sentinel — and the
+                source/dataset slugs — to match what actually shipped: a stale
+                sentinel makes the dispatcher re-open a done layer.
+            - Before opening the PR, verify every block still parses (stdlib-only):
+              `python3 -c "from pathlib import Path; from scripts.dispatch import parse_backlog; bad = [c.name + ': ' + c.parse_error for c in parse_backlog(Path('BACKLOG.md').read_text()) if c.parse_error]; assert not bad, bad"`
+              The backlog-check CI job runs the full guard test on your PR; a
+              malformed block fails it.
 
             Open ONE pull request against `main` from branch
             `replenish/<YYYY-MM-DD>`, titled "chore(backlog): weekly replenish".
