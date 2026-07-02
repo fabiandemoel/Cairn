@@ -4,7 +4,9 @@ on:
   # paths-ignore skips the build/lint/test matrix when a PR/push touches ONLY
   # these pure-docs files (no build depends on them) â€” chiefly the weekly
   # replenish PR, which edits BACKLOG.md alone. A mixed PR (docs + code) still
-  # runs CI. NB: site/**/*.md are Evidence pages and are deliberately NOT
+  # runs CI, and BACKLOG.md-only changes are still gated by backlog-check.yml
+  # (the dispatch-block guard test, which this skip would otherwise silence).
+  # NB: site/**/*.md are Evidence pages and are deliberately NOT
   # listed â€” changing one must still trigger evidence-build. CAVEAT: if these
   # jobs are required status checks under branch protection, a fully-skipped
   # run reports no check and the PR can stay "expected" â€” verify before relying

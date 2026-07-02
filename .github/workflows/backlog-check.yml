@@ -1,0 +1,32 @@
+name: Backlog Check
+
+# ci.yml deliberately path-ignores BACKLOG.md, so a docs-only PR — chiefly the
+# weekly replenish PR — skips the whole build/test matrix, including the one
+# test such a PR actually needs: tests/test_dispatch.py's guard that every live
+# candidate's <!-- dispatch --> block parses and lists its layers in dependency
+# order. A malformed block degrades to a silent skip at dispatch time, which
+# starves the automation loop; this tiny job gates it instead. The dispatch
+# machinery is stdlib-only, so plain pytest is enough — no uv sync, no project
+# dependencies. NB: same caveat as ci.yml — if this is made a required status
+# check under branch protection, PRs that don't touch BACKLOG.md report no run
+# for it and stay "expected".
+
+on:
+  pull_request:
+    paths:
+      - "BACKLOG.md"
+  push:
+    branches: [main]
+    paths:
+      - "BACKLOG.md"
+
+jobs:
+  dispatch-blocks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - run: python -m pytest tests/test_dispatch.py -q

@@ -262,6 +262,9 @@ jobs:
           # mcp__github__get_issue / mcp__github__create_pull_request are the
           # bundled github-mcp-server's actual tool names (run 28085542460);
           # guessing wrong (issue_read, issue_write) silently denies them.
+          # get_issue is only a fallback now - the model step already fetches
+          # the issue and the prompt inlines its title/body, saving the
+          # fetch turn every run started with.
           #
           # --max-turns 100: a full new-source slice (ingestion + mart + test
           # + site) needs room; 20 then 60 both hit error_max_turns mid-work
@@ -277,11 +280,13 @@ jobs:
           prompt: |
             CLAUDE.md and BACKLOG.md are authoritative and override this prompt, but
             they are long, so read them narrowly -- a big upfront read inflates
-            every later turn. Read
-            CLAUDE.md's "Non-negotiable invariants" in full, then grep both files for
-            the issue at hand and read only the matching section (a `data-refresh`
-            issue's "Recurring maintenance" checklist, or a `feat` issue's BACKLOG.md
-            candidate). Consult "Gotchas" only when you hit something it covers.
+            every later turn. Read CLAUDE.md's "Non-negotiable invariants" in full.
+            For a `data-refresh` issue, grep CLAUDE.md for that source's "Recurring
+            maintenance" checklist and read only that. For a `feat` issue, the issue
+            body already quotes the BACKLOG.md candidate entry verbatim -- do NOT
+            re-read the entry in BACKLOG.md (open BACKLOG.md only for the upkeep
+            edit below, or if the body lacks the quoted entry because the issue was
+            written by hand). Consult "Gotchas" only when you hit something it covers.
 
             EXECUTION MODEL - read this first. You are the ORCHESTRATOR: you read
             files, author edits (Write/Edit), and make every decision. You do NOT act
@@ -348,40 +353,53 @@ jobs:
 
             ${{ steps.scaffold.outputs.note }}
 
-            Treat the ISSUE BODY as the authoritative spec - the no-LLM dispatcher
-            (cairn-dispatch.yml) generates it from the BACKLOG.md candidate: it names
-            the layer's sentinel artifact, the earlier/later layers, and quotes the
-            candidate entry with its watch caveats verbatim. Execute it directly;
-            investigate the codebase only where it is genuinely insufficient or
-            ambiguous.
-
             Implement issue
-            #${{ github.event.issue.number || github.event.inputs.issue_number }}.
+            #${{ github.event.issue.number || github.event.inputs.issue_number }},
+            titled "${{ steps.model.outputs.title }}". Its body is inlined between the
+            <issue-body> tags below, fetched at the start of this run - do NOT spend a
+            turn re-fetching it with get_issue (that tool is a fallback for the rare
+            case the block below is empty because the fetch failed). Treat it as the
+            authoritative spec - the no-LLM dispatcher (cairn-dispatch.yml) generates
+            it from the BACKLOG.md candidate: it names the layer's sentinel artifact,
+            the earlier/later layers, and quotes the candidate entry with its watch
+            caveats verbatim. Execute it directly; investigate the codebase only where
+            it is genuinely insufficient or ambiguous.
+
+            <issue-body>
+            ${{ steps.model.outputs.body }}
+            </issue-body>
             - `data-refresh`: follow the matching CLAUDE.md "Recurring maintenance"
               checklist exactly (idempotent ingest, new append-only snapshot, refresh CI
               fixtures, bump release dirs, re-check the assumptions the models lean on).
-            - `feat`: implement the BACKLOG.md candidate within its stated scope and
-              "watch" caveats. New numbers go in a dbt mart (tested there); the
-              site/export only read. Never invent figures - real source categories or
-              explicit NULL + a note. A new source gets its own append-only manifest
-              under sources/.
+            - `feat`: implement ONLY the single layer this issue asks for, within the
+              candidate's "watch" caveats - the issue's "Scope: this layer only"
+              section is binding, and later layers get their own issues once this
+              merges. New numbers go in a dbt mart (tested there); the site/export
+              only read. Never invent figures - real source categories or explicit
+              NULL + a note. A new source gets its own append-only manifest under
+              sources/.
             Never weaken a test to make a change pass.
 
             BACKLOG.md upkeep (for a `feat` issue only - skip this for `data-refresh`):
             the no-LLM dispatcher decides "this layer is done" purely by the sentinel
-            path in the candidate's `<!-- dispatch -->` block existing on main, so keep
-            that block truthful in the SAME PR:
+            path in the candidate's `<!-- dispatch -->` block existing on main, and it
+            quotes the entry verbatim into the NEXT layer's issue as soon as your PR
+            merges - so keep both truthful in the SAME PR:
               - If you name the layer's artifact differently than the sentinel path the
-                issue body states, update the candidate's `<!-- dispatch -->` block in
-                BACKLOG.md to the actual path - otherwise the dispatcher will consider
-                the layer still missing and re-dispatch it after your PR merges.
+                issue body states, update the candidate's `<!-- dispatch -->` block AND
+                the matching *Layers* bullet in BACKLOG.md to the actual path -
+                otherwise the dispatcher will consider the layer still missing and
+                re-dispatch it after your PR merges.
+              - Rewrite the shipped layer's *Layers* bullet into the one-line shipped
+                record BACKLOG.md's "Entry format" section prescribes (this issue/PR +
+                the pointers later layers still need). Change nothing else in the
+                entry - no extra status prose; the sentinels track doneness and the
+                weekly replenish keeps the rest tidy.
               - If this issue completes the candidate's LAST layer (every sentinel in
-                its block now exists), move the entry from "Live candidates" to
-                "Considered and rejected" in the style already there (`- **<name>.**
-                Shipped: merged in this PR (<date>). <one sentence naming the artifact
-                now live>.`) and renumber the remaining candidates. Do NOT add status
-                notes for intermediate layers - the dispatcher tracks that via the
-                sentinels; the weekly replenish keeps the prose tidy.
+                its block now exists), instead move the whole entry from "Live
+                candidates" to "Considered and rejected" in the style already there
+                (`- **<name>.** Shipped: merged in this PR (<date>). <one sentence
+                naming the artifact now live>.`) and renumber the remaining candidates.
 
             For a NEW data source, do all live-source discovery in ONE legwork task up
             front: hand it the source URL and ask for the column layout, the
