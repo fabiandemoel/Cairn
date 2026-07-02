@@ -67,7 +67,7 @@ def test_every_source_has_an_ingest_case_branch() -> None:
 def test_every_source_appears_in_freshness_report() -> None:
     # build_report probes upstream for some sources; with a fetcher that raises,
     # those rows degrade to "probe failed" but the source is still listed -- so
-    # the report is the full register of sources the scout watches.
+    # the report is the full register of sources the dispatcher watches.
     def _no_network(_url: str) -> tuple[str, str | None]:
         raise ConnectionError("network disabled in tests")
 
@@ -75,6 +75,6 @@ def test_every_source_appears_in_freshness_report() -> None:
     missing = {name for name in _sources() if f"| {name} |" not in report}
     assert not missing, (
         f"sources {sorted(missing)} are not listed in scripts/check_freshness.py's "
-        "report. Add a prober (or a human-watched row) so the scout sees their "
-        "freshness."
+        "report. Add a prober (or a human-watched row) so the dispatcher sees "
+        "their freshness."
     )

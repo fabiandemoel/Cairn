@@ -69,6 +69,7 @@ jobs:
             let model = "claude-sonnet-5";
             let title = "";
             let labelsCsv = "";
+            let body = "";
             try {
               const { data: issue } = await github.rest.issues.get({
                 owner: context.repo.owner,
@@ -78,17 +79,20 @@ jobs:
               const labels = issue.labels.map(l => (typeof l === "string" ? l : l.name));
               labelsCsv = labels.join(",");
               title = issue.title || "";
+              body = issue.body || "";
               model = labels.includes("data-refresh") ? "claude-haiku-4-5-20251001" : "claude-sonnet-5";
               core.info(`Issue #${issueNumber} labels: ${labelsCsv} -> model ${model}`);
             } catch (err) {
               core.warning(`Could not read labels for #${issueNumber}, defaulting to Sonnet: ${err}`);
             }
-            // title/labels feed the per-layer reference generator below; on a
-            // read failure they stay empty and the generator falls back to a
-            // "find the closest example" note rather than crashing.
+            // title/labels feed the per-layer reference generator below, and
+            // title/labels/body feed the layer-scaffold step; on a read
+            // failure they stay empty and both generators fall back to a
+            // "write it yourself" note rather than crashing.
             core.setOutput("model", model);
             core.setOutput("title", title);
             core.setOutput("labels", labelsCsv);
+            core.setOutput("body", body);
 
       # Timestamp the run start so the cost step can find the PR this run opens
       # (branch agent/<issue>-*) without grabbing an older one.
@@ -186,6 +190,35 @@ jobs:
             python3 scripts/reference_for_layer.py --title "$ISSUE_TITLE" --labels "$ISSUE_LABELS"
             echo
             echo 'REF_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # No-LLM: for an ingestion/staging issue whose body carries a
+      # "Scaffold parameters" source/dataset slug block (written by the no-LLM
+      # dispatcher from the candidate's BACKLOG.md dispatch block), pre-write the fixed
+      # boilerplate that layer's exemplar above shows (scaffold_ingestion.py /
+      # scaffold_staging.py) so the agent starts editing TODO markers instead of
+      # typing the plumbing from scratch. A mart/site/export/data-refresh issue,
+      # a missing/malformed slug block, or a target that already exists (partial
+      # progress from an earlier run) all degrade to an explanatory note (or no
+      # note at all) rather than touching the tree -- run as a module
+      # (`-m scripts.scaffold_for_layer`, not `scripts/scaffold_for_layer.py`)
+      # because it cross-imports the other scaffold_*.py modules, which only
+      # resolve as a package when the repo root is on sys.path. This is a cost
+      # optimisation, never a correctness gate: it never fails the job, and its
+      # absence just reproduces today's copy-the-exemplar behaviour.
+      - name: Scaffold this issue's layer (if applicable)
+        id: scaffold
+        continue-on-error: true
+        env:
+          ISSUE_TITLE: ${{ steps.model.outputs.title }}
+          ISSUE_LABELS: ${{ steps.model.outputs.labels }}
+          ISSUE_BODY: ${{ steps.model.outputs.body }}
+        run: |
+          {
+            echo 'note<<SCAFFOLD_EOF'
+            python3 -m scripts.scaffold_for_layer --title "$ISSUE_TITLE" --labels "$ISSUE_LABELS" --body "$ISSUE_BODY"
+            echo
+            echo 'SCAFFOLD_EOF'
           } >> "$GITHUB_OUTPUT"
 
       - id: claude
@@ -313,10 +346,14 @@ jobs:
             are out of scope. Every file you read rides in every later turn, so
             unnecessary reading is the single biggest cost driver.
 
-            Treat the ISSUE BODY as the authoritative spec - cairn-scout writes it with
-            the exact files to touch, fixture requirements, and watch caveats. Execute
-            it directly; investigate the codebase only where it is genuinely
-            insufficient or ambiguous.
+            ${{ steps.scaffold.outputs.note }}
+
+            Treat the ISSUE BODY as the authoritative spec - the no-LLM dispatcher
+            (cairn-dispatch.yml) generates it from the BACKLOG.md candidate: it names
+            the layer's sentinel artifact, the earlier/later layers, and quotes the
+            candidate entry with its watch caveats verbatim. Execute it directly;
+            investigate the codebase only where it is genuinely insufficient or
+            ambiguous.
 
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.
@@ -331,31 +368,20 @@ jobs:
             Never weaken a test to make a change pass.
 
             BACKLOG.md upkeep (for a `feat` issue only - skip this for `data-refresh`):
-            this issue is one layer of a BACKLOG.md candidate, and that file is stale
-            more often than not right now - a fully-shipped candidate has repeatedly sat
-            in "Live candidates" for days after merging, and cairn-scout then re-dispatches
-            the same already-done work (wasting a full implement run each time, no PR to
-            show for it). Break that loop from this side too:
-              - Identify which numbered candidate in BACKLOG.md's "Live candidates" this
-                issue implements (the issue body names it).
-              - If this issue completes that candidate's LAST remaining layer (check the
-                candidate's "Touches" line against what actually exists after your change -
-                use the orientation map's layer inventory), move that candidate's entry, in
-                the SAME PR, from "Live candidates" to "Considered and rejected", following
-                the exact style already there: `- **<candidate name>.** Shipped: merged in
-                PR #<this PR's number once known - if not yet known, say "this PR"> (<date>).
-                <one sentence naming the concrete artifact - column/mart/page - now live>.`
-                Renumber the remaining "Live candidates" headers and fix any internal
-                `candidate #N` / `(#N)` cross-references so they still point at the right
-                item - grep the file for `candidate #` and `(#` before finishing.
-              - If this issue only completes ONE layer of a multi-layer candidate (e.g. the
-                mart layer, with a site layer still to come), do NOT move it - instead
-                add/update a one-line `*Status:*` note under that candidate (mirroring
-                candidate #1's existing status note as a template) naming what shipped and
-                what layer is still open, so cairn-scout dispatches the next layer instead
-                of repeating this one.
-              - Do this as a normal part of the PR diff (one more file changed), not a
-              separate PR - `runner` stages and commits it with the rest of your change.
+            the no-LLM dispatcher decides "this layer is done" purely by the sentinel
+            path in the candidate's `<!-- dispatch -->` block existing on main, so keep
+            that block truthful in the SAME PR:
+              - If you name the layer's artifact differently than the sentinel path the
+                issue body states, update the candidate's `<!-- dispatch -->` block in
+                BACKLOG.md to the actual path - otherwise the dispatcher will consider
+                the layer still missing and re-dispatch it after your PR merges.
+              - If this issue completes the candidate's LAST layer (every sentinel in
+                its block now exists), move the entry from "Live candidates" to
+                "Considered and rejected" in the style already there (`- **<name>.**
+                Shipped: merged in this PR (<date>). <one sentence naming the artifact
+                now live>.`) and renumber the remaining candidates. Do NOT add status
+                notes for intermediate layers - the dispatcher tracks that via the
+                sentinels; the weekly replenish keeps the prose tidy.
 
             For a NEW data source, do all live-source discovery in ONE legwork task up
             front: hand it the source URL and ask for the column layout, the
@@ -393,7 +419,9 @@ jobs:
             Cairn context, spelling out each acronym or jargon term on first use (e.g.
             "EU ETS (the EU's Emissions Trading System)", "manifest (the append-only
             file that pins which source snapshot Cairn uses)"). Below it, keep the
-            technical content: link the issue, summarise the change, state the
+            technical content: link the issue with a closing keyword ("Closes
+            #<issue>" - the dispatcher's dedup relies on the issue auto-closing
+            when the PR merges), summarise the change, state the
             data/methodology impact, and list any assumptions. Do NOT merge. If you
             cannot make CI pass within scope, open a DRAFT PR explaining exactly what
             blocks it rather than forcing it green.

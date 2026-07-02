@@ -1,7 +1,7 @@
 """Emit a compact "repo orientation" map for the agent workflows.
 
 This is a no-LLM, stdlib-only helper run as a workflow step *before* the Claude
-step in cairn-implement.yml and cairn-scout.yml. Its stdout is injected into the
+step in cairn-implement.yml and cairn-replenish.yml. Its stdout is injected into the
 agent's prompt so the agent starts already knowing the stable, slow-to-discover
 facts about the repo — the build/verify sequence, where the dbt warehouse lives
 and how Evidence reaches it, and which sources / staging models / marts / site

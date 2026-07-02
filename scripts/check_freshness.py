@@ -1,18 +1,19 @@
-"""Precompute the upstream-freshness diff for cairn-scout (no-LLM).
+"""Precompute the upstream-freshness diff for cairn-dispatch (no-LLM).
 
-cairn-scout's weekly task is to compare each source's live upstream release token
-against the pin in ``sources/<name>/manifest.yml`` and open a ``data-refresh``
-issue when a newer release exists. Run-log analysis showed the agent spent the
-bulk of a scout run *discovering* those live tokens by hand — and for euets.info,
-which has no upstream index, it brute-forced dozens of candidate S3 filenames
-before concluding there was nothing to find (run 28368467174: ~20 of 33 turns).
+The weekly freshness task is to compare each source's live upstream release
+token against the pin in ``sources/<name>/manifest.yml`` and open a
+``data-refresh`` issue when a newer release exists. This used to be an agent
+task; run-log analysis showed the agent spent the bulk of a run *discovering*
+those live tokens by hand — and for euets.info, which has no upstream index, it
+brute-forced dozens of candidate S3 filenames before concluding there was
+nothing to find (run 28368467174: ~20 of 33 turns).
 
-This stdlib-only helper does that diff deterministically and emits a compact
-report injected into the scout prompt, so the agent opens issues for the sources
-already marked STALE instead of probing anything itself. It is wired as a
-``continue-on-error`` step: if a probe fails (network, source layout change),
-that source is marked "probe failed" and the agent can fall back to checking it
-— this is a cost optimisation, never a correctness gate.
+This stdlib-only helper does that diff deterministically. ``collect_statuses``
+returns the structured per-source result that ``scripts/dispatch.py`` turns
+into ``data-refresh`` issues; ``build_report`` renders the same result as the
+compact markdown table (used in job logs/summaries). A probe failure (network,
+source layout change) marks that one source "probe failed" and never crashes
+the run — a human sees it in the weekly job summary.
 
 Design notes:
 
@@ -35,6 +36,7 @@ import json
 import re
 import urllib.request
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -48,7 +50,7 @@ Fetcher = Callable[[str], "tuple[str, str | None]"]
 
 def _http_get(url: str, *, timeout: int = 25) -> tuple[str, str | None]:
     """Fetch a URL; return (body, Content-Disposition filename or None)."""
-    req = urllib.request.Request(url, headers={"User-Agent": "cairn-scout-freshness"})
+    req = urllib.request.Request(url, headers={"User-Agent": "cairn-dispatch-freshness"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
         filename = resp.headers.get_filename()
         body = resp.read().decode("utf-8", errors="replace")
@@ -218,10 +220,25 @@ def _live_eea(root: Path, fetch: Fetcher) -> str:
     return token
 
 
-def build_report(root: Path, *, fetch: Fetcher = _http_get) -> str:
-    """Render the freshness table + a one-line stale summary for the prompt."""
-    rows: list[tuple[str, str, str, str]] = []  # source, pinned, live, status
-    stale: list[str] = []
+@dataclass(frozen=True)
+class SourceStatus:
+    """Structured freshness verdict for one source.
+
+    ``state`` is one of: ``current``, ``stale``, ``unpinned``, ``probe-failed``,
+    ``human-watched``. ``note`` carries the free-text status cell rendered in the
+    markdown table.
+    """
+
+    source: str
+    pinned: str | None
+    live: str | None
+    state: str
+    note: str
+
+
+def collect_statuses(root: Path, *, fetch: Fetcher = _http_get) -> list[SourceStatus]:
+    """Compare every source's live upstream release token against its pin."""
+    statuses: list[SourceStatus] = []
 
     def manifest_pin(name: str) -> str | None:
         path = root / "sources" / name / "manifest.yml"
@@ -238,43 +255,57 @@ def build_report(root: Path, *, fetch: Fetcher = _http_get) -> str:
         try:
             live = prober(root, fetch)
         except Exception as err:  # noqa: BLE001 — any probe failure degrades, never crashes
-            rows.append((name, pin or "—", "?", f"probe failed ({type(err).__name__}) — verify"))
+            statuses.append(
+                SourceStatus(
+                    name, pin, None, "probe-failed", f"probe failed ({type(err).__name__}) — verify"
+                )
+            )
             continue
         if pin is None:
-            rows.append((name, "unpinned", live, "unpinned (CI uses fixture) — no action"))
+            statuses.append(
+                SourceStatus(name, None, live, "unpinned", "unpinned (CI uses fixture) — no action")
+            )
         elif live == pin:
-            rows.append((name, pin, live, "current"))
+            statuses.append(SourceStatus(name, pin, live, "current", "current"))
         else:
-            rows.append((name, pin, live, f"**STALE — new release {live}**"))
-            stale.append(f"{name} → {live}")
+            statuses.append(
+                SourceStatus(name, pin, live, "stale", f"**STALE — new release {live}**")
+            )
 
     # euets.info: no upstream index; the live token IS the pinned DEFAULT_URL.
-    euets_url = _read_const(root, "ingestion/euets_pipeline.py", "DEFAULT_URL")
-    euets_live = token_from_euets_url(euets_url) if euets_url else None
-    euets_pin = manifest_pin("euets")
-    rows.append(
-        (
-            "euets",
-            euets_pin or "unpinned",
-            euets_live or "?",
-            "human-watched (no upstream index) — never probe S3",
-        )
-    )
-
     # eua (EEX auction reports): no upstream release index either; the live token
-    # is encoded in DEFAULT_URL's filename, bumped by a human when EEX publishes a
-    # new archive. Live equals the pin by construction — never probe EEX.
-    eua_url = _read_const(root, "ingestion/eua_pipeline.py", "DEFAULT_URL")
-    eua_live = token_from_eua_url(eua_url) if eua_url else None
-    eua_pin = manifest_pin("eua")
-    rows.append(
-        (
-            "eua",
-            eua_pin or "unpinned",
-            eua_live or "?",
-            "human-watched (no upstream index) — never probe EEX",
+    # is encoded in DEFAULT_URL's filename, bumped by a human when EEX publishes
+    # a new archive. Live equals the pin by construction — never probe either.
+    for name, rel, tokenizer, never in (
+        ("euets", "ingestion/euets_pipeline.py", token_from_euets_url, "S3"),
+        ("eua", "ingestion/eua_pipeline.py", token_from_eua_url, "EEX"),
+    ):
+        url = _read_const(root, rel, "DEFAULT_URL")
+        statuses.append(
+            SourceStatus(
+                name,
+                manifest_pin(name),
+                tokenizer(url) if url else None,
+                "human-watched",
+                f"human-watched (no upstream index) — never probe {never}",
+            )
         )
-    )
+
+    return statuses
+
+
+def build_report(root: Path, *, fetch: Fetcher = _http_get) -> str:
+    """Render the freshness table + a one-line stale summary."""
+    statuses = collect_statuses(root, fetch=fetch)
+    stale = [f"{s.source} → {s.live}" for s in statuses if s.state == "stale"]
+
+    def row(s: SourceStatus) -> tuple[str, str, str, str]:
+        if s.state == "probe-failed":
+            return (s.source, s.pinned or "—", "?", s.note)
+        if s.state == "unpinned":
+            return (s.source, "unpinned", s.live or "?", s.note)
+        # current / stale / human-watched all show pin + live verbatim.
+        return (s.source, s.pinned or "unpinned", s.live or "?", s.note)
 
     # emissieregistratie (UNFCCC CRF submission): no upstream release index
     # either (di.unfccc.int is JS-only); the live token is encoded in
@@ -297,7 +328,7 @@ def build_report(root: Path, *, fetch: Fetcher = _http_get) -> str:
         [
             "| Source | Pinned | Live upstream | Status |",
             "| --- | --- | --- | --- |",
-            *(f"| {s} | {p} | {live} | {st} |" for s, p, live, st in rows),
+            *(f"| {s} | {p} | {live} | {st} |" for s, p, live, st in map(row, statuses)),
         ]
     )
     summary = (
@@ -310,8 +341,8 @@ def build_report(root: Path, *, fetch: Fetcher = _http_get) -> str:
         + table
         + "\n\n"
         + summary
-        + "\n\nOpen a `data-refresh` issue ONLY for a source marked **STALE** above. "
-        "Do NOT probe any source yourself, and never guess euets.info zip filenames.\n"
+        + "\n\nA `data-refresh` issue is warranted ONLY for a source marked **STALE** "
+        "above. Never probe euets.info/EEX directly or guess their zip filenames.\n"
     )
 
 
