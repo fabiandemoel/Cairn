@@ -276,9 +276,18 @@ def collect_statuses(root: Path, *, fetch: Fetcher = _http_get) -> list[SourceSt
     # eua (EEX auction reports): no upstream release index either; the live token
     # is encoded in DEFAULT_URL's filename, bumped by a human when EEX publishes
     # a new archive. Live equals the pin by construction — never probe either.
+    # emissieregistratie (UNFCCC CRF submission): same story — di.unfccc.int is
+    # JS-only, so the live token is encoded in DEFAULT_URL's filename, bumped by
+    # a human when UNFCCC/RVO publish a new annual submission. Never probe UNFCCC.
     for name, rel, tokenizer, never in (
         ("euets", "ingestion/euets_pipeline.py", token_from_euets_url, "S3"),
         ("eua", "ingestion/eua_pipeline.py", token_from_eua_url, "EEX"),
+        (
+            "emissieregistratie",
+            "ingestion/emissieregistratie_pipeline.py",
+            token_from_emissieregistratie_url,
+            "UNFCCC",
+        ),
     ):
         url = _read_const(root, rel, "DEFAULT_URL")
         statuses.append(
@@ -306,23 +315,6 @@ def build_report(root: Path, *, fetch: Fetcher = _http_get) -> str:
             return (s.source, "unpinned", s.live or "?", s.note)
         # current / stale / human-watched all show pin + live verbatim.
         return (s.source, s.pinned or "unpinned", s.live or "?", s.note)
-
-    # emissieregistratie (UNFCCC CRF submission): no upstream release index
-    # either (di.unfccc.int is JS-only); the live token is encoded in
-    # DEFAULT_URL's filename, bumped by a human when UNFCCC/RVO publish a new
-    # annual submission. Live equals the pin by construction -- never probe
-    # UNFCCC.
-    er_url = _read_const(root, "ingestion/emissieregistratie_pipeline.py", "DEFAULT_URL")
-    er_live = token_from_emissieregistratie_url(er_url) if er_url else None
-    er_pin = manifest_pin("emissieregistratie")
-    rows.append(
-        (
-            "emissieregistratie",
-            er_pin or "unpinned",
-            er_live or "?",
-            "human-watched (no upstream index) — never probe UNFCCC",
-        )
-    )
 
     table = "\n".join(
         [
