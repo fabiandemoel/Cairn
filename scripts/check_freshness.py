@@ -126,6 +126,17 @@ def token_from_eua_url(url: str) -> str | None:
     return match.group(1) if match else None
 
 
+def token_from_emissieregistratie_url(url: str) -> str | None:
+    """``.../NLD-CRT-2026-V1.0.zip`` -> ``2026-V1.0``.
+
+    Mirrors ``ingestion.emissieregistratie_pipeline._release_from_url``.
+    """
+    name = url.rstrip("/").rsplit("/", 1)[-1]
+    stem = name[:-4] if name.lower().endswith(".zip") else name
+    match = re.match(r"NLD-CRT-(.+)$", stem)
+    return match.group(1) if match else None
+
+
 def normalize_eurostat_date(raw: str) -> str | None:
     """Normalise a Eurostat date to YYYY-MM-DD / YYYY-MM.
 
@@ -265,9 +276,18 @@ def collect_statuses(root: Path, *, fetch: Fetcher = _http_get) -> list[SourceSt
     # eua (EEX auction reports): no upstream release index either; the live token
     # is encoded in DEFAULT_URL's filename, bumped by a human when EEX publishes
     # a new archive. Live equals the pin by construction — never probe either.
+    # emissieregistratie (UNFCCC CRF submission): same story — di.unfccc.int is
+    # JS-only, so the live token is encoded in DEFAULT_URL's filename, bumped by
+    # a human when UNFCCC/RVO publish a new annual submission. Never probe UNFCCC.
     for name, rel, tokenizer, never in (
         ("euets", "ingestion/euets_pipeline.py", token_from_euets_url, "S3"),
         ("eua", "ingestion/eua_pipeline.py", token_from_eua_url, "EEX"),
+        (
+            "emissieregistratie",
+            "ingestion/emissieregistratie_pipeline.py",
+            token_from_emissieregistratie_url,
+            "UNFCCC",
+        ),
     ):
         url = _read_const(root, rel, "DEFAULT_URL")
         statuses.append(
