@@ -6,6 +6,7 @@ from pathlib import Path
 
 from scripts.check_freshness import SourceStatus
 from scripts.dispatch import (
+    LAYER_TITLES,
     backlog_issue_spec,
     freshness_issue_specs,
     next_missing_layer,
@@ -268,3 +269,22 @@ def test_run_backlog_scope_never_probes_the_network(tmp_path: Path) -> None:
     )
     assert len(specs) == 1 and specs[0].title.startswith("feat:")
     assert "freshness:" not in summary
+
+
+def test_live_backlog_dispatch_blocks_are_valid() -> None:
+    """Guard the real BACKLOG.md: every live candidate must parse cleanly.
+
+    The dispatcher degrades a malformed block to a skip-with-reason at runtime,
+    which silently starves the loop; catching it here keeps a bad edit (by
+    replenish or a human) from merging. Sentinel *paths* can't be checked for
+    existence (an undone layer's sentinel is supposed to be missing), but the
+    block schema and the dependency order of the layers are testable.
+    """
+    root = Path(__file__).resolve().parent.parent
+    cands = parse_backlog((root / "BACKLOG.md").read_text(encoding="utf-8"))
+    assert cands, "no live candidates parsed from BACKLOG.md"
+    layer_rank = {layer: i for i, layer in enumerate(LAYER_TITLES)}
+    for cand in cands:
+        assert cand.parse_error is None, f"{cand.name}: {cand.parse_error}"
+        ranks = [layer_rank[layer] for layer, _ in cand.layers]
+        assert ranks == sorted(ranks), f"{cand.name}: layers out of dependency order"
