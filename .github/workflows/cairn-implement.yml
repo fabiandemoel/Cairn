@@ -192,8 +192,9 @@ jobs:
             echo 'REF_EOF'
           } >> "$GITHUB_OUTPUT"
 
-      # No-LLM: for an ingestion/staging issue whose body carries a cairn-scout
-      # "Scaffold parameters" source/dataset slug block, pre-write the fixed
+      # No-LLM: for an ingestion/staging issue whose body carries a
+      # "Scaffold parameters" source/dataset slug block (written by the no-LLM
+      # dispatcher from the candidate's BACKLOG.md dispatch block), pre-write the fixed
       # boilerplate that layer's exemplar above shows (scaffold_ingestion.py /
       # scaffold_staging.py) so the agent starts editing TODO markers instead of
       # typing the plumbing from scratch. A mart/site/export/data-refresh issue,
@@ -347,10 +348,12 @@ jobs:
 
             ${{ steps.scaffold.outputs.note }}
 
-            Treat the ISSUE BODY as the authoritative spec - cairn-scout writes it with
-            the exact files to touch, fixture requirements, and watch caveats. Execute
-            it directly; investigate the codebase only where it is genuinely
-            insufficient or ambiguous.
+            Treat the ISSUE BODY as the authoritative spec - the no-LLM dispatcher
+            (cairn-dispatch.yml) generates it from the BACKLOG.md candidate: it names
+            the layer's sentinel artifact, the earlier/later layers, and quotes the
+            candidate entry with its watch caveats verbatim. Execute it directly;
+            investigate the codebase only where it is genuinely insufficient or
+            ambiguous.
 
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }}.
@@ -365,31 +368,20 @@ jobs:
             Never weaken a test to make a change pass.
 
             BACKLOG.md upkeep (for a `feat` issue only - skip this for `data-refresh`):
-            this issue is one layer of a BACKLOG.md candidate, and that file is stale
-            more often than not right now - a fully-shipped candidate has repeatedly sat
-            in "Live candidates" for days after merging, and cairn-scout then re-dispatches
-            the same already-done work (wasting a full implement run each time, no PR to
-            show for it). Break that loop from this side too:
-              - Identify which numbered candidate in BACKLOG.md's "Live candidates" this
-                issue implements (the issue body names it).
-              - If this issue completes that candidate's LAST remaining layer (check the
-                candidate's "Touches" line against what actually exists after your change -
-                use the orientation map's layer inventory), move that candidate's entry, in
-                the SAME PR, from "Live candidates" to "Considered and rejected", following
-                the exact style already there: `- **<candidate name>.** Shipped: merged in
-                PR #<this PR's number once known - if not yet known, say "this PR"> (<date>).
-                <one sentence naming the concrete artifact - column/mart/page - now live>.`
-                Renumber the remaining "Live candidates" headers and fix any internal
-                `candidate #N` / `(#N)` cross-references so they still point at the right
-                item - grep the file for `candidate #` and `(#` before finishing.
-              - If this issue only completes ONE layer of a multi-layer candidate (e.g. the
-                mart layer, with a site layer still to come), do NOT move it - instead
-                add/update a one-line `*Status:*` note under that candidate (mirroring
-                candidate #1's existing status note as a template) naming what shipped and
-                what layer is still open, so cairn-scout dispatches the next layer instead
-                of repeating this one.
-              - Do this as a normal part of the PR diff (one more file changed), not a
-              separate PR - `runner` stages and commits it with the rest of your change.
+            the no-LLM dispatcher decides "this layer is done" purely by the sentinel
+            path in the candidate's `<!-- dispatch -->` block existing on main, so keep
+            that block truthful in the SAME PR:
+              - If you name the layer's artifact differently than the sentinel path the
+                issue body states, update the candidate's `<!-- dispatch -->` block in
+                BACKLOG.md to the actual path - otherwise the dispatcher will consider
+                the layer still missing and re-dispatch it after your PR merges.
+              - If this issue completes the candidate's LAST layer (every sentinel in
+                its block now exists), move the entry from "Live candidates" to
+                "Considered and rejected" in the style already there (`- **<name>.**
+                Shipped: merged in this PR (<date>). <one sentence naming the artifact
+                now live>.`) and renumber the remaining candidates. Do NOT add status
+                notes for intermediate layers - the dispatcher tracks that via the
+                sentinels; the weekly replenish keeps the prose tidy.
 
             For a NEW data source, do all live-source discovery in ONE legwork task up
             front: hand it the source URL and ask for the column layout, the
@@ -427,7 +419,9 @@ jobs:
             Cairn context, spelling out each acronym or jargon term on first use (e.g.
             "EU ETS (the EU's Emissions Trading System)", "manifest (the append-only
             file that pins which source snapshot Cairn uses)"). Below it, keep the
-            technical content: link the issue, summarise the change, state the
+            technical content: link the issue with a closing keyword ("Closes
+            #<issue>" - the dispatcher's dedup relies on the issue auto-closing
+            when the PR merges), summarise the change, state the
             data/methodology impact, and list any assumptions. Do NOT merge. If you
             cannot make CI pass within scope, open a DRAFT PR explaining exactly what
             blocks it rather than forcing it green.

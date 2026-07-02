@@ -1,7 +1,7 @@
 // Shared github-script module: attribute one Claude Code run's cost to the
-// issue(s)/PR(s) it touched. Each of the three Cairn agent workflows (scout,
-// implement, replenish) resolves its own target number(s), then requires this
-// module from an actions/github-script step and calls it.
+// issue(s)/PR(s) it touched. Each Cairn agent workflow (implement, replenish)
+// resolves its own target number(s), then requires this module from an
+// actions/github-script step and calls it.
 //
 // For every target it:
 //   1. posts the run-cost markdown as a comment (REST, via the step's
@@ -12,7 +12,7 @@
 // The whole Projects v2 section is wrapped in try/catch: a missing board, a
 // missing/renamed field, or a token without the `project` scope produces a
 // core.warning, never a failed run. Comment posting is best-effort per target
-// for the same reason. Scout may pass 0–3 targets; a multi-issue run sets the
+// for the same reason. A caller may pass multiple targets; such a run sets the
 // full run cost on each (accepted double-attribution).
 
 module.exports = async ({

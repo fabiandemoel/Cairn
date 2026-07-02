@@ -1,0 +1,119 @@
+name: Cairn Dispatch
+
+# No-LLM replacement for the old cairn-scout agent. Both scout tasks turned out
+# to be deterministic once their inputs were precomputed, so this job runs no
+# model at all — it is scripts/dispatch.py plus two thin GitHub API steps:
+#
+#   1. FRESHNESS (weekly): scripts/check_freshness.py compares each source's
+#      live upstream release token against sources/*/manifest.yml; every STALE
+#      source becomes one templated `data-refresh` issue (deduped by title).
+#      euets/eua stay human-watched and are never probed.
+#   2. BACKLOG DISPATCH (on every merge to main + weekly): each BACKLOG.md
+#      "Live candidates" entry carries a machine-readable <!-- dispatch -->
+#      block (schema in BACKLOG.md's header, maintained by cairn-replenish)
+#      declaring one sentinel path per layer. The first layer whose sentinel
+#      does not exist on main is the next issue — opened at most one per run,
+#      after dedup against open issues/PRs and the saturation gate
+#      (DISPATCH_BACKLOG_SATURATION, default 5 un-approved proposals).
+#
+# Event-driven on purpose: the next layer of a candidate becomes dispatchable
+# at exactly the moment the previous layer merges to main, so `push` is the
+# natural trigger — no daily cron polling, no LLM cost, run time in seconds.
+# Output is GitHub issues only — never code, never a PR. A human triages them
+# and adds the `approved` label to hand one to Cairn Implement.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Monday 06:17 UTC: freshness probe + backlog dispatch
+  push:
+    branches: [main] # after every merge: backlog dispatch only
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Which checks to run"
+        type: choice
+        options: [both, freshness, backlog]
+        default: both
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: cairn-dispatch
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decide scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_SCOPE: ${{ github.event.inputs.scope }}
+        run: |
+          case "$EVENT" in
+            schedule) scope=both ;;
+            push)     scope=backlog ;;
+            *)        scope="${INPUT_SCOPE:-both}" ;;
+          esac
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+
+      # Snapshot the open issues/PRs so every dedup/saturation *decision* lives
+      # in the unit-tested python script, not in inline JS.
+      - name: Snapshot open issues and PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', per_page: 100,
+            });
+            const openIssues = issues
+              .filter((i) => !i.pull_request)
+              .map((i) => ({
+                title: i.title,
+                labels: i.labels.map((l) => (typeof l === 'string' ? l : l.name)),
+              }));
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', per_page: 100,
+            });
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/open_issues.json`,
+              JSON.stringify(openIssues));
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/open_prs.json`,
+              JSON.stringify(prs.map((p) => ({ title: p.title }))));
+
+      # stdlib-only, so no `uv sync` needed; `-m scripts.dispatch` because it
+      # imports scripts.check_freshness (package-relative, like scaffold_for_layer).
+      - name: Compute dispatch decisions
+        env:
+          SCOPE: ${{ steps.scope.outputs.scope }}
+          THRESHOLD: ${{ vars.DISPATCH_BACKLOG_SATURATION || '5' }}
+        run: |
+          python3 -m scripts.dispatch \
+            --scope "$SCOPE" \
+            --open-issues "$RUNNER_TEMP/open_issues.json" \
+            --open-prs "$RUNNER_TEMP/open_prs.json" \
+            --saturation-threshold "$THRESHOLD" \
+            -o "$RUNNER_TEMP/dispatch.json" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Open the dispatched issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { issues } = JSON.parse(
+              fs.readFileSync(`${process.env.RUNNER_TEMP}/dispatch.json`, 'utf8'));
+            for (const spec of issues) {
+              const { data } = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title: spec.title, body: spec.body, labels: spec.labels,
+              });
+              core.info(`Opened #${data.number}: ${spec.title}`);
+            }
+            if (issues.length === 0) core.info('Nothing to open.');

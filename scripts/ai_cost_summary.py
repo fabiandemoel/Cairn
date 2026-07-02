@@ -3,7 +3,7 @@
 `anthropics/claude-code-action` exposes an `execution_file` output: the path to a
 JSON log of the run. Its final ``type: "result"`` record carries the billing
 figures (``total_cost_usd``, ``usage``, ``modelUsage``, ``num_turns``,
-``duration_ms``). The three Cairn agent workflows (scout, implement, replenish)
+``duration_ms``). The Cairn agent workflows (implement, replenish)
 call this script to turn that record into:
 
   * a markdown block, written to ``--out``, posted as an issue/PR comment, and

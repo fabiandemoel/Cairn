@@ -18,9 +18,10 @@ auditability.
 > the **Evidence site** (`site/`). Phase 4 added the **CSRD/ESRS E1 export**
 > (`mart_esrs_e1`). Additional sources since added: **Eurostat AEA**
 > (`env_ac_ainah_r2`, cross-country NACE sector benchmarks) and **Eurostat GGE**
-> (`env_air_gge`, national GHG totals cross-check). Three scheduled agent
-> workflows handle scout (daily freshness check), implement (issue → PR on
-> approval), and replenish (weekly backlog curation) — see [`CLAUDE.md`](CLAUDE.md).
+> (`env_air_gge`, national GHG totals cross-check). Automation: a no-LLM
+> dispatcher (weekly freshness check + per-merge backlog dispatch) opens the
+> issues, and two agent workflows handle implement (issue → PR on approval)
+> and replenish (weekly backlog curation) — see [`CLAUDE.md`](CLAUDE.md).
 
 > **Maintainers & agents**: see [`CLAUDE.md`](CLAUDE.md) for the upkeep routine
 > (handling new CBS releases, refreshing fixtures, the classification migration

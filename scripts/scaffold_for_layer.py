@@ -7,9 +7,10 @@ inferred exactly as ``reference_for_layer.infer_layer`` does; only "ingestion" a
 call (business logic, not boilerplate), so those layers get no scaffold and no
 note (see CLAUDE.md's "Mappings are code, reviewed via PRs").
 
-The source/dataset slugs are never guessed from the issue title's prose --
-cairn-scout is asked (see cairn-scout.yml's prompt) to embed them explicitly, for
-ingestion/staging issues only, as a fenced block near the top of the issue body::
+The source/dataset slugs are never guessed from the issue title's prose -- the
+no-LLM dispatcher (``scripts/dispatch.py``) embeds them deterministically, from
+the candidate's ``<!-- dispatch -->`` block in BACKLOG.md, for ingestion/staging
+issues only, as a fenced block near the top of the issue body::
 
     Scaffold parameters:
     - source: rivm

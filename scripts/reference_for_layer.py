@@ -32,8 +32,8 @@ from pathlib import Path
 # Per-layer canonical exemplars: the file(s) a new contribution to that layer
 # should be modelled on. Ordered most-illustrative first. Paths that don't
 # exist are skipped, so this list can name a preferred exemplar without risking
-# a crash if it is later renamed. These mirror the layers cairn-scout splits a
-# candidate into (ingestion -> staging -> mart -> site/export).
+# a crash if it is later renamed. These mirror the layers cairn-dispatch splits
+# a candidate into (ingestion -> staging -> mart -> site/export).
 EXEMPLARS: dict[str, list[str]] = {
     "ingestion": [
         "ingestion/eurostat_aea_pipeline.py",
@@ -80,8 +80,9 @@ def infer_layer(title: str | None, labels: list[str] | None) -> str:
     """Infer the repo layer an issue targets from its title and labels.
 
     data-refresh is label-driven; the feature layers are encoded in the issue
-    title suffix cairn-scout writes (e.g. "… — ingestion", "… — dbt mart",
-    "… — site").
+    title suffix the dispatcher writes (e.g. "… — ingestion", "… — dbt mart",
+    "… — site"; see LAYER_TITLES in scripts/dispatch.py, which round-trips
+    through this function).
     """
     labs = {label.lower() for label in (labels or [])}
     if "data-refresh" in labs:

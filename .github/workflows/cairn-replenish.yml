@@ -91,6 +91,17 @@ jobs:
               drifted off-spine into "Considered and rejected" WITH the reason.
             - Do NOT re-propose anything already in "Considered and rejected".
             - Keep at most ~15 live candidates.
+            - MAINTAIN each live candidate's `<!-- dispatch -->` block (schema in
+              BACKLOG.md's "Dispatch metadata" section) — the no-LLM dispatcher
+              (cairn-dispatch.yml) reads it to open the next-layer issue, so this
+              is load-bearing, not decoration. Every new candidate gets one:
+              layers in dependency order, each with a sentinel path (a NEW file
+              that layer will create, derived from the "Touches" line), plus
+              source/dataset slugs when the candidate adds a new source, or
+              `hold: <reason>` when it must not be dispatched yet. For existing
+              candidates, check the sentinel paths against the orientation map's
+              layer inventory: a candidate whose sentinels all exist has fully
+              shipped — retire it.
 
             Open ONE pull request against `main` from branch
             `replenish/<YYYY-MM-DD>`, titled "chore(backlog): weekly replenish".
