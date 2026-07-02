@@ -85,7 +85,9 @@ jobs:
             Then, as a docs-only change:
             - Propose at most 3 NEW candidates that pass every "Rules of the game"
               admission test. Score each (Value / Effort / Spine-fit) with the same
-              rubric, add the "watch" caveats and the repo paths it would touch.
+              rubric, following BACKLOG.md's "Entry format" section: a per-layer
+              *Layers* plan (the entry is quoted verbatim into the dispatched
+              issue, so it must read as a spec) plus the "watch" caveats.
             - Re-rank "Live candidates" by value, then spine-fit, then inverse effort.
             - Move any candidate that has shipped, been rejected in review, or
               drifted off-spine into "Considered and rejected" WITH the reason.
@@ -96,7 +98,7 @@ jobs:
               (cairn-dispatch.yml) reads it to open the next-layer issue, so this
               is load-bearing, not decoration. Every new candidate gets one:
               layers in dependency order, each with a sentinel path (a NEW file
-              that layer will create, derived from the "Touches" line), plus
+              that layer will create, mirroring the entry's *Layers* plan), plus
               source/dataset slugs when the candidate adds a new source, or
               `hold: <reason>` when it must not be dispatched yet. For existing
               candidates, check the sentinel paths against the orientation map's
