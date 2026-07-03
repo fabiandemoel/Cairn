@@ -342,10 +342,26 @@ by turn (the dominant repeated cost in the run logs):
   stale) and per-file line-capped (it is re-sent every turn); a missing exemplar
   or an unrecognised layer degrades to a "find the closest example" note rather
   than failing the step. The prompt also tells the agent to treat the issue body
-  as the authoritative spec, to do all live-source discovery in one `legwork`
-  subagent task (never curl the source from its own turns, and never run the real
-  `--offline` ingest — it mutates the manifest with a `file://` snapshot), and to
-  avoid the background-task/agent-messaging tools that add turns without value.
+  as the authoritative spec and never to run the real `--offline` ingest — it
+  mutates the manifest with a `file://` snapshot.
+- **Live-source research (implement only, gated).** The implement agent does no
+  mid-run web discovery at all. `scripts/source_research.py` (stdlib-only,
+  unit-tested in `tests/test_source_research.py`) gates it: only an
+  ingestion-layer issue emits `needed=true`, and then an isolated Haiku
+  research step (WebFetch/WebSearch only — no shell, no files, no subagents)
+  investigates the source *before* the orchestrator starts; the same script
+  extracts that step's final message from the action's execution log and the
+  workflow injects it into the implement prompt as the "research brief"
+  (missing/failed research degrades to a fallback note, never a job failure).
+  The implement step consequently carries **no** WebFetch/WebSearch in its
+  allowlist, and the background/wakeup tools (`ScheduleWakeup` and the
+  agent-messaging/background-task tools) are blocked via `--disallowedTools`,
+  with the prompt requiring `run_in_background: false` on every subagent Task.
+  This is mechanical enforcement of "stay synchronous": prompt-only enforcement
+  failed twice (implement runs #42 and #43 both parked work in background
+  subagents, scheduled a wakeup that can never fire in a one-shot CI job, and
+  ended their turn having shipped nothing — and `ScheduleWakeup` bypasses the
+  `--allowedTools` allowlist, so only `--disallowedTools` actually stops it).
 - **Upstream freshness (now fully no-LLM).** `scripts/check_freshness.py`
   (stdlib-only, unit-tested in `tests/test_check_freshness.py`) computes the
   live-vs-pinned diff per source; `scripts/dispatch.py` consumes its structured
@@ -373,6 +389,9 @@ cost step). `scripts/ai_cost_summary.py` (stdlib-only, unit-tested in
 `tests/test_ai_cost_summary.py`) parses the action's
 `execution_file` output — its `total_cost_usd`, `usage`, `modelUsage`,
 `num_turns`, `duration_ms` — into a markdown comment and the total cost in USD.
+It accepts `--execution-file` more than once and merges them, so implement's
+research + implement steps surface as one total (an empty path from a skipped
+research step is ignored).
 The shared `.github/scripts/attribute_run_cost.js` github-script module then
 posts that comment and sets a Projects v2 Number field for the PR the run
 opened, resolved by branch prefix (`agent/<issue>-*`, `replenish/*`).
