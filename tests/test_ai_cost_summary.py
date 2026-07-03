@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.ai_cost_summary import (
+    combine,
     extract_result,
     main,
     render_markdown,
@@ -121,3 +124,76 @@ def test_main_missing_file_does_not_fail(tmp_path: Path, monkeypatch) -> None:
     gh = gh_out.read_text(encoding="utf-8")
     assert "cost_usd=\n" in gh
     assert "has_cost=false" in gh
+
+
+RESEARCH_RESULT = {
+    "type": "result",
+    "total_cost_usd": 0.05,
+    "num_turns": 8,
+    "duration_ms": 5500,
+    "usage": {
+        "input_tokens": 300,
+        "output_tokens": 40,
+        "cache_read_input_tokens": 1100,
+        "cache_creation_input_tokens": 50,
+    },
+    "modelUsage": {
+        "claude-haiku-4-5": {
+            "inputTokens": 300,
+            "outputTokens": 40,
+            "cacheReadInputTokens": 1100,
+            "cacheCreationInputTokens": 50,
+            "costUSD": 0.05,
+        },
+    },
+}
+
+
+def test_combine_sums_costs_turns_and_merges_models() -> None:
+    merged = combine([summarize(RESULT), summarize(RESEARCH_RESULT)])
+    assert merged.total_cost_usd == pytest.approx(0.1734)
+    assert merged.num_turns == 20
+    assert merged.duration_ms == 40000
+    assert merged.input_tokens == 1500
+    haiku = next(m for m in merged.models if m.model == "claude-haiku-4-5")
+    assert haiku.input_tokens == 500  # 200 + 300
+    assert haiku.cost_usd == pytest.approx(0.0734)
+    assert [m.model for m in merged.models] == ["claude-haiku-4-5", "claude-sonnet-5"]
+
+
+def test_combine_single_and_unpriced() -> None:
+    single = summarize(RESULT)
+    assert combine([single]) is single
+    merged = combine([summarize(None), summarize(RESULT)])
+    assert merged.total_cost_usd == 0.1234
+    assert merged.num_turns == 12
+
+
+def test_main_merges_multiple_files_and_skips_empty_path(tmp_path: Path, monkeypatch) -> None:
+    # cairn-implement passes the research step's execution_file unconditionally;
+    # when the step was skipped the expression is empty and must be ignored.
+    implement = tmp_path / "implement.json"
+    implement.write_text(json.dumps([RESULT]), encoding="utf-8")
+    research = tmp_path / "research.json"
+    research.write_text(json.dumps([RESEARCH_RESULT]), encoding="utf-8")
+    gh_out = tmp_path / "gh_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(gh_out))
+
+    out = tmp_path / "comment.md"
+    rc = main(
+        [
+            "--execution-file",
+            str(implement),
+            "--execution-file",
+            str(research),
+            "--execution-file",
+            "",
+            "-o",
+            str(out),
+        ]
+    )
+    assert rc == 0
+    md = out.read_text(encoding="utf-8")
+    assert "$0.1734" in md
+    assert "20 turns" in md
+    assert "cost_usd=0.1734" in gh_out.read_text(encoding="utf-8")

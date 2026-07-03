@@ -10,8 +10,14 @@ call this script to turn that record into:
   * the run's total cost in USD, written to ``$GITHUB_OUTPUT`` as ``cost_usd``
     so a follow-up step can set it on the Projects v2 board.
 
-Cost visibility is best-effort: a missing or malformed execution file yields a
-"cost unavailable" note and an empty ``cost_usd`` rather than failing the run.
+``--execution-file`` may be given more than once (cairn-implement runs two
+Claude steps: the isolated live-source research step and the implement step);
+the summaries are merged into one total so the posted cost covers the whole run.
+
+Cost visibility is best-effort: a missing or malformed execution file (or an
+empty path, e.g. from a skipped research step) is skipped with a note rather
+than failing the run; if none is readable the comment says "cost unavailable"
+and ``cost_usd`` stays empty.
 
     uv run python scripts/ai_cost_summary.py --execution-file run.json \
         --label "Cairn Implement" --run-url https://… -o comment.md
@@ -133,6 +139,41 @@ def summarize(result: dict | None) -> CostSummary:
     return summary
 
 
+def combine(summaries: list[CostSummary]) -> CostSummary:
+    """Merge per-step summaries (e.g. research + implement) into one total.
+
+    Sums are only taken over the figures each step actually reported, so one
+    step lacking a cost/turn count leaves the others' totals intact; with no
+    priced step at all the merged summary stays "cost unavailable".
+    """
+    if len(summaries) == 1:
+        return summaries[0]
+
+    merged = CostSummary()
+    by_model: dict[str, ModelLine] = {}
+    for s in summaries:
+        if s.total_cost_usd is not None:
+            merged.total_cost_usd = (merged.total_cost_usd or 0.0) + s.total_cost_usd
+        if s.num_turns is not None:
+            merged.num_turns = (merged.num_turns or 0) + s.num_turns
+        if s.duration_ms is not None:
+            merged.duration_ms = (merged.duration_ms or 0) + s.duration_ms
+        merged.input_tokens += s.input_tokens
+        merged.output_tokens += s.output_tokens
+        merged.cache_read += s.cache_read
+        merged.cache_write += s.cache_write
+        for m in s.models:
+            line = by_model.setdefault(m.model, ModelLine(model=m.model))
+            line.input_tokens += m.input_tokens
+            line.output_tokens += m.output_tokens
+            line.cache_read += m.cache_read
+            line.cache_write += m.cache_write
+            if m.cost_usd is not None:
+                line.cost_usd = (line.cost_usd or 0.0) + m.cost_usd
+    merged.models = [by_model[name] for name in sorted(by_model)]
+    return merged
+
+
 def _usd(value: float | None) -> str:
     return "—" if value is None else f"${value:,.4f}"
 
@@ -207,20 +248,32 @@ def _write_github_output(summary: CostSummary) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--execution-file", required=True, help="Path to the action's execution_file JSON."
+        "--execution-file",
+        action="append",
+        required=True,
+        dest="execution_files",
+        help="Path to an action's execution_file JSON. Repeat to merge several "
+        "steps' costs into one summary; empty/unreadable paths are skipped.",
     )
     parser.add_argument("--label", help="Workflow label for the comment footer.")
     parser.add_argument("--run-url", help="URL of the workflow run, linked in the footer.")
     parser.add_argument("--out", "-o", help="Write the markdown comment here (else stdout).")
     args = parser.parse_args(argv)
 
-    path = Path(args.execution_file)
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        summary = summarize(extract_result(data))
-    except (OSError, json.JSONDecodeError) as err:
-        print(f"ai_cost_summary: could not read execution file: {err}", file=sys.stderr)
-        summary = CostSummary()
+    summaries: list[CostSummary] = []
+    for exec_path in args.execution_files:
+        if not exec_path:
+            continue
+        try:
+            data = json.loads(Path(exec_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as err:
+            print(
+                f"ai_cost_summary: could not read execution file {exec_path!r}: {err}",
+                file=sys.stderr,
+            )
+            continue
+        summaries.append(summarize(extract_result(data)))
+    summary = combine(summaries) if summaries else CostSummary()
 
     markdown = render_markdown(summary, label=args.label, run_url=args.run_url)
     if args.out:
