@@ -128,7 +128,8 @@ select
     operator_type_benchmark.operator_type_mean_emissions_t_co2eq,
     operator_type_benchmark.operator_type_median_emissions_t_co2eq,
     installation_year.installation_emissions_t_co2eq
-    / operator_type_benchmark.operator_type_mean_emissions_t_co2eq as emissions_vs_operator_type_mean,
+    / operator_type_benchmark.operator_type_mean_emissions_t_co2eq
+        as emissions_vs_operator_type_mean,
     installation_year.installation_emissions_t_co2eq
     / nullif(installation_year.allocated_total_t_co2eq, 0) as emissions_vs_allocated
 from installation_year
