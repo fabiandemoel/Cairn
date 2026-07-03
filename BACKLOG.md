@@ -192,16 +192,14 @@ themselves, not folded into the stationary NACE sectors — adds a new benchmark
 axis from the already-pinned euets snapshot. Pure read/relabel: the flags are
 already staged.
 - *Layers:*
-  - mart — `benchmark_transport_emissions`: a sibling of
-    `benchmark_installation_emissions` over the same euets staging models,
-    filtered **to** the aviation/maritime flags instead of away from them, with
-    an operator-type label column. Same grain and tests (unique
-    installation|year, `not_null` on the grain, `accepted_values` on the
-    operator type); benchmark by operator type, never by NACE section (these
-    operators carry none).
-  - site — a `transport_emissions.sql` source query + a page. State on the page
-    that maritime entered EU ETS only from the **2024 compliance year**, so its
-    coverage is partial and recent.
+  - mart — **shipped** (issue #91, this PR): `benchmark_transport_emissions`, a
+    sibling of `benchmark_installation_emissions` over the same euets staging
+    models, filtered **to** the aviation/maritime flags instead of away from
+    them, with an `operator_type` label column (`accepted_values`:
+    aircraft/maritime), benchmarked by operator type, never by NACE section.
+  - site (the only remaining scope) — a `transport_emissions.sql` source query
+    + a page. State on the page that maritime entered EU ETS only from the
+    **2024 compliance year**, so its coverage is partial and recent.
 - *Watch:* keep these operators **out** of the stationary national-total
   reconciliation and the EEA stationary `20-99` coverage test — both assume
   stationary, and these operators sit outside CBS national totals and that EEA
