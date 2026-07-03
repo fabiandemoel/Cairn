@@ -42,3 +42,47 @@ seeds:
         description: >
           GLEIF Legal Entity Identifier (20-char ISO 17442) of the operating
           legal entity, or NULL when no confident GLEIF match exists.
+
+  - name: carbon_leakage_list
+    description: >
+      Reviewed transcription of the sectors and sub-sectors deemed exposed to
+      a significant risk of carbon leakage for EU ETS Phase 4 (2021-2030) under
+      Commission Delegated Regulation (EU) 2019/708 (OJ L 120, 11.5.2019).
+      Annex I lists whole NACE Rev.2 sectors (code_type = 'nace'); Annex II
+      lists PRODCOM sub-sectors within a broader NACE sector (code_type =
+      'prodcom'). Like sector_mapping_cbs, every row is transcribed verbatim
+      from the Regulation's annexes in a reviewed PR -- never paraphrased,
+      inferred, or reconstructed from memory. This seed ships empty
+      (header only) until a PR adds verified rows sourced directly from the
+      Official Journal text; benchmark_installation_emissions joins it as a
+      left join, so an empty seed leaves every installation's exposure flag
+      false rather than blocking the mart.
+    columns:
+      - name: code
+        description: >
+          NACE Rev.2 code (code_type = 'nace') or PRODCOM code (code_type =
+          'prodcom'), transcribed verbatim from the annex (primary key).
+        tests:
+          - unique
+          - not_null
+      - name: code_type
+        description: Which classification `code` uses.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["nace", "prodcom"]
+      - name: oj_annex
+        description: Which annex of the Regulation the row is transcribed from.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["I", "II"]
+      - name: sector_description
+        description: Sector or sub-sector description, transcribed verbatim from the annex.
+        tests:
+          - not_null
+      - name: oj_citation
+        description: >
+          Citation for the row (Regulation, annex, Official Journal reference).
+        tests:
+          - not_null

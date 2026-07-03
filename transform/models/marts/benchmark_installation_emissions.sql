@@ -49,6 +49,14 @@
 --       - latitude/longitude are euets.info's latitudeGoogle/longitudeGoogle --
 --         source-provided and approximate. Nullable: not all installations
 --         carry coordinates.
+--   * Carbon leakage exposure (carbon_leakage_exposed, and its supporting
+--     sector_description/oj_citation) is a labelled read/relabel dimension
+--     joined from the reviewed carbon_leakage_list seed (Commission Delegated
+--     Regulation (EU) 2019/708, Annex I) on the installation's NACE code --
+--     policy context only, never a computed figure and never a free-allocation
+--     entitlement. Only Annex I ('nace') rows are joined: Annex II PRODCOM
+--     sub-sector rows cannot be matched, since euets.info carries no PRODCOM
+--     classification per installation.
 
 with lei_mapping as (
     select
@@ -56,6 +64,15 @@ with lei_mapping as (
         lei,
         gleif_legal_name
     from {{ ref('lei_mapping_euets') }}
+),
+
+carbon_leakage as (
+    select
+        code,
+        sector_description,
+        oj_citation
+    from {{ ref('carbon_leakage_list') }}
+    where code_type = 'nace'
 ),
 
 installations as (
@@ -98,6 +115,14 @@ installation_year as (
         installations.gleif_legal_name,
         installations.nace_section,
         installations.nace_section_label,
+        -- Carbon leakage exposure is a labelled policy flag, not a computed
+        -- figure: true only where the installation's NACE code is transcribed
+        -- in the reviewed carbon_leakage_list seed (Annex I). The seed ships
+        -- empty until a reviewed PR adds verified rows, so this is false for
+        -- every installation until then.
+        carbon_leakage.code is not null as carbon_leakage_exposed,
+        carbon_leakage.sector_description as carbon_leakage_sector_description,
+        carbon_leakage.oj_citation as carbon_leakage_oj_citation,
         compliance.year,
         compliance.verified_emissions_t_co2eq as installation_emissions_t_co2eq,
         -- Free allocation (allocatedTotal) is a labelled measure straight from
@@ -112,6 +137,7 @@ installation_year as (
         compliance.surrendered as surrendered_allowances_t_co2eq
     from compliance
     inner join installations on installations.installation_id = compliance.installation_id
+    left join carbon_leakage on carbon_leakage.code = installations.nace_code
 ),
 
 sector_benchmark as (
@@ -140,6 +166,9 @@ select
     installation_year.gleif_legal_name,
     installation_year.nace_section,
     installation_year.nace_section_label,
+    installation_year.carbon_leakage_exposed,
+    installation_year.carbon_leakage_sector_description,
+    installation_year.carbon_leakage_oj_citation,
     installation_year.installation_emissions_t_co2eq,
     installation_year.allocated_total_t_co2eq,
     installation_year.surrendered_allowances_t_co2eq,

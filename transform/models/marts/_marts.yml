@@ -86,7 +86,13 @@ models:
         joined from the reviewed lei_mapping_euets seed -- the operating entity's
         GLEIF Legal Entity Identifier (ISO 17442), letting the benchmark roll up
         to company level. The join is 1:1 on installation_id, so it adds no rows
-        and changes no emissions figure.
+        and changes no emissions figure. Carbon leakage exposure
+        (carbon_leakage_exposed, carbon_leakage_sector_description,
+        carbon_leakage_oj_citation) is a labelled read/relabel dimension joined
+        from the reviewed carbon_leakage_list seed (Commission Delegated
+        Regulation (EU) 2019/708, Annex I) on the installation's NACE code --
+        pure policy context, never a computed figure and never a
+        free-allocation entitlement.
       known_limitations: >
         (1) euets.info lags the EEA release (latest data ~2023 vs 2025).
         (2) Installations without a NACE code are excluded (cannot be sector-
@@ -104,7 +110,14 @@ models:
         (8) parent_company is free text from euets.info and is not normalised;
         the authoritative entity identifier is the LEI. (9) latitude and
         longitude are euets.info's latitudeGoogle/longitudeGoogle fields:
-        source-provided, approximate, and nullable.
+        source-provided, approximate, and nullable. (10) carbon_leakage_exposed
+        is only ever true for an Annex I ('nace') match on the installation's
+        NACE code -- Annex II PRODCOM sub-sector rows cannot be matched, since
+        euets.info carries no PRODCOM classification per installation. The
+        carbon_leakage_list seed ships empty (header only) pending a reviewed
+        PR that transcribes verified rows from the Regulation's annexes, so
+        every installation currently reads carbon_leakage_exposed = false;
+        never derive a free-allocation entitlement from this flag.
       references:
         installation_source: https://www.euets.info/
         eutl_database_doc: https://euets-info-public.s3.eu-central-1.amazonaws.com/Description_EUTL_database.pdf
@@ -162,6 +175,25 @@ models:
               values:
                 ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
                  "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U"]
+      - name: carbon_leakage_exposed
+        description: >
+          True where the installation's NACE code is transcribed in the
+          reviewed carbon_leakage_list seed (Commission Delegated Regulation
+          (EU) 2019/708, Annex I) as exposed to carbon leakage risk for EU ETS
+          Phase 4. A policy-context label only -- never a free-allocation
+          entitlement. The seed currently ships empty pending a reviewed PR,
+          so this is false for every installation until then.
+        tests:
+          - not_null
+      - name: carbon_leakage_sector_description
+        description: >
+          Sector description for the matched Annex I entry, transcribed
+          verbatim from the Regulation. Nullable -- NULL where
+          carbon_leakage_exposed is false.
+      - name: carbon_leakage_oj_citation
+        description: >
+          Official Journal citation for the matched Annex I entry. Nullable --
+          NULL where carbon_leakage_exposed is false.
       - name: "year"
         description: Compliance year.
         tests:
