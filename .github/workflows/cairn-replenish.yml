@@ -66,10 +66,16 @@ jobs:
           # actual tool name. --model Sonnet 5: re-scoring one markdown file
           # against an explicit rubric needs no Opus-level judgement.
           show_full_output: true
+          # --disallowedTools: ScheduleWakeup is harness-internal and bypasses
+          # the allowlist (cairn-implement run #43 called it while unlisted,
+          # then ended its turn waiting on a wakeup that can never fire in a
+          # one-shot CI job). Block it and the agent-messaging/background-task
+          # tools here too - same one-shot execution model as implement.
           claude_args: >-
             --max-turns 20
             --model claude-sonnet-5
             --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Bash,WebFetch,mcp__github__list_issues,mcp__github__list_pull_requests,mcp__github__search_pull_requests,mcp__github__create_pull_request"
+            --disallowedTools "ScheduleWakeup,TaskCreate,TaskUpdate,TaskGet,TaskList,TaskOutput,TaskStop,SendMessage"
           prompt: |
             You are Cairn's backlog curator. Read CLAUDE.md, all of BACKLOG.md
             (including "Considered and rejected"), and the open + recently closed
