@@ -199,6 +199,138 @@ models:
           installation emitted more than its free grant, below 1 less. Nullable:
           NULL where allocation is missing or zero.
 
+  - name: benchmark_transport_emissions
+    description: >
+      Per NL aviation/maritime EU ETS operator and year, its verified emissions
+      (tonnes CO2-eq) benchmarked against its operator-type average (mean and
+      median) over the same population. A sibling of
+      benchmark_installation_emissions, which deliberately excludes these
+      operators -- this is the transport-axis "how do your emissions compare
+      to your peers?" answer, benchmarked by operator type rather than NACE
+      section (these operators are classified by vehicle, not industry).
+    meta:
+      source_manifest: sources/euets/manifest.yml
+      source_dataset: "eutl (euets.info)"
+      methodology: >
+        NL registry, 'euets' trading system (Swiss 'chets' duplicates
+        excluded), aviation and maritime operators only (the mirror image of
+        the stationary mart's exclusion), verified emissions only. Benchmarked
+        by operator_type ('aircraft' / 'maritime') and year, never by NACE
+        section. Free allocation (allocated_total_t_co2eq) and the
+        verified-vs-allocated ratio (emissions_vs_allocated) are labelled
+        read/relabel measures over the pinned snapshot's allocatedTotal
+        column, exactly as in the stationary mart. Legal-entity identity (lei,
+        gleif_legal_name) is the same reviewed lei_mapping_euets seed join
+        as the stationary mart.
+      known_limitations: >
+        (1) euets.info lags the EEA release (latest data ~2023 vs 2025).
+        (2) Maritime entered EU ETS only from the 2024 compliance year, so
+        maritime rows are legitimately sparse -- or, on a snapshot that
+        predates 2024 (e.g. the CI fixture), entirely absent -- rather than
+        zero-filled. (3) An installation flagged as both an aircraft and a
+        maritime operator would break the installation|year grain; none exist
+        in the current snapshot, and aircraft classification takes precedence
+        if one appears, rather than silently duplicating the row. (4) These
+        operators sit outside CBS national totals and the EEA stationary
+        aggregate ('20-99'), so this mart is deliberately excluded from
+        assert_national_total_reconciles and assert_euets_coverage_within_eea.
+        (5) Free allocation is nullable: an installation-year with no
+        allocation stays NULL (never a placeholder zero), and
+        emissions_vs_allocated is NULL where allocation is missing or zero.
+        (6) The LEI is nullable, as in the stationary mart.
+      references:
+        installation_source: https://www.euets.info/
+        eutl_database_doc: https://euets-info-public.s3.eu-central-1.amazonaws.com/Description_EUTL_database.pdf
+        eu_ets_directive: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32003L0087
+        nace_rev2: https://ec.europa.eu/eurostat/web/nace
+        gleif_lei: https://www.gleif.org/en/about-lei/introducing-the-legal-entity-identifier-lei
+    columns:
+      - name: installation_year_key
+        description: Surrogate natural key (installation_id|year).
+        tests:
+          - unique
+          - not_null
+      - name: lei
+        description: >
+          GLEIF Legal Entity Identifier (ISO 17442) of the operating legal
+          entity, from the reviewed lei_mapping_euets seed. Nullable -- NULL
+          where no confident GLEIF match exists; never an invented identifier.
+      - name: gleif_legal_name
+        description: >
+          The GLEIF-registered legal name the LEI resolves to (context for the
+          mapping). Nullable, paired with lei.
+      - name: parent_company
+        description: >
+          Free-text parent company name from euets.info. Descriptive context
+          only. Nullable: euets.info does not guarantee this field for every
+          installation.
+      - name: ets_activity_label
+        description: >
+          ETS activity type label from euets.info (e.g. "Aviation"). Descriptive
+          context read straight from the pinned snapshot.
+      - name: country_label
+        description: >
+          Country name from euets.info (e.g. "Netherlands"). Descriptive context
+          for the installation's registry country.
+      - name: latitude
+        description: >
+          Approximate latitude (WGS84) from euets.info's latitudeGoogle field.
+          Nullable: not all installations carry coordinates in euets.info.
+      - name: longitude
+        description: >
+          Approximate longitude (WGS84) from euets.info's longitudeGoogle field.
+          Nullable: not all installations carry coordinates in euets.info.
+      - name: operator_type
+        description: >
+          Transport mode the operator is classified under. Never a NACE
+          section -- these operators are classified by vehicle, not industry.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["aircraft", "maritime"]
+      - name: "year"
+        description: Compliance year.
+        tests:
+          - not_null
+      - name: installation_emissions_t_co2eq
+        description: The operator's verified emissions for the year (tonnes CO2-eq).
+        tests:
+          - not_null
+      - name: allocated_total_t_co2eq
+        description: >
+          Total free allowances allocated to the operator for the year (tonnes
+          CO2-eq), read straight from the pinned euets.info snapshot. Nullable
+          -- a few installation-years carry no allocation; NULL is left as
+          NULL, never a placeholder zero.
+      - name: surrendered_allowances_t_co2eq
+        description: >
+          Allowances the operator actually surrendered for the year (tonnes
+          CO2-eq), read straight from the pinned euets.info snapshot. Nullable
+          -- surrender can lag and a single surrender may cover multiple
+          years, so some installation-years legitimately carry NULL (never a
+          placeholder zero).
+      - name: operator_type_installation_count
+        description: Number of operators in the operator-type-year benchmark population.
+        tests:
+          - not_null
+      - name: operator_type_mean_emissions_t_co2eq
+        description: Mean verified emissions across the operator-type-year population.
+        tests:
+          - not_null
+      - name: operator_type_median_emissions_t_co2eq
+        description: Median verified emissions across the operator-type-year population.
+        tests:
+          - not_null
+      - name: emissions_vs_operator_type_mean
+        description: Operator emissions divided by the operator-type mean for the year.
+        tests:
+          - not_null
+      - name: emissions_vs_allocated
+        description: >
+          Verified emissions divided by free allocation -- above 1 means the
+          operator emitted more than its free grant, below 1 less. Nullable:
+          NULL where allocation is missing or zero.
+
   - name: mart_esrs_e1
     description: >
       ESRS E1-6 disclosure export: gross Scope 1 greenhouse-gas emissions
