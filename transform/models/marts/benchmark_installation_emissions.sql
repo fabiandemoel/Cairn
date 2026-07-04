@@ -52,11 +52,12 @@
 --   * Carbon leakage exposure (carbon_leakage_exposed, and its supporting
 --     sector_description/oj_citation) is a labelled read/relabel dimension
 --     joined from the reviewed carbon_leakage_list seed (Commission Delegated
---     Regulation (EU) 2019/708, Annex I) on the installation's NACE code --
---     policy context only, never a computed figure and never a free-allocation
---     entitlement. Only Annex I ('nace') rows are joined: Annex II PRODCOM
---     sub-sector rows cannot be matched, since euets.info carries no PRODCOM
---     classification per installation.
+--     Decision (EU) 2019/708, OJ L 120, 8.5.2019, p. 20) on the installation's
+--     NACE code -- policy context only, never a computed figure and never a
+--     free-allocation entitlement. Only the Decision's Annex points 1-3
+--     ('nace') rows are joined: point 4's Prodcom sub-sector rows cannot be
+--     matched, since euets.info carries no Prodcom classification per
+--     installation.
 
 with lei_mapping as (
     select
@@ -117,9 +118,7 @@ installation_year as (
         installations.nace_section_label,
         -- Carbon leakage exposure is a labelled policy flag, not a computed
         -- figure: true only where the installation's NACE code is transcribed
-        -- in the reviewed carbon_leakage_list seed (Annex I). The seed ships
-        -- empty until a reviewed PR adds verified rows, so this is false for
-        -- every installation until then.
+        -- in the reviewed carbon_leakage_list seed (Annex points 1-3).
         carbon_leakage.code is not null as carbon_leakage_exposed,
         carbon_leakage.sector_description as carbon_leakage_sector_description,
         carbon_leakage.oj_citation as carbon_leakage_oj_citation,
