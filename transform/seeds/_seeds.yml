@@ -42,3 +42,53 @@ seeds:
         description: >
           GLEIF Legal Entity Identifier (20-char ISO 17442) of the operating
           legal entity, or NULL when no confident GLEIF match exists.
+
+  - name: carbon_leakage_list
+    description: >
+      Reviewed transcription of the sectors and sub-sectors deemed exposed to
+      a significant risk of carbon leakage for EU ETS Phase 4 (2021-2030) under
+      Commission Delegated Decision (EU) 2019/708 of 15 February 2019 (OJ L
+      120, 8.5.2019, p. 20). The Decision's single Annex is split into four
+      numbered points by legal basis: points 1-3 list whole NACE Rev.2-4
+      sectors (code_type = 'nace') assessed under Article 10b(1)/(2)/(3) first
+      subparagraph; point 4 lists Prodcom sub-sectors (code_type = 'prodcom')
+      disaggregated under Article 10b(3) fifth subparagraph. Like
+      sector_mapping_cbs, every row is transcribed verbatim from the Annex in
+      a reviewed PR -- never paraphrased, inferred, or reconstructed from
+      memory. NACE codes are stored dotted (e.g. '05.10') to match
+      euets.info's nace_id convention that benchmark_installation_emissions
+      joins against; Prodcom codes are stored exactly as printed in the Annex
+      table (no dots).
+    columns:
+      - name: code
+        description: >
+          NACE Rev.2-4 code, dotted (code_type = 'nace') or Prodcom code,
+          undotted (code_type = 'prodcom'), transcribed verbatim from the
+          annex (primary key).
+        tests:
+          - unique
+          - not_null
+      - name: code_type
+        description: Which classification `code` uses.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["nace", "prodcom"]
+      - name: oj_point
+        description: >
+          Which numbered point of the Decision's Annex the row is transcribed
+          from (1-3 are NACE sectors by legal basis, 4 is the Prodcom
+          disaggregation).
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["1", "2", "3", "4"]
+      - name: sector_description
+        description: Sector or sub-sector description, transcribed verbatim from the annex.
+        tests:
+          - not_null
+      - name: oj_citation
+        description: >
+          Citation for the row (Decision, Annex point, Official Journal reference).
+        tests:
+          - not_null

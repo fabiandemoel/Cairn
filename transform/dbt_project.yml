@@ -40,3 +40,7 @@ seeds:
       +column_types:
         lei: varchar
         gleif_legal_name: varchar
+    carbon_leakage_list:
+      +column_types:
+        code: varchar
+        oj_point: varchar
