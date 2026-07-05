@@ -37,20 +37,36 @@ dataset: <slug>            slugs are lowercase_with_underscores and drive the
                            stg_<source>__<dataset>.sql from them)
 layers:
   <layer>: <sentinel path>
+  <layer>+<layer>: <sentinel path>; <sentinel path>   (a fused step — see below)
 -->
 ```
 
-- `layers:` lists the candidate's full chain in dependency order. Valid layer
-  names: `ingestion`, `staging`, `mart`, `site`, `export`. Each value is the
-  layer's **sentinel path**: a *new file* that layer creates, mirroring the
-  entry's *Layers* plan. The dispatcher opens an issue for the first layer
-  whose sentinel does not exist on `main`. Shipped layers **stay in the block**
+- `layers:` lists the candidate's dispatch steps in dependency order. Valid
+  layer names: `ingestion`, `staging`, `mart`, `site`, `export`. Each value is
+  the step's **sentinel path**: a *new file* that step creates, mirroring the
+  entry's *Layers* plan. The dispatcher opens an issue for the first step
+  whose sentinel does not exist on `main`. Shipped steps **stay in the block**
   (their sentinels exist, so they are skipped, and the generated issue lists
   them as already merged). If an implement PR names the artifact differently,
-  it must update the block in the same PR, or the layer will be re-dispatched.
+  it must update the block in the same PR, or the step will be re-dispatched.
+- **Fused step (one issue, several layers).** Join two or more layer names with
+  `+` (e.g. `mart+site`) to dispatch them as a **single** issue/PR, with one
+  `;`-separated sentinel per part (in the same order as the joined names). The
+  fused step is only "done" once **every** sentinel exists, so the one issue
+  delivers all its layers. Use this for a `mart+site` pair: the site page is a
+  thin read-only query over the mart, can't be built before it, and a separate
+  approve→PR→CI round-trip buys little review value. Constraints the parser
+  enforces: the fused names must be **distinct**, in **dependency order**, and
+  **not scaffoldable** — `ingestion`/`staging` keep their own step because the
+  scaffold and the (ingestion-only) source-research gate key off a single-layer
+  issue. So fuse `mart+site` (and `mart+site+export` if ever), never anything
+  touching ingestion/staging. Only fuse layers that are **both still pending**;
+  once a layer has shipped, leave it as its own recorded sentinel rather than
+  retroactively fusing a done layer with a pending one (that would re-surface
+  the shipped layer in the new issue's scope).
 - Sentinel paths must match what actually ships, including the repo's naming
   conventions (for a new source, the paths the scaffold derives from the
-  slugs). A stale sentinel makes the dispatcher re-open a done layer — check
+  slugs). A stale sentinel makes the dispatcher re-open a done step — check
   the blocks against the tree when curating.
 - A candidate that must not be dispatched yet carries `hold: <reason>` instead
   of (or in addition to) `layers:`.
@@ -72,11 +88,12 @@ dispatched issue reads as a per-layer spec:
    score line (`**Value: · Effort: · Spine-fit:**`).
 2. One short paragraph: what the candidate adds and why it belongs on the
    spine.
-3. `*Layers:*` — one bullet per layer in the dispatch block, in the same
-   order: the artifact to build, the test(s) that guard it, and any naming /
-   fixture / discovery notes specific to that layer. A shipped layer keeps a
-   one-line bullet recording where it landed (issue/PR and the pointers the
-   later layers need).
+3. `*Layers:*` — one bullet per dispatch step, in the same order: the
+   artifact to build, the test(s) that guard it, and any naming / fixture /
+   discovery notes specific to that step. A **fused** step (e.g. `mart+site`)
+   gets one bullet that describes **all** its artifacts (both sentinels), since
+   they ship in one PR. A shipped step keeps a one-line bullet recording where
+   it landed (issue/PR and the pointers the later steps need).
 4. `*Watch:*` — the caveats an implementer must not violate: methodology
    limits, what stays out of which test, what must never be computed.
 
@@ -225,8 +242,7 @@ dataset: air_emissions
 layers:
   ingestion: sources/cbs_namea/manifest.yml
   staging: transform/models/staging/stg_cbs_namea__air_emissions.sql
-  mart: transform/models/marts/mart_namea_bridge.sql
-  site: site/sources/cairn/namea_bridge.sql
+  mart+site: transform/models/marts/mart_namea_bridge.sql; site/sources/cairn/namea_bridge.sql
 -->
 **Value: M · Effort: M · Spine-fit: H**
 
@@ -247,10 +263,12 @@ for the same sector — directly from CBS via the same OData v4 API.
   - staging — `stg_cbs_namea__air_emissions`: NACE sector code, year, gas,
     value, with the `cbs_namea_air_emissions_raw_dir` var and a small committed
     fixture like the other CBS source.
-  - mart — `mart_namea_bridge`: the NL residence-vs-territorial bridge per
-    sector/year, presented as a provenance/methodology layer.
-  - site — a `namea_bridge.sql` source query + a page explaining the two
-    attribution principles side by side.
+  - mart + site (fused — one PR) — `mart_namea_bridge`: the NL
+    residence-vs-territorial bridge per sector/year, presented as a
+    provenance/methodology layer; **plus** its read-only site layer in the same
+    PR — a `namea_bridge.sql` source query + a page explaining the two
+    attribution principles side by side. The site only reads the mart; keep the
+    bridge logic in the mart, tested there.
 - *Watch:* residence-principle totals do **not** reconcile with 85669NED — the
   divergence is methodological by design, so document the bridge explicitly in
   a note, never a `<0.5%` test. Don't duplicate AEA's cross-country story:
@@ -260,8 +278,7 @@ for the same sector — directly from CBS via the same OData v4 API.
 ### 5. Coverage & completeness observability — surface the reconciliation drift the tests already compute
 <!-- dispatch
 layers:
-  mart: transform/models/marts/mart_coverage_observability.sql
-  site: site/sources/cairn/coverage_observability.sql
+  mart+site: transform/models/marts/mart_coverage_observability.sql; site/sources/cairn/coverage_observability.sql
 -->
 **Value: M · Effort: L · Spine-fit: M**
 
@@ -273,15 +290,16 @@ totals and the official aggregates, and the CBS mart already buckets ~30–35% o
 national emissions as `UNMAPPED` — but those numbers are discarded once the
 test goes green. A read-only mart can surface them as standing facts.
 - *Layers:*
-  - mart — `mart_coverage_observability`: per source/year, the reconciliation
-    drift %, `UNMAPPED` share, and covered share, read from
-    `benchmark_sector_emissions` / `benchmark_installation_emissions` (+ the
-    EEA aggregate staging) — the same figures the assert tests compare, never a
-    re-derivation of a national total by a second route. Guard with
-    accepted-range tests, not exact values.
-  - site — a `coverage_observability.sql` source query + a section on the
-    existing Data quality page, extending it from "is the chain pinned?" to
-    "how complete is the coverage?".
+  - mart + site (fused — one PR) — `mart_coverage_observability`: per
+    source/year, the reconciliation drift %, `UNMAPPED` share, and covered
+    share, read from `benchmark_sector_emissions` /
+    `benchmark_installation_emissions` (+ the EEA aggregate staging) — the same
+    figures the assert tests compare, never a re-derivation of a national total
+    by a second route. Guard with accepted-range tests, not exact values.
+    **Plus** its read-only site layer in the same PR — a
+    `coverage_observability.sql` source query + a section on the existing Data
+    quality page, extending it from "is the chain pinned?" to "how complete is
+    the coverage?".
 - *Watch:* a coverage ratio **is** a computation, so keep it strictly an
   *observation* over figures the marts/tests already produce — never a new
   benchmark figure, never in the ESRS E1 export. It is descriptive ("32% of
@@ -291,8 +309,7 @@ test goes green. A read-only mart can surface them as standing facts.
 ### 6. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
 <!-- dispatch
 layers:
-  mart: transform/models/marts/mart_field_completeness.sql
-  site: site/sources/cairn/field_completeness.sql
+  mart+site: transform/models/marts/mart_field_completeness.sql; site/sources/cairn/field_completeness.sql
 -->
 **Value: M · Effort: L · Spine-fit: H**
 
@@ -302,12 +319,13 @@ CBS. Their completeness is itself a data-quality signal ("what fraction of
 installation-years carry an LEI / a free-allocation figure?") and lets
 reviewed-seed coverage (e.g. the LEI mapping) be watched as it grows over time.
 - *Layers:*
-  - mart — `mart_field_completeness`: per mart/column/year, populated-vs-NULL
-    counts and the resulting share, computed over the existing marts. Counts
-    only; enumerate the tracked columns explicitly in the model rather than
-    introspecting the schema, so a new nullable column is a reviewed addition.
-  - site — a `field_completeness.sql` source query + a section on the Data
-    quality page.
+  - mart + site (fused — one PR) — `mart_field_completeness`: per
+    mart/column/year, populated-vs-NULL counts and the resulting share,
+    computed over the existing marts. Counts only; enumerate the tracked columns
+    explicitly in the model rather than introspecting the schema, so a new
+    nullable column is a reviewed addition. **Plus** its read-only site layer in
+    the same PR — a `field_completeness.sql` source query + a section on the
+    Data quality page.
 - *Watch:* pure counts/shares of populated vs NULL; **never impute or fill a
   NULL**, and never present completeness as a quality verdict on the figures
   themselves. Honour the existing nullability semantics — a NULL LEI /
@@ -317,8 +335,7 @@ reviewed-seed coverage (e.g. the LEI mapping) be watched as it grows over time.
 ### 7. Freshness / staleness observability — how current is each source?
 <!-- dispatch
 layers:
-  mart: transform/models/marts/mart_source_freshness.py
-  site: site/sources/cairn/source_freshness.sql
+  mart+site: transform/models/marts/mart_source_freshness.py; site/sources/cairn/source_freshness.sql
 -->
 **Value: M · Effort: L · Spine-fit: H**
 
@@ -328,12 +345,12 @@ the known euets.info-vs-EEA latency, the latest `Definitief` CBS year vs the
 provisional one — is a data-quality dimension that today lives only in README
 prose and the source quirks.
 - *Layers:*
-  - mart — `mart_source_freshness`: a Python dbt model (like
-    `mart_data_provenance.py`, which already reads the manifests — hence the
-    `.py` sentinel): per source, the pinned release and ingest date, the latest
-    covered year from the matching mart, and the observed lag between them.
-  - site — a `source_freshness.sql` source query + a section on the Data
-    quality page.
+  - mart + site (fused — one PR) — `mart_source_freshness`: a Python dbt model
+    (like `mart_data_provenance.py`, which already reads the manifests — hence
+    the `.py` sentinel): per source, the pinned release and ingest date, the
+    latest covered year from the matching mart, and the observed lag between
+    them. **Plus** its read-only site layer in the same PR — a
+    `source_freshness.sql` source query + a section on the Data quality page.
 - *Watch:* freshness is **descriptive**, computed from pinned dates and the
   marts' `max(year)` — not a freshness SLA or alarm (that is the weekly
   reproducibility job's / the dispatcher's role) and never a score. Don't

@@ -89,13 +89,41 @@ _LAYER_NOTES: dict[str, str] = {
 }
 
 
-def infer_layer(title: str | None, labels: list[str] | None) -> str:
-    """Infer the repo layer an issue targets from its title and labels.
+# Layer name -> the title tokens that identify it, in dependency order. A fused
+# dispatch step (e.g. mart+site) writes a title like "… — dbt mart + site", so a
+# title can legitimately match more than one layer; infer_layers returns them all.
+_LAYER_TOKENS: list[tuple[str, tuple[str, ...]]] = [
+    ("ingestion", ("ingest", "pipeline", "manifest")),
+    ("staging", ("staging", "stg_")),
+    ("mart", ("mart",)),
+    ("site", ("site", "evidence", "page")),
+    ("export", ("export", "esrs")),
+]
 
-    data-refresh is label-driven; the feature layers are encoded in the issue
-    title suffix the dispatcher writes (e.g. "… — ingestion", "… — dbt mart",
-    "… — site"; see LAYER_TITLES in scripts/dispatch.py, which round-trips
-    through this function).
+
+def infer_layers(title: str | None, labels: list[str] | None) -> list[str]:
+    """All repo layers an issue targets, in dependency order.
+
+    A fused dispatch step (``mart+site``) produces a title like "… — dbt mart +
+    site"; this returns ``["mart", "site"]`` so the reference step can inline the
+    exemplars for *every* fused layer. A single-layer issue returns a one-element
+    list; data-refresh and an unrecognised title return their sentinel single
+    value. See LAYER_TITLES in scripts/dispatch.py, which round-trips through here.
+    """
+    labs = {label.lower() for label in (labels or [])}
+    if "data-refresh" in labs:
+        return ["data-refresh"]
+    t = (title or "").lower()
+    found = [layer for layer, needles in _LAYER_TOKENS if any(n in t for n in needles)]
+    return found or ["unknown"]
+
+
+def infer_layer(title: str | None, labels: list[str] | None) -> str:
+    """Infer the single repo layer an issue targets from its title and labels.
+
+    Kept for the single-layer consumers (scaffold_for_layer, source_research)
+    that gate on ingestion/staging: it returns the most specific single layer,
+    checking the more specific tokens first. For a fused step, use infer_layers.
     """
     labs = {label.lower() for label in (labels or [])}
     if "data-refresh" in labs:
@@ -139,26 +167,60 @@ def _render_file(root: Path, rel: str, max_lines: int) -> str | None:
     return f"### `{rel}`\n\n```{fence}\n{body}{note}\n```"
 
 
-def build_reference(root: Path, layer: str, max_lines: int = 250) -> str:
+def build_reference(root: Path, layers: str | list[str], max_lines: int = 250) -> str:
+    """Render the exemplar template(s) for one layer, or several fused layers.
+
+    ``layers`` is a single layer name or a list (a fused ``mart+site`` step
+    injects the exemplars for both). data-refresh/unknown only ever occur alone.
+    """
+    if isinstance(layers, str):
+        layers = [layers]
     heading = "## Canonical reference for this layer (generated — copy this pattern)"
 
-    if layer in _NO_TEMPLATE_NOTE:
-        return f"{heading}\n\n{_NO_TEMPLATE_NOTE[layer]}\n"
+    if len(layers) == 1 and layers[0] in _NO_TEMPLATE_NOTE:
+        return f"{heading}\n\n{_NO_TEMPLATE_NOTE[layers[0]]}\n"
 
-    blocks = [b for rel in EXEMPLARS.get(layer, []) if (b := _render_file(root, rel, max_lines))]
-    if not blocks:
+    rendered: list[tuple[str, list[str]]] = []
+    for layer in layers:
+        blocks = [
+            b for rel in EXEMPLARS.get(layer, []) if (b := _render_file(root, rel, max_lines))
+        ]
+        if blocks:
+            rendered.append((layer, blocks))
+    if not rendered:
         return f"{heading}\n\n{_NO_TEMPLATE_NOTE['unknown']}\n"
 
+    if len(rendered) == 1:
+        layer, blocks = rendered[0]
+        intro = (
+            f"The files below are the canonical, in-tree exemplar(s) for the **{layer}** layer. "
+            "Your change is a near-copy of this pattern — model the new file(s) on these and "
+            "adapt only the source-specific parts. This is the authoritative template: do NOT "
+            "spend turns re-reading these files, and do NOT read neighbouring layers' files that "
+            "are out of scope for this issue."
+        )
+        note = _LAYER_NOTES.get(layer)
+        tail = f"\n\n{note}" if note else ""
+        return heading + "\n\n" + intro + "\n\n" + "\n\n".join(blocks) + tail + "\n"
+
+    # Fused step: inline the exemplars for every layer in the issue, grouped per
+    # layer. Here the neighbouring layer IS in scope — build them all in one PR.
+    names = " + ".join(layer for layer, _ in rendered)
     intro = (
-        f"The files below are the canonical, in-tree exemplar(s) for the **{layer}** layer. "
-        "Your change is a near-copy of this pattern — model the new file(s) on these and adapt "
-        "only the source-specific parts. This is the authoritative template: do NOT spend turns "
-        "re-reading these files, and do NOT read neighbouring layers' files that are out of scope "
-        "for this issue."
+        f"This issue **fuses** the {names} layers into one PR — deliver all of them together. "
+        "The canonical in-tree exemplar(s) for each layer are grouped below; your change is a "
+        "near-copy of these patterns. Model the new file(s) on them and adapt only the "
+        "source-specific parts. Do NOT spend turns re-reading these files. All the layers below "
+        "are in scope — but do NOT pull in layers outside this set."
     )
-    note = _LAYER_NOTES.get(layer)
-    tail = f"\n\n{note}" if note else ""
-    return heading + "\n\n" + intro + "\n\n" + "\n\n".join(blocks) + tail + "\n"
+    sections = [heading, intro]
+    for layer, blocks in rendered:
+        sections.append(f"### Fused layer: {layer}")
+        sections.extend(blocks)
+        note = _LAYER_NOTES.get(layer)
+        if note:
+            sections.append(note)
+    return "\n\n".join(sections) + "\n"
 
 
 def main() -> None:
@@ -184,8 +246,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    layer = args.layer or infer_layer(args.title, args.labels.split(",") if args.labels else [])
-    print(build_reference(args.root.resolve(), layer, max_lines=args.max_lines), end="")
+    labels = args.labels.split(",") if args.labels else []
+    layers = [args.layer] if args.layer else infer_layers(args.title, labels)
+    print(build_reference(args.root.resolve(), layers, max_lines=args.max_lines), end="")
 
 
 if __name__ == "__main__":
