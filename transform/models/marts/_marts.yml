@@ -712,6 +712,87 @@ models:
           Comma-joined allowed-value list when the column has an accepted_values
           test, else NULL.
 
+  - name: mart_coverage_observability
+    description: >
+      Coverage & completeness observability: per source and year, the
+      reconciliation drift against the official aggregate, the UNMAPPED share
+      (CBS only), and the covered share. These are the same figures
+      assert_national_total_reconciles and assert_euets_coverage_within_eea
+      already compute in CI, surfaced as standing facts instead of discarded
+      once the test goes green.
+    meta:
+      source_manifest: sources/cbs/manifest.yml, sources/euets/manifest.yml
+      methodology: >
+        A second reader of figures the reconciliation tests already compute --
+        never a re-derivation of a national total by an independent route, and
+        never a new benchmark figure. cbs: reconciliation_drift is
+        benchmark_sector_emissions's own national total (all leaves, including
+        UNMAPPED) against the CBS source total (T001616, gas T001372,
+        Definitief years), the same pair assert_national_total_reconciles
+        compares; unmapped_share is the share of that total in the UNMAPPED
+        NACE bucket, and covered_share is its complement. euets:
+        reconciliation_drift is benchmark_installation_emissions's summed
+        verified emissions against the EEA official stationary aggregate
+        (main_activity_code 20-99, verified emissions, all sizes), the same
+        pair assert_euets_coverage_within_eea compares; covered_share is the
+        fraction of that official aggregate the installation register
+        captures. unmapped_share has no EU ETS equivalent (every mart row
+        already carries a NACE section) and is left NULL, never a placeholder.
+      known_limitations: >
+        (1) Descriptive only -- a coverage ratio is a computation over existing
+        mart/test figures, never a confidence or quality score on any single
+        figure, and never surfaced in the ESRS E1 export. (2) unmapped_share is
+        NULL for euets by design (no UNMAPPED concept in that mart).
+        (3) covered_share can exceed 1 for euets by a fraction of a percent (the
+        installation mart and the EEA aggregate both derive from the EUTL but
+        are ingested independently); the accepted-range test guards against a
+        gross deviation, not an exact value. (4) Inherits every upstream
+        known_limitation of benchmark_sector_emissions and
+        benchmark_installation_emissions (provisional-year exclusion, euets.info
+        release lag, etc).
+      references:
+        cbs_reconciliation_test: https://github.com/fabiandemoel/Cairn/blob/main/transform/tests/assert_national_total_reconciles.sql
+        euets_coverage_test: https://github.com/fabiandemoel/Cairn/blob/main/transform/tests/assert_euets_coverage_within_eea.sql
+        source_table_cbs: https://opendata.cbs.nl/statline/#/CBS/nl/dataset/85669NED
+        eea_cross_check: https://www.eea.europa.eu/en/datahub/datahubitem-view/98f04097-26de-4fca-86c4-63834818c0c0
+    columns:
+      - name: coverage_key
+        description: Surrogate natural key (source|year).
+        tests:
+          - unique
+          - not_null
+      - name: source
+        description: Source identifier this observation covers.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["cbs", "euets"]
+      - name: "year"
+        description: Calendar / compliance year.
+        tests:
+          - not_null
+      - name: reconciliation_drift
+        description: >
+          (Mart total - official source total) / official source total for the
+          source-year -- the same deviation assert_national_total_reconciles /
+          assert_euets_coverage_within_eea already guard at a tight tolerance.
+          Near zero confirms the mart's own total still matches the official
+          aggregate it derives from.
+        tests:
+          - not_null
+      - name: unmapped_share
+        description: >
+          Share of the CBS national total landing in the UNMAPPED NACE bucket
+          (categories CBS does not attribute to a single NACE section).
+          NULL for euets -- no UNMAPPED equivalent in that mart.
+      - name: covered_share
+        description: >
+          cbs: the complement of unmapped_share (mapped share of the national
+          total). euets: the installation mart's summed verified emissions
+          divided by the EEA official stationary aggregate for the year.
+        tests:
+          - not_null
+
   - name: mart_business_glossary
     description: >
       Business glossary: one row per curated definition of a cross-cutting Cairn
