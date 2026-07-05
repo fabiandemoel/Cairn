@@ -56,6 +56,18 @@ def test_ingestion_reference_inlines_exemplars(tmp_path: Path) -> None:
     assert "```python" in out and "```yaml" in out
     # It tells the agent not to re-read them.
     assert "do NOT spend turns" in out
+    # And it names the per-source registers a new source must be wired into.
+    assert "test_source_wiring" in out
+    assert "check_freshness" in out
+
+
+def test_layer_note_only_for_ingestion(tmp_path: Path) -> None:
+    # The register-wiring note is ingestion-specific noise for other layers.
+    repo = _make_repo(tmp_path)
+    (repo / "scripts").mkdir()
+    (repo / "scripts" / "export_esrs_e1.py").write_text("def main():\n    pass\n")
+    out = build_reference(repo, "export")
+    assert "test_source_wiring" not in out
 
 
 def test_data_refresh_emits_checklist_pointer_not_a_template(tmp_path: Path) -> None:
