@@ -749,7 +749,12 @@ models:
         gross deviation, not an exact value. (4) Inherits every upstream
         known_limitation of benchmark_sector_emissions and
         benchmark_installation_emissions (provisional-year exclusion, euets.info
-        release lag, etc).
+        release lag, etc). (5) euets's reconciliation_drift / covered_share can
+        legitimately run very low (large negative drift, low covered_share) on
+        a partial installation snapshot -- the CI fixture holds only a subset
+        of NL installations, so its accepted-range test is one-sided (upper
+        bound only), mirroring assert_euets_coverage_within_eea's own
+        one-sided design.
       references:
         cbs_reconciliation_test: https://github.com/fabiandemoel/Cairn/blob/main/transform/tests/assert_national_total_reconciles.sql
         euets_coverage_test: https://github.com/fabiandemoel/Cairn/blob/main/transform/tests/assert_euets_coverage_within_eea.sql
