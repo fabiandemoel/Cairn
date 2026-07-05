@@ -6,10 +6,10 @@ from pathlib import Path
 
 from scripts.check_freshness import SourceStatus
 from scripts.dispatch import (
-    LAYER_TITLES,
+    LAYER_RANK,
     backlog_issue_spec,
     freshness_issue_specs,
-    next_missing_layer,
+    next_missing_step,
     parse_backlog,
     run,
 )
@@ -48,8 +48,7 @@ The authoritative source under NL's UNFCCC submission.
 ### 3. Coverage observability
 <!-- dispatch
 layers:
-  mart: transform/models/marts/mart_coverage_observability.sql
-  site: site/sources/cairn/coverage_observability.sql
+  mart+site: transform/models/marts/mart_coverage.sql; site/sources/cairn/coverage.sql
 -->
 Surface the reconciliation drift.
 
@@ -91,15 +90,22 @@ def test_parse_backlog_reads_blocks_holds_and_errors() -> None:
     eua, rivm, cov, none = cands
     assert eua.hold and not eua.dispatchable
     assert rivm.dispatchable and rivm.source == "rivm" and rivm.dataset == "emissieregistratie"
-    assert [lyr for lyr, _ in rivm.layers] == ["ingestion", "staging", "mart"]
+    assert [s.key for s in rivm.layers] == ["ingestion", "staging", "mart"]
+    # #3 fuses mart+site into a single step with two sentinels.
     assert cov.dispatchable and cov.source is None
+    assert [s.key for s in cov.layers] == ["mart+site"]
+    assert cov.layers[0].parts == ("mart", "site")
+    assert cov.layers[0].sentinels == (
+        "transform/models/marts/mart_coverage.sql",
+        "site/sources/cairn/coverage.sql",
+    )
     assert none.parse_error == "no <!-- dispatch --> block"
     # The dispatch comment is stripped from the quoted entry.
     assert "<!--" not in rivm.entry_md and "Watch:" in rivm.entry_md
 
 
 def test_parse_backlog_ignores_rejected_section_and_malformed_blocks() -> None:
-    text = BACKLOG.replace("layers:\n  mart:", "layers:\n  warehouse:")  # unknown layer
+    text = BACKLOG.replace("mart+site:", "warehouse+site:")  # unknown layer in a fused key
     cands = parse_backlog(text)
     cov = next(c for c in cands if c.name == "Coverage observability")
     assert cov.parse_error and "unknown layer" in cov.parse_error
@@ -107,18 +113,57 @@ def test_parse_backlog_ignores_rejected_section_and_malformed_blocks() -> None:
     assert all("Old idea" not in c.name for c in cands)
 
 
-def test_next_missing_layer_walks_sentinels(tmp_path: Path) -> None:
+def test_fused_step_parser_rejects_bad_shapes() -> None:
+    # A fused key may not include a scaffoldable layer (ingestion/staging keep
+    # their own step so the scaffold + research gate stay per-layer).
+    scaffoldable = BACKLOG.replace(
+        "mart+site: transform/models/marts/mart_coverage.sql; site/sources/cairn/coverage.sql",
+        "staging+mart: a.sql; b.sql",
+    )
+    cov = next(c for c in parse_backlog(scaffoldable) if c.name == "Coverage observability")
+    assert cov.parse_error and "scaffoldable" in cov.parse_error
+
+    # Fused parts must be in dependency order.
+    bad_order = BACKLOG.replace("mart+site:", "site+mart:")
+    cov = next(c for c in parse_backlog(bad_order) if c.name == "Coverage observability")
+    assert cov.parse_error and "dependency order" in cov.parse_error
+
+    # One sentinel per fused part, or it's malformed.
+    mismatch = BACKLOG.replace(
+        "mart+site: transform/models/marts/mart_coverage.sql; site/sources/cairn/coverage.sql",
+        "mart+site: only-one-sentinel.sql",
+    )
+    cov = next(c for c in parse_backlog(mismatch) if c.name == "Coverage observability")
+    assert cov.parse_error and "one ';'-separated sentinel" in cov.parse_error
+
+
+def test_next_missing_step_walks_sentinels(tmp_path: Path) -> None:
     cands = parse_backlog(BACKLOG)
     rivm = cands[1]
-    assert next_missing_layer(rivm, tmp_path) == ("ingestion", "sources/rivm/manifest.yml")
+    step = next_missing_step(rivm, tmp_path)
+    assert step is not None
+    assert step.parts == ("ingestion",) and step.sentinels == ("sources/rivm/manifest.yml",)
     (tmp_path / "sources/rivm").mkdir(parents=True)
     (tmp_path / "sources/rivm/manifest.yml").write_text("snapshots: []\n")
-    layer, sentinel = next_missing_layer(rivm, tmp_path)
-    assert layer == "staging"
-    for _, p in rivm.layers:
-        (tmp_path / p).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / p).write_text("x")
-    assert next_missing_layer(rivm, tmp_path) is None
+    assert next_missing_step(rivm, tmp_path).key == "staging"
+    for step in rivm.layers:
+        for sentinel in step.sentinels:
+            (tmp_path / sentinel).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / sentinel).write_text("x")
+    assert next_missing_step(rivm, tmp_path) is None
+
+
+def test_fused_step_is_built_only_when_all_sentinels_exist(tmp_path: Path) -> None:
+    cov = next(c for c in parse_backlog(BACKLOG) if c.name == "Coverage observability")
+    step = cov.layers[0]
+    mart, site = step.sentinels
+    # Building only the mart leaves the fused step incomplete → still dispatched.
+    (tmp_path / mart).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / mart).write_text("x")
+    assert next_missing_step(cov, tmp_path) is step
+    (tmp_path / site).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / site).write_text("x")
+    assert next_missing_step(cov, tmp_path) is None
 
 
 # ---- freshness ------------------------------------------------------------------
@@ -170,33 +215,55 @@ def test_backlog_dispatches_top_candidates_next_layer(tmp_path: Path) -> None:
     assert any("held" in n for n in notes)
 
 
+def test_backlog_dispatches_fused_mart_site_as_one_issue(tmp_path: Path) -> None:
+    from scripts.reference_for_layer import infer_layers
+
+    cov = next(c for c in parse_backlog(BACKLOG) if c.name == "Coverage observability")
+    step = cov.layers[0]
+    assert step.title == "dbt mart + site"
+
+    spec, _ = backlog_issue_spec([cov], tmp_path, [], [])
+    assert spec is not None
+    assert spec.title == "feat: Coverage observability — dbt mart + site"
+    # The body asks for one PR delivering both layers and names both sentinels.
+    assert "Deliver the fused **dbt mart + site** step" in spec.body
+    assert "`transform/models/marts/mart_coverage.sql`" in spec.body
+    assert "`site/sources/cairn/coverage.sql`" in spec.body
+    assert "Scaffold parameters" not in spec.body  # mart+site is never scaffoldable
+    # The fused title round-trips through implement's layer inference to both
+    # exemplars, in dependency order.
+    assert infer_layers(spec.title, ["proposal"]) == list(step.parts)
+
+
 def test_backlog_title_suffix_matches_implements_layer_inference(tmp_path: Path) -> None:
-    from scripts.reference_for_layer import infer_layer
+    from scripts.reference_for_layer import infer_layers
 
     cands = parse_backlog(BACKLOG)
     rivm = cands[1]
-    # Walk every layer: the generated title must round-trip through implement's
-    # infer_layer so the right exemplar/scaffold is injected on the other side.
-    for idx, (layer, _sentinel) in enumerate(rivm.layers):
-        for _done_layer, done_path in rivm.layers[:idx]:
-            p = tmp_path / done_path
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text("x")
-        for _, later_path in rivm.layers[idx:]:
-            (tmp_path / later_path).unlink(missing_ok=True)
+    # Walk every step: the generated title must round-trip through implement's
+    # infer_layers so the right exemplar/scaffold is injected on the other side.
+    for idx, step in enumerate(rivm.layers):
+        for done in rivm.layers[:idx]:
+            for sentinel in done.sentinels:
+                p = tmp_path / sentinel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text("x")
+        for later in rivm.layers[idx:]:
+            for sentinel in later.sentinels:
+                (tmp_path / sentinel).unlink(missing_ok=True)
         spec, _ = backlog_issue_spec([rivm], tmp_path, [], [])
         assert spec is not None
-        assert infer_layer(spec.title, ["proposal"]) == layer
+        assert infer_layers(spec.title, ["proposal"]) == list(step.parts)
 
 
 def test_backlog_dedups_on_open_issue_and_pr(tmp_path: Path) -> None:
     cands = parse_backlog(BACKLOG)
     open_issue = ["feat: Emissieregistratie (RIVM) → deepen NL provenance — ingestion"]
     spec, notes = backlog_issue_spec(cands, tmp_path, open_issue, [])
-    # RIVM is tracked -> falls through to the next candidate (#3).
+    # RIVM is tracked -> falls through to the next candidate (#3, a fused step).
     assert spec is not None and spec.title.startswith("feat: Coverage observability")
-    assert spec.title.endswith("— dbt mart")
-    assert "Scaffold parameters" not in spec.body  # mart layer: no scaffold block
+    assert spec.title.endswith("— dbt mart + site")
+    assert "Scaffold parameters" not in spec.body  # mart+site layer: no scaffold block
 
     pr_titles = ["feat(mart): coverage observability mart (Coverage observability)"]
     spec, notes = backlog_issue_spec(cands, tmp_path, open_issue, pr_titles)
@@ -207,9 +274,10 @@ def test_backlog_dedups_on_open_issue_and_pr(tmp_path: Path) -> None:
 def test_backlog_skips_fully_shipped_candidate(tmp_path: Path) -> None:
     cands = parse_backlog(BACKLOG)
     rivm = cands[1]
-    for _, p in rivm.layers:
-        (tmp_path / p).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / p).write_text("x")
+    for step in rivm.layers:
+        for sentinel in step.sentinels:
+            (tmp_path / sentinel).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / sentinel).write_text("x")
     spec, notes = backlog_issue_spec([rivm], tmp_path, [], [])
     assert spec is None
     assert any("fully shipped" in n for n in notes)
@@ -278,13 +346,13 @@ def test_live_backlog_dispatch_blocks_are_valid() -> None:
     which silently starves the loop; catching it here keeps a bad edit (by
     replenish or a human) from merging. Sentinel *paths* can't be checked for
     existence (an undone layer's sentinel is supposed to be missing), but the
-    block schema and the dependency order of the layers are testable.
+    block schema and the dependency order of the layers (flattened across any
+    fused steps) are testable.
     """
     root = Path(__file__).resolve().parent.parent
     cands = parse_backlog((root / "BACKLOG.md").read_text(encoding="utf-8"))
     assert cands, "no live candidates parsed from BACKLOG.md"
-    layer_rank = {layer: i for i, layer in enumerate(LAYER_TITLES)}
     for cand in cands:
         assert cand.parse_error is None, f"{cand.name}: {cand.parse_error}"
-        ranks = [layer_rank[layer] for layer, _ in cand.layers]
+        ranks = [LAYER_RANK[part] for step in cand.layers for part in step.parts]
         assert ranks == sorted(ranks), f"{cand.name}: layers out of dependency order"

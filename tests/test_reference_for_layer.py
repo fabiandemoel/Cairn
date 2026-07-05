@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.reference_for_layer import build_reference, infer_layer
+from scripts.reference_for_layer import build_reference, infer_layer, infer_layers
 
 
 @pytest.mark.parametrize(
@@ -26,9 +26,26 @@ def test_infer_layer(title: str, labels: list[str], expected: str) -> None:
     assert infer_layer(title, labels) == expected
 
 
+@pytest.mark.parametrize(
+    ("title", "labels", "expected"),
+    [
+        ("data: cbs new release", ["proposal", "data-refresh"], ["data-refresh"]),
+        ("feat: X — ingestion", ["feat"], ["ingestion"]),
+        ("feat: X — dbt mart", ["feat"], ["mart"]),
+        ("feat: X — site", ["feat"], ["site"]),
+        # A fused dispatch step yields both layers, in dependency order.
+        ("feat: Coverage observability — dbt mart + site", ["feat"], ["mart", "site"]),
+        ("feat: something unclassifiable", ["feat"], ["unknown"]),
+    ],
+)
+def test_infer_layers(title: str, labels: list[str], expected: list[str]) -> None:
+    assert infer_layers(title, labels) == expected
+
+
 def test_data_refresh_label_wins_over_title() -> None:
     # A data-refresh issue routes to its checklist even if the title says "mart".
     assert infer_layer("data: refresh the mart fixture", ["data-refresh"]) == "data-refresh"
+    assert infer_layers("data: refresh the mart fixture", ["data-refresh"]) == ["data-refresh"]
 
 
 def _make_repo(tmp_path: Path) -> Path:
@@ -92,6 +109,29 @@ def test_per_file_line_cap_truncates(tmp_path: Path) -> None:
     assert "truncated at 50 lines" in out
     assert "line 49" in out
     assert "line 60" not in out
+
+
+def test_fused_layers_inline_every_exemplar(tmp_path: Path) -> None:
+    # A fused mart+site step injects the exemplars for both layers in one block.
+    marts = tmp_path / "transform" / "models" / "marts"
+    marts.mkdir(parents=True)
+    (marts / "benchmark_country_sector_emissions.sql").write_text("select 1 as mart_example\n")
+    (marts / "_marts.yml").write_text("models: []\n")
+    site = tmp_path / "site" / "sources" / "cairn"
+    site.mkdir(parents=True)
+    (site / "country_sector_emissions.sql").write_text("select 1 as site_example\n")
+    pages = tmp_path / "site" / "pages"
+    pages.mkdir(parents=True)
+    (pages / "sectors-eu.md").write_text("# example page\n")
+
+    out = build_reference(tmp_path, ["mart", "site"])
+    assert "fuses" in out and "deliver all of them together" in out
+    assert "### Fused layer: mart" in out and "### Fused layer: site" in out
+    assert "mart_example" in out and "site_example" in out
+    # A single-element list behaves exactly like the scalar form (no fused framing).
+    scalar = build_reference(tmp_path, "mart")
+    assert build_reference(tmp_path, ["mart"]) == scalar
+    assert "fuses" not in scalar
 
 
 def test_unknown_layer_falls_back(tmp_path: Path) -> None:
