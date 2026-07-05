@@ -1,6 +1,6 @@
 ---
-title: Data quality — provenance integrity
-description: Is every figure on this site still chained, by hash, to an immutable official source? The pin status of each source, straight from the manifests.
+title: Data quality — provenance & coverage
+description: Is every figure on this site still chained, by hash, to an immutable official source, and how completely does each source's data cover the official aggregate it derives from? Straight from the manifests and the marts' own reconciliation tests.
 ---
 
 Cairn's data quality is, before anything else, a **provenance** property: every
@@ -97,5 +97,45 @@ file, recomputes its SHA256, and rebuilds the warehouse from it — so a silentl
 mutated source file is a failing build, not a number that quietly drifts. See
 **[Architecture →](/architecture)** for the full CI rail and
 **[Methodology & sources →](/methodology)** for per-figure provenance.
+
+</Alert>
+
+## How complete is the coverage?
+
+Provenance answers "is the number still pinned?". Coverage answers a different
+question: how much of each source's official aggregate does Cairn's mart
+actually capture, and how much of the CBS national total can be attributed to
+a NACE sector? These are the same reconciliation figures the CI benchmark
+already computes — `assert_national_total_reconciles` (CBS) and
+`assert_euets_coverage_within_eea` (EU ETS) — surfaced here as standing facts
+rather than discarded once the test goes green.
+
+```sql coverage
+select
+    source,
+    year,
+    reconciliation_drift,
+    unmapped_share,
+    covered_share
+from cairn.coverage_observability
+order by source desc, year desc
+```
+
+<DataTable data={coverage} rows=all rowShading={true}>
+    <Column id=source title="Source" />
+    <Column id=year title="Year" />
+    <Column id=reconciliation_drift title="Reconciliation drift" fmt='0.0%' />
+    <Column id=unmapped_share title="UNMAPPED share (CBS only)" fmt='0.0%' />
+    <Column id=covered_share title="Covered share" fmt='0.0%' />
+</DataTable>
+
+<Alert status="info">
+
+**Descriptive, not a score.** `covered_share` describes how completely each
+source's official aggregate is captured, and — for CBS — `unmapped_share`
+describes how much of the national total cannot be attributed to a single
+NACE section. Neither is a confidence or quality score on any individual
+figure. `reconciliation_drift` near zero confirms the mart's own total still
+matches the official aggregate it derives from.
 
 </Alert>

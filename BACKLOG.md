@@ -275,38 +275,7 @@ for the same sector — directly from CBS via the same OData v4 API.
   keep this NL-only, provenance-depth. RIVM (#2) deepens NL provenance from
   the territorial side — complementary, not redundant.
 
-### 5. Coverage & completeness observability — surface the reconciliation drift the tests already compute
-<!-- dispatch
-layers:
-  mart+site: transform/models/marts/mart_coverage_observability.sql; site/sources/cairn/coverage_observability.sql
--->
-**Value: M · Effort: L · Spine-fit: M**
-
-`mart_data_provenance` and the **Data quality** site page already answer "is
-each figure still pinned to its source?". The next data-quality dimension is
-**coverage**: `assert_national_total_reconciles` and
-`assert_euets_coverage_within_eea` already compute the drift between Cairn's
-totals and the official aggregates, and the CBS mart already buckets ~30–35% of
-national emissions as `UNMAPPED` — but those numbers are discarded once the
-test goes green. A read-only mart can surface them as standing facts.
-- *Layers:*
-  - mart + site (fused — one PR) — `mart_coverage_observability`: per
-    source/year, the reconciliation drift %, `UNMAPPED` share, and covered
-    share, read from `benchmark_sector_emissions` /
-    `benchmark_installation_emissions` (+ the EEA aggregate staging) — the same
-    figures the assert tests compare, never a re-derivation of a national total
-    by a second route. Guard with accepted-range tests, not exact values.
-    **Plus** its read-only site layer in the same PR — a
-    `coverage_observability.sql` source query + a section on the existing Data
-    quality page, extending it from "is the chain pinned?" to "how complete is
-    the coverage?".
-- *Watch:* a coverage ratio **is** a computation, so keep it strictly an
-  *observation* over figures the marts/tests already produce — never a new
-  benchmark figure, never in the ESRS E1 export. It is descriptive ("32% of
-  national emissions are UNMAPPED"), **never a confidence/quality score** on
-  any single figure (that line stays in _Considered and rejected_).
-
-### 6. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
+### 5. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
 <!-- dispatch
 layers:
   mart+site: transform/models/marts/mart_field_completeness.sql; site/sources/cairn/field_completeness.sql
@@ -332,7 +301,7 @@ reviewed-seed coverage (e.g. the LEI mapping) be watched as it grows over time.
   allocation / surrender is legitimate (not-yet-mapped or genuinely absent),
   not an error to "fix".
 
-### 7. Freshness / staleness observability — how current is each source?
+### 6. Freshness / staleness observability — how current is each source?
 <!-- dispatch
 layers:
   mart+site: transform/models/marts/mart_source_freshness.py; site/sources/cairn/source_freshness.sql
@@ -392,6 +361,10 @@ new reason it now fits.)*
   Shipped: merged in this PR (2026-07-05). `benchmark_transport_emissions` is
   live, sourced from `sources/euets/manifest.yml`; the transport benchmark page
   (`transport.md`) is deployed on the Evidence site.
+- **Coverage & completeness observability — surface the reconciliation drift
+  the tests already compute.** Shipped: merged in this PR (2026-07-05).
+  `mart_coverage_observability` is live, surfacing the reconciliation drift,
+  UNMAPPED share, and covered share on the Data quality site page.
 - **Public read/query API.** Category jump in complexity and maintenance for a
   static, R2-pinned Pages site; solves no current user's problem. (ChatGPT review.)
 - **Interactive lineage graph.** Same — the static Architecture page covers the
