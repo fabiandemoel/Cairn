@@ -75,6 +75,19 @@ _NO_TEMPLATE_NOTE = {
 
 _FENCE = {".py": "python", ".sql": "sql", ".yml": "yaml", ".yaml": "yaml", ".md": "markdown"}
 
+# Per-layer hard requirements the exemplar files themselves cannot show. Keep
+# each note to a few lines — like the exemplars, it is re-sent on every turn.
+_LAYER_NOTES: dict[str, str] = {
+    "ingestion": (
+        "**Register wiring (required):** creating `sources/<source>/manifest.yml` arms "
+        "the guards in `tests/test_source_wiring.py` — the source must also appear in "
+        "cairn-ingest.yml's dropdown + `case` branch (the scaffold wires these two when "
+        "it runs) and in `scripts/check_freshness.py` (add a prober or a human-watched "
+        "row matching the source's release-detection pattern). The build stays red until "
+        "every register lists the source."
+    ),
+}
+
 
 def infer_layer(title: str | None, labels: list[str] | None) -> str:
     """Infer the repo layer an issue targets from its title and labels.
@@ -143,7 +156,9 @@ def build_reference(root: Path, layer: str, max_lines: int = 250) -> str:
         "re-reading these files, and do NOT read neighbouring layers' files that are out of scope "
         "for this issue."
     )
-    return heading + "\n\n" + intro + "\n\n" + "\n\n".join(blocks) + "\n"
+    note = _LAYER_NOTES.get(layer)
+    tail = f"\n\n{note}" if note else ""
+    return heading + "\n\n" + intro + "\n\n" + "\n\n".join(blocks) + tail + "\n"
 
 
 def main() -> None:

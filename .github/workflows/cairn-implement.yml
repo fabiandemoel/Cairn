@@ -284,6 +284,11 @@ jobs:
 
             1. The machine-readable data endpoint(s): exact download URL(s), file
                format (CSV/xlsx/zip/JSON/API), and how to fetch non-interactively.
+               If the source is a catalogue of datasets (CBS StatLine, Eurostat,
+               a CKAN/data-portal), FIRST identify the exact dataset/table id in
+               that catalogue (e.g. the CBS `NNNNNED` table id) and verify it
+               resolves against the live API — this id is the one fact the
+               implementation agent cannot proceed without.
             2. The release/version token: the filename part, metadata field, or
                last-update date that identifies a release, usable as an idempotency
                pin (the pipeline exits "no new release" when it matches the manifest).
@@ -550,7 +555,12 @@ jobs:
             unit test must not silently depend on. If the brief is missing or lacks a
             fact you genuinely cannot proceed without, hand `legwork` ONE narrowly
             scoped fetch (an explicit curl via Bash, not open-ended exploration); if
-            that fails too, open a draft PR explaining the blocker. Do NOT run the
+            that fails too, open a draft PR explaining the blocker - but WITHOUT
+            `sources/<source>/manifest.yml` in it: that file arms the per-source
+            register guards in tests/test_source_wiring.py, so a scaffold-only draft
+            that ships it can never go green. Revert the scaffolded files (`git rm` /
+            restore) so the draft carries only the blocker description, with CI
+            passing. Do NOT run the
             real `--offline` ingest as a check - it downloads
             the full dataset and writes a machine-specific `file://` snapshot into the
             manifest that you would then have to detect and reset. Rely on the unit test

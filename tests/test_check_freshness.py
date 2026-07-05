@@ -70,6 +70,7 @@ def _make_repo(tmp_path: Path, *, cbs_modified: str, eurostat_date: str, pins: d
     ing = tmp_path / "ingestion"
     ing.mkdir()
     (ing / "cbs_pipeline.py").write_text('TABLE_ID = "85669NED"\n')
+    (ing / "cbs_namea_pipeline.py").write_text('TABLE_ID = "83300NED"\n')
     (ing / "eurostat_aea_pipeline.py").write_text('DATASET = "env_ac_ainah_r2"\n')
     (ing / "eea_ets_pipeline.py").write_text('DEFAULT_URL = "https://eea/download"\n')
     (ing / "euets_pipeline.py").write_text('DEFAULT_URL = "https://s3/eutl_2024_202410.zip"\n')
@@ -105,6 +106,7 @@ def test_report_marks_current_and_stale(tmp_path: Path) -> None:
         eurostat_date="2025-01-15T23:00:00+0100",  # newer than pin -> stale
         pins={
             "cbs": "2026-03-11",
+            "cbs_namea": "2026-03-11",
             "eurostat": "2024-10-23",
             "eea": "2005-2025_v01_r00",
             "euets": "2024-10",
@@ -112,6 +114,7 @@ def test_report_marks_current_and_stale(tmp_path: Path) -> None:
     )
     out = build_report(repo, fetch=fetch)
     assert "| cbs | 2026-03-11 | 2026-03-11 | current |" in out
+    assert "| cbs_namea | 2026-03-11 | 2026-03-11 | current |" in out
     assert "STALE — new release 2025-01-15" in out
     assert "Stale sources" in out and "eurostat → 2025-01-15" in out
     # EEA pin matches the fake filename token -> current.
@@ -143,6 +146,25 @@ def test_report_handles_unpinned_and_probe_failure(tmp_path: Path) -> None:
     assert "unpinned (CI uses fixture)" in out  # eurostat unpinned
     # A run where nothing is stale says so explicitly.
     assert "No source is stale" in out
+
+
+def test_cbs_namea_probes_its_own_table(tmp_path: Path) -> None:
+    # The namea prober must read TABLE_ID from its own pipeline file, not cbs's.
+    repo, fetch = _make_repo(
+        tmp_path,
+        cbs_modified="2026-03-11T00:00:00+0100",
+        eurostat_date="2024-10-23",
+        pins={"cbs": "2026-03-11", "cbs_namea": "2026-03-11"},
+    )
+    seen: list[str] = []
+
+    def spy_fetch(url: str) -> tuple[str, str | None]:
+        seen.append(url)
+        return fetch(url)
+
+    build_report(repo, fetch=spy_fetch)
+    assert any("/85669NED/" in url for url in seen)
+    assert any("/83300NED/" in url for url in seen)
 
 
 def test_euets_never_probes_and_is_listed(tmp_path: Path) -> None:

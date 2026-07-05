@@ -176,13 +176,26 @@ def _eurostat_update_date(payload: dict) -> str | None:
 # ---- per-source live-token discovery ----------------------------------------
 
 
-def _live_cbs(root: Path, fetch: Fetcher) -> str:
-    table = _read_const(root, "ingestion/cbs_pipeline.py", "TABLE_ID") or "85669NED"
+def _live_cbs_table(root: Path, fetch: Fetcher, pipeline_rel: str, fallback_table: str) -> str:
+    """Probe a CBS OData v4 table's ``Properties`` Modified date for a release token.
+
+    The table id is read from the pipeline file's ``TABLE_ID`` constant so this
+    probe can never drift from the pin of record.
+    """
+    table = _read_const(root, pipeline_rel, "TABLE_ID") or fallback_table
     body, _ = fetch(f"{CBS_ODATA_BASE}/{table}/Properties")
     token = cbs_token_from_modified(json.loads(body).get("Modified", ""))
     if not token:
         raise ValueError("no Modified date in CBS Properties response")
     return token
+
+
+def _live_cbs(root: Path, fetch: Fetcher) -> str:
+    return _live_cbs_table(root, fetch, "ingestion/cbs_pipeline.py", "85669NED")
+
+
+def _live_cbs_namea(root: Path, fetch: Fetcher) -> str:
+    return _live_cbs_table(root, fetch, "ingestion/cbs_namea_pipeline.py", "83300NED")
 
 
 def _live_eurostat(root: Path, fetch: Fetcher) -> str:
@@ -247,6 +260,7 @@ def collect_statuses(root: Path, *, fetch: Fetcher = _http_get) -> list[SourceSt
     # CBS / Eurostat (AEA + GGE) / EEA: probe the live token and compare to the pin.
     for name, prober in (
         ("cbs", _live_cbs),
+        ("cbs_namea", _live_cbs_namea),
         ("eurostat", _live_eurostat),
         ("eurostat_gge", _live_eurostat_gge),
         ("eea", _live_eea),

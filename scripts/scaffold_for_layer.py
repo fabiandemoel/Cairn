@@ -109,7 +109,7 @@ def build_note(root: Path, title: str | None, labels: list[str], body: str | Non
         )
 
     paths = "\n".join(f"- `{p.relative_to(root)}`" for p in written)
-    return (
+    note = (
         f"{heading}\n\n"
         f"The fixed boilerplate for this `{layer}` layer (`{source}`/`{dataset}`) has "
         f"already been written to:\n{paths}\n\n"
@@ -118,6 +118,17 @@ def build_note(root: Path, title: str | None, labels: list[str], body: str | Non
         "each against the live source, never invent one. Do NOT rewrite the fixed plumbing "
         "around them; it already matches the canonical pattern above.\n"
     )
+    if layer == "ingestion":
+        note += (
+            "\nCreating `sources/<source>/manifest.yml` arms the per-source register "
+            "guards in `tests/test_source_wiring.py`. The scaffold already wired the "
+            "mechanical ones (cairn-ingest.yml's dropdown + `case` branch, when that "
+            "workflow file is present); one register is still YOURS: add the source to "
+            "`scripts/check_freshness.py` (a prober, or a human-watched row -- matching "
+            "the release-detection pattern you implement). The build stays red until "
+            "every register lists the source.\n"
+        )
+    return note
 
 
 def main() -> None:

@@ -467,6 +467,21 @@ The **Eurostat `env_air_gge`** source has its own quirks:
   territorial principle. They serve different purposes and come from different
   inventories.
 
+The **CBS NAMEA `83300NED`** source (air emission accounts) has its own quirks:
+
+- **Residence principle — diverges from `85669NED` by design.** `83300NED`
+  (*Emissies naar lucht door de Nederlandse economie; nationale rekeningen*)
+  attributes emissions to Dutch-resident economic activity: Dutch operators
+  abroad count, non-residents on Dutch territory do not. Its totals therefore
+  do **not** reconcile with the territorial `85669NED` — the gap is
+  methodological (largest for transport/shipping), to be documented as a bridge,
+  never "fixed" with a reconciliation test. It is the Dutch side of the
+  Eurostat AEA (residence-principle) picture.
+- **Same OData v4 shape as `85669NED`.** Annual update (November), release
+  detected via the `Properties` singleton's `Modified` date; coded
+  `Observations` plus `NederlandseEconomieCodes` / `PeriodenCodes` /
+  `MeasureCodes` decode tables. The v3-API-returns-406 gotcha applies here too.
+
 ## References & methodology
 
 The data, the methodology and the classification logic are all grounded in

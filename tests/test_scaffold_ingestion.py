@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.scaffold_ingestion import scaffold_ingestion
+from scripts.scaffold_ingestion import scaffold_ingestion, wire_ingest_workflow
 
 
 def test_scaffold_writes_three_files(tmp_path: Path) -> None:
@@ -90,3 +90,57 @@ def test_generated_test_file_has_reusable_idempotency_test(tmp_path: Path) -> No
     content = (tmp_path / "tests" / "test_rivm_pipeline.py").read_text()
     assert "def test_run_skips_when_release_already_pinned" in content
     assert "TODO(scaffold)" in content
+
+
+# --- cairn-ingest.yml wiring ----------------------------------------------------
+
+_FAKE_WORKFLOW = """\
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        type: choice
+        options: [cbs, euets]
+jobs:
+  ingest:
+    steps:
+      - run: |
+          case "$SOURCE" in
+            cbs)      module=ingestion.cbs_pipeline ;;
+            euets)    module=ingestion.euets_pipeline ;;
+            *) echo "Unknown source: $SOURCE" >&2; exit 1 ;;
+          esac
+"""
+
+
+def _write_fake_workflow(root: Path) -> Path:
+    path = root / ".github" / "workflows" / "cairn-ingest.yml"
+    path.parent.mkdir(parents=True)
+    path.write_text(_FAKE_WORKFLOW)
+    return path
+
+
+def test_scaffold_wires_ingest_workflow_when_present(tmp_path: Path) -> None:
+    workflow = _write_fake_workflow(tmp_path)
+    written = scaffold_ingestion(tmp_path, "rivm", "emissieregistratie")
+    assert workflow in written  # the note lists the wired workflow too
+    text = workflow.read_text()
+    assert "options: [cbs, euets, rivm]" in text
+    assert "rivm) module=ingestion.rivm_pipeline ;;" in text
+    # The new branch must come before the fallback so it is reachable.
+    assert text.index("rivm) module=") < text.index('*) echo "Unknown source')
+
+
+def test_wire_ingest_workflow_is_idempotent(tmp_path: Path) -> None:
+    workflow = _write_fake_workflow(tmp_path)
+    assert wire_ingest_workflow(tmp_path, "rivm") == workflow
+    once = workflow.read_text()
+    assert wire_ingest_workflow(tmp_path, "rivm") is None
+    assert workflow.read_text() == once
+
+
+def test_wire_ingest_workflow_degrades_without_workflow_file(tmp_path: Path) -> None:
+    assert wire_ingest_workflow(tmp_path, "rivm") is None
+    # And the scaffold still writes its three files (the pre-wiring behaviour).
+    written = scaffold_ingestion(tmp_path, "rivm", "emissieregistratie")
+    assert len(written) == 3
