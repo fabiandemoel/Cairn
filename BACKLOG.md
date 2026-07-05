@@ -183,37 +183,7 @@ territorial side (complementary to NAMEA's residence-side story, candidate #5).
   layer is planned; if one turns out to be warranted, add it to the dispatch
   block and this plan first.
 
-### 3. EU ETS aviation & maritime verified emissions → transport benchmark axis
-<!-- dispatch
-layers:
-  mart: transform/models/marts/benchmark_transport_emissions.sql
-  site: site/sources/cairn/transport_emissions.sql
--->
-**Value: M · Effort: M · Spine-fit: H**
-
-`benchmark_installation_emissions` deliberately excludes aircraft and maritime
-operators (`not is_aircraft_operator and not is_maritime_operator`). Surfacing
-them as their *own* labelled transport dimension — benchmarked among
-themselves, not folded into the stationary NACE sectors — adds a new benchmark
-axis from the already-pinned euets snapshot. Pure read/relabel: the flags are
-already staged.
-- *Layers:*
-  - mart — **shipped** (issue #91, this PR): `benchmark_transport_emissions`, a
-    sibling of `benchmark_installation_emissions` over the same euets staging
-    models, filtered **to** the aviation/maritime flags instead of away from
-    them, with an `operator_type` label column (`accepted_values`:
-    aircraft/maritime), benchmarked by operator type, never by NACE section.
-  - site (the only remaining scope) — a `transport_emissions.sql` source query
-    + a page. State on the page that maritime entered EU ETS only from the
-    **2024 compliance year**, so its coverage is partial and recent.
-- *Watch:* keep these operators **out** of the stationary national-total
-  reconciliation and the EEA stationary `20-99` coverage test — both assume
-  stationary, and these operators sit outside CBS national totals and that EEA
-  code. Operator flags are nullable and the CI fixture contains no NULLs —
-  verify on the full snapshot; a NULL flag means not-confirmed and stays
-  excluded from both marts (see the CLAUDE.md gotcha).
-
-### 4. EU ETS carbon leakage list (Delegated Decision 2019/708) → installation sector-exposure flag
+### 3. EU ETS carbon leakage list (Delegated Decision 2019/708) → installation sector-exposure flag
 <!-- dispatch
 layers:
   mart: transform/seeds/carbon_leakage_list.csv
@@ -248,7 +218,7 @@ allocation?" directly from official EU law.
   flag (that requires benchmark production data Cairn does not have) — surface
   it as a label only.
 
-### 5. CBS NAMEA air emission accounts — residence-principle sector breakdown
+### 4. CBS NAMEA air emission accounts — residence-principle sector breakdown
 <!-- dispatch
 source: cbs_namea
 dataset: air_emissions
@@ -287,7 +257,7 @@ for the same sector — directly from CBS via the same OData v4 API.
   keep this NL-only, provenance-depth. RIVM (#2) deepens NL provenance from
   the territorial side — complementary, not redundant.
 
-### 6. Coverage & completeness observability — surface the reconciliation drift the tests already compute
+### 5. Coverage & completeness observability — surface the reconciliation drift the tests already compute
 <!-- dispatch
 layers:
   mart: transform/models/marts/mart_coverage_observability.sql
@@ -318,7 +288,7 @@ test goes green. A read-only mart can surface them as standing facts.
   national emissions are UNMAPPED"), **never a confidence/quality score** on
   any single figure (that line stays in _Considered and rejected_).
 
-### 7. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
+### 6. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
 <!-- dispatch
 layers:
   mart: transform/models/marts/mart_field_completeness.sql
@@ -344,7 +314,7 @@ reviewed-seed coverage (e.g. the LEI mapping) be watched as it grows over time.
   allocation / surrender is legitimate (not-yet-mapped or genuinely absent),
   not an error to "fix".
 
-### 8. Freshness / staleness observability — how current is each source?
+### 7. Freshness / staleness observability — how current is each source?
 <!-- dispatch
 layers:
   mart: transform/models/marts/mart_source_freshness.py
@@ -401,6 +371,10 @@ new reason it now fits.)*
 - **EU ETS free allocation → verified-vs-allocated benchmark.** Shipped: merged
   in PR #31 (2026-06-24). The `allocated_total` measure is live on
   `benchmark_installation_emissions` and surfaced on the Evidence site.
+- **EU ETS aviation & maritime verified emissions → transport benchmark axis.**
+  Shipped: merged in this PR (2026-07-05). `benchmark_transport_emissions` is
+  live, sourced from `sources/euets/manifest.yml`; the transport benchmark page
+  (`transport.md`) is deployed on the Evidence site.
 - **Public read/query API.** Category jump in complexity and maintenance for a
   static, R2-pinned Pages site; solves no current user's problem. (ChatGPT review.)
 - **Interactive lineage graph.** Same — the static Architecture page covers the
