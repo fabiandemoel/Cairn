@@ -54,6 +54,12 @@ layers:
   the blocks against the tree when curating.
 - A candidate that must not be dispatched yet carries `hold: <reason>` instead
   of (or in addition to) `layers:`.
+- A candidate whose ingestion hinges on an upstream identifier that is not yet
+  verified (a catalogue table id, a dataset code, a download URL) carries
+  `hold: needs <identifier> — <where to look>` until a human resolves it and
+  writes the identifier into the entry. A "the exact id must be identified
+  first" caveat in the *Watch* prose alone does **not** stop the no-LLM
+  dispatcher — issue #95 / PR #103 shipped a blocked scaffold exactly that way.
 - A candidate without a block is skipped with a note in the dispatch run
   summary — add the block when the candidate is ready to be worked.
 
@@ -264,9 +270,10 @@ for the same sector — directly from CBS via the same OData v4 API.
 - *Layers:*
   - ingestion — `ingestion/cbs_namea_pipeline.py` + `sources/cbs_namea/manifest.yml`,
     following `cbs_pipeline.py` (OData v4, `Modified`-based release detection,
-    idempotent no-new-release exit). The exact NAMEA table id must be
-    identified in the CBS catalogue first — one legwork/discovery task; the
-    v3-API-returns-406 gotcha applies here too.
+    idempotent no-new-release exit). The NAMEA table is **83300NED** ("Emissies
+    naar lucht door de Nederlandse economie; nationale rekeningen", annual
+    November update, verified live 2026-07-05); the v3-API-returns-406 gotcha
+    applies here too.
   - staging — `stg_cbs_namea__air_emissions`: NACE sector code, year, gas,
     value, with the `cbs_namea_air_emissions_raw_dir` var and a small committed
     fixture like the other CBS source.
