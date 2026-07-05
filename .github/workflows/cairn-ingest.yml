@@ -21,7 +21,7 @@ on:
         description: "Source to ingest"
         required: true
         type: choice
-        options: [cbs, euets, eea, eurostat, eurostat_gge, eua, emissieregistratie]
+        options: [cbs, cbs_namea, euets, eea, eurostat, eurostat_gge, eua, emissieregistratie]
       url:
         description: >-
           Override URL (euets/eea/eua/emissieregistratie only -- point at the new
@@ -67,6 +67,7 @@ jobs:
           set -euo pipefail
           case "$SOURCE" in
             cbs)      module=ingestion.cbs_pipeline ;;
+            cbs_namea) module=ingestion.cbs_namea_pipeline ;;
             euets)    module=ingestion.euets_pipeline ;;
             eea)      module=ingestion.eea_ets_pipeline ;;
             eurostat)     module=ingestion.eurostat_aea_pipeline ;;
