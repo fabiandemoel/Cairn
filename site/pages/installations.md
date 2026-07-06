@@ -103,6 +103,33 @@ This installation is in NACE section
 against **<Value data={selected_latest} column=sector_installation_count />**
 ETS installations in that section.
 
+```sql selected_leakage
+select
+    carbon_leakage_exposed,
+    carbon_leakage_sector_description,
+    carbon_leakage_oj_citation,
+    case
+        when carbon_leakage_exposed then 'exposed to carbon leakage risk'
+        else 'not listed as exposed to carbon leakage'
+    end as carbon_leakage_status
+from cairn.carbon_leakage
+where installation_id = '${inputs.installation.value}'
+    and year = (
+        select max(year) from cairn.carbon_leakage
+        where installation_id = '${inputs.installation.value}'
+    )
+```
+
+Under Commission Delegated Decision (EU) 2019/708 (the EU's carbon leakage
+list for ETS Phase 4, 2021–2030), this installation's NACE code is
+**<Value data={selected_leakage} column=carbon_leakage_status />**. Where
+exposed, the matched Annex sector is
+**<Value data={selected_leakage} column=carbon_leakage_sector_description />**
+(<Value data={selected_leakage} column=carbon_leakage_oj_citation />). This is
+a policy-context label only, transcribed from the Decision's Annex — it is
+never a free-allocation entitlement (that would require benchmark production
+data Cairn does not have).
+
 Operating legal entity (where the reviewed
 [GLEIF](https://www.gleif.org/en/about-lei/introducing-the-legal-entity-identifier-lei)
 mapping has a confident match):
@@ -172,9 +199,12 @@ select
     i.surrendered_allowances_t_co2eq,
     i.emissions_vs_sector_mean,
     i.emissions_vs_allocated,
+    cl.carbon_leakage_exposed,
     i.installation_id = '${inputs.installation.value}' as is_selected
 from cairn.installation_emissions i
 inner join sel on i.nace_section = sel.nace_section and i.year = sel.year
+left join cairn.carbon_leakage cl
+    on cl.installation_id = i.installation_id and cl.year = i.year
 order by i.installation_emissions_t_co2eq desc
 ```
 
@@ -186,4 +216,5 @@ order by i.installation_emissions_t_co2eq desc
     <Column id=surrendered_allowances_t_co2eq title="Surrendered allowances (t CO₂-eq)" fmt='#,##0' />
     <Column id=emissions_vs_sector_mean title="vs. sector mean" fmt='0.0"×"' contentType=colorscale />
     <Column id=emissions_vs_allocated title="vs. free allocation" fmt='0.0"×"' contentType=colorscale />
+    <Column id=carbon_leakage_exposed title="Carbon leakage exposed" />
 </DataTable>

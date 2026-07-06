@@ -200,42 +200,7 @@ territorial side (complementary to NAMEA's residence-side story, candidate #5).
   layer is planned; if one turns out to be warranted, add it to the dispatch
   block and this plan first.
 
-### 3. EU ETS carbon leakage list (Delegated Decision 2019/708) → installation sector-exposure flag
-<!-- dispatch
-layers:
-  mart: transform/seeds/carbon_leakage_list.csv
-  site: site/sources/cairn/carbon_leakage.sql
--->
-**Value: M · Effort: M · Spine-fit: H**
-
-Commission Delegated Decision (EU) 2019/708 of 15 February 2019 (OJ L 120,
-8.5.2019, p. 20, and subsequent amendments) lists the NACE and Prodcom sectors
-deemed exposed to carbon leakage in ETS Phase 4 (2021–2030); exposed sectors
-receive elevated free allocation. Pinning the list as a reviewed seed — like
-`sector_mapping_cbs.csv` — lets the mart label every installation with its
-exposure status: a pure policy-context read/relabel, no computation. It bridges
-the shipped surrendered-vs-verified axis (PRs #42/#54) and the allocation
-picture (PR #31), answering "why does this sector receive more free
-allocation?" directly from official EU law.
-- *Layers:*
-  - mart — **shipped** (issue #93, PR #101): the reviewed seed
-    `transform/seeds/carbon_leakage_list.csv` (63 rows transcribed verbatim
-    from the Decision's Annex points 1–4: NACE code or Prodcom code, sector
-    description, the OJ citation per row), registered in `_seeds.yml` with
-    schema tests, joined into `benchmark_installation_emissions` as an
-    exposure label column on the installation's NACE code (Annex points 1–3
-    only — point 4's Prodcom sub-sector rows can't be matched at euets.info's
-    grain).
-  - site (the only remaining scope) — a `carbon_leakage.sql` source query and
-    the flag surfaced on the installations page (a column or filter), reading
-    the mart column only.
-- *Watch:* the list is versioned to a specific Decision and OJ citation — pin
-  it there; if an amending act is issued, add a new seed version rather than
-  overwriting. Never derive a free-allocation **entitlement** from this
-  flag (that requires benchmark production data Cairn does not have) — surface
-  it as a label only.
-
-### 4. CBS NAMEA air emission accounts — residence-principle sector breakdown
+### 3. CBS NAMEA air emission accounts — residence-principle sector breakdown
 <!-- dispatch
 source: cbs_namea
 dataset: air_emissions
@@ -275,7 +240,7 @@ for the same sector — directly from CBS via the same OData v4 API.
   keep this NL-only, provenance-depth. RIVM (#2) deepens NL provenance from
   the territorial side — complementary, not redundant.
 
-### 5. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
+### 4. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
 <!-- dispatch
 layers:
   mart+site: transform/models/marts/mart_field_completeness.sql; site/sources/cairn/field_completeness.sql
@@ -301,7 +266,7 @@ reviewed-seed coverage (e.g. the LEI mapping) be watched as it grows over time.
   allocation / surrender is legitimate (not-yet-mapped or genuinely absent),
   not an error to "fix".
 
-### 6. Freshness / staleness observability — how current is each source?
+### 5. Freshness / staleness observability — how current is each source?
 <!-- dispatch
 layers:
   mart+site: transform/models/marts/mart_source_freshness.py; site/sources/cairn/source_freshness.sql
@@ -361,6 +326,11 @@ new reason it now fits.)*
   Shipped: merged in this PR (2026-07-05). `benchmark_transport_emissions` is
   live, sourced from `sources/euets/manifest.yml`; the transport benchmark page
   (`transport.md`) is deployed on the Evidence site.
+- **EU ETS carbon leakage list (Delegated Decision 2019/708) → installation
+  sector-exposure flag.** Shipped: mart layer merged in PR #101 (issue #93);
+  site layer merged in this PR (2026-07-05). `carbon_leakage_exposed` and its
+  supporting sector description/OJ citation are live on
+  `benchmark_installation_emissions` and surfaced on the installations page.
 - **Coverage & completeness observability — surface the reconciliation drift
   the tests already compute.** Shipped: merged in this PR (2026-07-05).
   `mart_coverage_observability` is live, surfacing the reconciliation drift,
