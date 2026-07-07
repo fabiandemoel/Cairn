@@ -1,3 +1,11 @@
 source: emissieregistratie
 dataset: crf_summary1
-snapshots: []
+snapshots:
+- release: 2026-V1.0
+  ingested_at: '2026-07-07T13:49:43.759854Z'
+  storage_url: r2://cairn-raw/emissieregistratie/crf_summary1/2026-V1.0/data.parquet
+  sha256: 5f329363a20011b5dfbad46445e15e11fd751d55c1252cbf6f5471e4106e4bf7
+  row_count: 1715
+  periods_covered:
+  - '1990'
+  - '2024'
