@@ -27,14 +27,27 @@ What you do:
   (`git push -u origin <branch>`). Report the branch/commit you pushed. You may
   also `git fetch` / `git branch -r` / check out an existing `agent/<issue>-*`
   branch when asked to resume a prior run, and report what you found.
-- Report back concisely: which commands passed, which failed, and for a failure
-  the key error lines (not the whole log) plus counts (e.g. "5 of 128 pytest tests
-  failed"). When a command fails, investigate the cause in your own context —
-  re-run with more output, read the failing test/model, grep for the symbol — and
-  return a factual root-cause summary plus a hypothesis for the fix (e.g.
-  "`read_xlsx` returned column names B, C, D instead of the header row; likely
-  needs `header = true` because `range` is set"). Report the suggestion; the
-  caller applies it.
+- Report back concisely — this is a hard contract, not a preference, because
+  your reply is the ONE thing that crosses back into the caller's context and
+  then rides in every later turn of theirs (that re-sent context is the dominant
+  cost). Never paste a full command log. Concretely:
+  - **On success:** one line per command — the command and "passed", with the
+    headline count where there is one (e.g. "pytest: 253 passed", "dbt build: 48
+    models, 0 errors", "build:strict: ok"). No log body, no per-test/per-model
+    listing, no timing tables. A green verify sequence should come back in a few
+    lines total.
+  - **On failure:** the failing command, the count (e.g. "5 of 253 pytest tests
+    failed"), and only the key error lines — the assertion/traceback tail or the
+    offending SQL/dbt error — capped at ~20 lines. Quote the smallest slice that
+    identifies the cause; summarise the rest in prose. When a command fails,
+    investigate in your own context — re-run with more output, read the failing
+    test/model, grep for the symbol — but keep that digging IN your context and
+    return only a factual root-cause summary plus a hypothesis for the fix (e.g.
+    "`read_xlsx` returned column names B, C, D instead of the header row; likely
+    needs `header = true` because `range` is set"). Report the suggestion; the
+    caller applies it.
+  - If the caller explicitly asks for a specific fuller excerpt, give exactly
+    that — the cap is the default, not a gag.
 
 What you must NOT do:
 - Do not decide mappings, model design, or methodology — flag ambiguity and hand

@@ -332,6 +332,28 @@ jobs:
             echo 'BRIEF_EOF'
           } >> "$GITHUB_OUTPUT"
 
+      # Shrink the CLAUDE.md the implement agent reads. The prompt has the agent
+      # read CLAUDE.md (invariants in full, the per-source checklist for a
+      # data-refresh), and every token it reads rides in every later turn -- the
+      # dominant repeated cost in the run logs. This strips the long "Agent
+      # automation (CI maintenance loop)" section (workflow-internals: dispatch/
+      # replenish/implement/cost-attribution) -- the largest single block and
+      # irrelevant to implementing any one issue -- from the EPHEMERAL checkout
+      # only, cutting ~35% of that file's context weight while leaving the
+      # invariants, the recurring-maintenance checklists, and the Gotchas intact.
+      # The committed CLAUDE.md is never touched: assume-unchanged keeps the
+      # overwrite out of any commit/stash runner makes. Generated from the tree
+      # (scripts/claude_md_for_implement.py, unit-tested) so it can't drift; a
+      # renamed heading degrades to an unchanged copy. continue-on-error: a
+      # failure just falls back to the full file -- a cost optimisation, not a
+      # gate, like the other priming steps.
+      - name: Trim CLAUDE.md for the implement run
+        continue-on-error: true
+        run: |
+          python3 scripts/claude_md_for_implement.py > CLAUDE.implement.md
+          mv CLAUDE.implement.md CLAUDE.md
+          git update-index --assume-unchanged CLAUDE.md
+
       - id: claude
         uses: anthropics/claude-code-action@v1
         with:
