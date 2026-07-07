@@ -239,37 +239,17 @@ for the same sector — directly from CBS via the same OData v4 API.
   keep this NL-only, provenance-depth. RIVM (#2) deepens NL provenance from
   the territorial side — complementary, not redundant.
 
-### 4. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
-<!-- dispatch
-layers:
-  mart+site: transform/models/marts/mart_field_completeness.sql; site/sources/cairn/field_completeness.sql
--->
-**Value: M · Effort: L · Spine-fit: H**
-
-Several mart columns are deliberately nullable — `lei`, `allocated_total`,
-`surrendered_allowances` on the installation mart; the `UNMAPPED`/NULL NACE on
-CBS. Their completeness is itself a data-quality signal ("what fraction of
-installation-years carry an LEI / a free-allocation figure?") and lets
-reviewed-seed coverage (e.g. the LEI mapping) be watched as it grows over time.
-- *Layers:*
-  - mart + site (fused — one PR) — `mart_field_completeness`: per
-    mart/column/year, populated-vs-NULL counts and the resulting share,
-    computed over the existing marts. Counts only; enumerate the tracked columns
-    explicitly in the model rather than introspecting the schema, so a new
-    nullable column is a reviewed addition. **Plus** its read-only site layer in
-    the same PR — a `field_completeness.sql` source query + a section on the
-    Data quality page.
-- *Watch:* pure counts/shares of populated vs NULL; **never impute or fill a
-  NULL**, and never present completeness as a quality verdict on the figures
-  themselves. Honour the existing nullability semantics — a NULL LEI /
-  allocation / surrender is legitimate (not-yet-mapped or genuinely absent),
-  not an error to "fix".
-
 ---
 
 ## Considered and rejected
 *(Don't re-propose these. If circumstances change, move an item back up with the
 new reason it now fits.)*
+
+- **Field-completeness (NULL-rate) observability — how fully are the nullable
+  columns populated?** Shipped: merged in this PR (2026-07-07).
+  `mart_field_completeness` (per mart/tracked column/year, populated-vs-NULL
+  counts and share) and its `field_completeness.sql` site source query are
+  live, surfaced in a new section on the Data quality page.
 
 - **Freshness / staleness observability — how current is each source?**
   Shipped: merged in this PR (2026-07-07). `mart_source_freshness` (per source,
