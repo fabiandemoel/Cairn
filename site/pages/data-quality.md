@@ -1,6 +1,6 @@
 ---
-title: Data quality — provenance & coverage
-description: Is every figure on this site still chained, by hash, to an immutable official source, and how completely does each source's data cover the official aggregate it derives from? Straight from the manifests and the marts' own reconciliation tests.
+title: Data quality — provenance, coverage & freshness
+description: Is every figure on this site still chained, by hash, to an immutable official source, how completely does each source's data cover the official aggregate it derives from, and how current is it? Straight from the manifests and the marts' own reconciliation tests.
 ---
 
 Cairn's data quality is, before anything else, a **provenance** property: every
@@ -137,5 +137,51 @@ describes how much of the national total cannot be attributed to a single
 NACE section. Neither is a confidence or quality score on any individual
 figure. `reconciliation_drift` near zero confirms the mart's own total still
 matches the official aggregate it derives from.
+
+</Alert>
+
+## How current is the data?
+
+Provenance and coverage answer "is it pinned?" and "how much does it capture?".
+This section answers a third question: how current is it? For each source, the
+pinned release and ingest date, the latest calendar year its benchmark mart
+actually covers, and the observed lag between "now" (this page's own build
+time) and those two facts.
+
+```sql freshness
+select
+    source,
+    dataset,
+    is_pinned,
+    release,
+    ingested_at,
+    ingest_age_days,
+    latest_covered_year,
+    coverage_lag_years
+from cairn.source_freshness
+order by source
+```
+
+<DataTable data={freshness} rows=all rowShading={true}>
+    <Column id=source title="Source" />
+    <Column id=dataset title="Dataset" />
+    <Column id=is_pinned title="Pinned?" />
+    <Column id=release title="Release" />
+    <Column id=ingested_at title="Ingested" fmt='yyyy-mm-dd' />
+    <Column id=ingest_age_days title="Age since ingest (days)" fmt='#,##0' />
+    <Column id=latest_covered_year title="Latest covered year" />
+    <Column id=coverage_lag_years title="Coverage lag (years)" />
+</DataTable>
+
+<Alert status="info">
+
+**Descriptive, not an SLA or alarm.** `ingest_age_days` and `coverage_lag_years`
+are measured against this page's own build time, so they drift with every
+rebuild — they are not pinned figures. `latest_covered_year` is NULL for a
+source with no benchmark mart yet. No "expected next release" date is ever
+computed: several sources publish on no fixed cadence, so only the *observed*
+lag is shown, never a predicted one. Watching for an actually new upstream
+release is the weekly reproducibility job's and the no-LLM dispatcher's job
+(`scripts/check_freshness.py`), not this page.
 
 </Alert>
