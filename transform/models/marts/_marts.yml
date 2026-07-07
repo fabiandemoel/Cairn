@@ -798,6 +798,79 @@ models:
         tests:
           - not_null
 
+  - name: mart_field_completeness
+    description: >
+      Field-completeness (NULL-rate) observability: per mart, tracked column,
+      and year, the populated-vs-NULL row counts and the resulting share.
+      Several mart columns are deliberately nullable -- lei, allocated_total,
+      surrendered_allowances on the two EU ETS marts; the UNMAPPED sentinel
+      NACE on CBS -- and their completeness is itself a data-quality signal,
+      e.g. what fraction of installation-years carry an LEI, letting reviewed-
+      seed coverage (the LEI mapping) be watched as it grows over time.
+    meta:
+      source_manifest: sources/cbs/manifest.yml, sources/euets/manifest.yml
+      methodology: >
+        Tracked columns are enumerated explicitly in the model, not
+        introspected from the schema, so a newly added nullable column is a
+        reviewed addition. "Populated" means the column is not NULL, except
+        for benchmark_sector_emissions.nace_section, where CBS categories
+        that cannot be attributed to a single NACE section carry the
+        sentinel 'UNMAPPED' rather than NULL, so populated there means
+        nace_section != 'UNMAPPED'. Pure counts over the existing marts --
+        never a re-derivation, an imputation, or a quality verdict on any
+        single figure.
+      known_limitations: >
+        (1) The tracked-column list is curated, not exhaustive of every
+        nullable column in every mart -- extending coverage is a reviewed
+        addition to this model. (2) A NULL (or UNMAPPED) value is a
+        legitimate, documented state -- not-yet-mapped in a reviewed seed
+        (lei), genuinely absent upstream (allocated_total,
+        surrendered_allowances), or CBS's own non-attribution (nace_section)
+        -- never an error this mart "fixes", and never surfaced in the ESRS
+        E1 export. (3) populated_share is a plain row-count share, not
+        weighted by emissions magnitude.
+      references:
+        installation_mart_lei: https://github.com/fabiandemoel/Cairn/blob/main/transform/models/marts/_marts.yml
+        gleif_lei: https://www.gleif.org/en/about-lei/introducing-the-legal-entity-identifier-lei
+    columns:
+      - name: mart_column_year_key
+        description: Surrogate natural key (mart_name|column_name|year).
+        tests:
+          - unique
+          - not_null
+      - name: mart_name
+        description: The mart the tracked column belongs to.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                ["benchmark_sector_emissions", "benchmark_installation_emissions",
+                 "benchmark_transport_emissions"]
+      - name: column_name
+        description: The tracked column within mart_name.
+        tests:
+          - not_null
+      - name: "year"
+        description: Calendar / compliance year.
+        tests:
+          - not_null
+      - name: total_count
+        description: Total rows for this mart/year.
+        tests:
+          - not_null
+      - name: populated_count
+        description: Rows where the tracked column is populated (see methodology).
+        tests:
+          - not_null
+      - name: null_count
+        description: total_count - populated_count.
+        tests:
+          - not_null
+      - name: populated_share
+        description: populated_count divided by total_count.
+        tests:
+          - not_null
+
   - name: mart_business_glossary
     description: >
       Business glossary: one row per curated definition of a cross-cutting Cairn

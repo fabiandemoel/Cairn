@@ -1,6 +1,6 @@
 ---
-title: Data quality — provenance, coverage & freshness
-description: Is every figure on this site still chained, by hash, to an immutable official source, how completely does each source's data cover the official aggregate it derives from, and how current is it? Straight from the manifests and the marts' own reconciliation tests.
+title: Data quality — provenance, coverage, freshness & completeness
+description: Is every figure on this site still chained, by hash, to an immutable official source, how completely does each source's data cover the official aggregate it derives from, how current is it, and how fully are the deliberately-nullable columns populated? Straight from the manifests and the marts' own reconciliation tests.
 ---
 
 Cairn's data quality is, before anything else, a **provenance** property: every
@@ -183,5 +183,50 @@ computed: several sources publish on no fixed cadence, so only the *observed*
 lag is shown, never a predicted one. Watching for an actually new upstream
 release is the weekly reproducibility job's and the no-LLM dispatcher's job
 (`scripts/check_freshness.py`), not this page.
+
+</Alert>
+
+## How complete are the nullable columns?
+
+Provenance, coverage, and freshness answer "is it pinned?", "how much does it
+capture?", and "how current is it?". This section answers a fourth question:
+for columns that are deliberately nullable, how fully are they populated?
+`lei`, `allocated_total_t_co2eq`, and `surrendered_allowances_t_co2eq` on the
+two EU ETS marts, and the `UNMAPPED` sentinel NACE on the CBS sector mart, are
+each legitimately NULL (or `UNMAPPED`) some of the time — not-yet-mapped in a
+reviewed seed, or genuinely absent upstream. This tracks that completeness as
+an observable fact, letting reviewed-seed coverage (e.g. the LEI mapping) be
+watched as it grows over time.
+
+```sql field_completeness
+select
+    mart_name,
+    column_name,
+    year,
+    total_count,
+    populated_count,
+    null_count,
+    populated_share
+from cairn.field_completeness
+order by mart_name, column_name, year desc
+```
+
+<DataTable data={field_completeness} rows=all rowShading={true} search={true}>
+    <Column id=mart_name title="Mart" />
+    <Column id=column_name title="Column" />
+    <Column id=year title="Year" />
+    <Column id=total_count title="Rows" fmt='#,##0' />
+    <Column id=populated_count title="Populated" fmt='#,##0' />
+    <Column id=null_count title="NULL / unmapped" fmt='#,##0' />
+    <Column id=populated_share title="Populated share" fmt='0.0%' contentType=colorscale />
+</DataTable>
+
+<Alert status="info">
+
+**Counts only, never a fix.** A NULL (or `UNMAPPED`) value here is a
+legitimate, documented state, not an error — this page never imputes or fills
+one in, and `populated_share` is never a quality verdict on the underlying
+emissions figures themselves. The tracked columns are a curated list, not
+every nullable column in every mart.
 
 </Alert>
