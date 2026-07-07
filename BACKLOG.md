@@ -182,13 +182,12 @@ territorial side (complementary to NAMEA's residence-side story, candidate #5).
     (emissieregistratie.nl's own portal has no headless-fetchable data API —
     see the pipeline's module docstring). The manifest ships unpinned
     (`snapshots: []`); the first real `cairn-ingest.yml` run establishes the pin.
-  - staging — `stg_emissieregistratie__crf_summary1`: stage the pinned parquet
-    into one row per CRF category/gas/year with clearly labelled units, plus
-    the usual schema tests (`not_null`/`unique` on the grain). Add the
-    `emissieregistratie_crf_summary1_raw_dir` var to `transform/dbt_project.yml`
-    pointing at the committed fixture
-    (`tests/fixtures/emissieregistratie/crf_summary1/<release>/`, rebuilt via
-    `scripts/build_emissieregistratie_fixture.py`).
+  - staging — **shipped** (issue #100, merged 2026-07-07):
+    `stg_emissieregistratie__crf_summary1` unpivots the pinned parquet into one
+    row per IPCC category/gas/year, dropping the raw sheet's units sub-header
+    row as structural noise (not a methodology filter). The
+    `emissieregistratie_crf_summary1_raw_dir` var points at the committed
+    fixture (`tests/fixtures/emissieregistratie/crf_summary1/2026-V1.0/`).
   - mart — `mart_emissieregistratie_cbs_reconciliation`: a cross-check model
     reconciling the CRF national total against the CBS national total, guarded
     by a tolerance test in the `assert_gge_nl_total_within_cbs` mould. UNFCCC

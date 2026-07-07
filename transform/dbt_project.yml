@@ -23,6 +23,7 @@ vars:
   eurostat_aea_raw_dir: "tests/fixtures/eurostat/env_ac_ainah_r2/2024-10-23"
   eurostat_gge_raw_dir: "tests/fixtures/eurostat_gge/2026-06-02"
   eua_raw_dir: "tests/fixtures/eua/2012-2025"
+  emissieregistratie_crf_summary1_raw_dir: "tests/fixtures/emissieregistratie/crf_summary1/2026-V1.0"
 
 models:
   cairn:

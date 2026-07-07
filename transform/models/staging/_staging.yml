@@ -246,3 +246,58 @@ models:
         description: Reporting year.
         tests:
           - not_null
+
+  - name: stg_emissieregistratie__crf_summary1
+    description: >
+      Typed view of the RIVM/UNFCCC CRF (Common Reporting Format) Summary1
+      national GHG inventory snapshot, unpivoted from the source's
+      one-column-per-gas layout into one row per IPCC source/sink category x
+      gas x inventory year. NL only, 1990 to the latest submitted inventory
+      year. A units sub-header row present in the raw sheet (see the
+      ingestion pipeline's docstring) is dropped as structural noise, not a
+      methodology filter.
+    columns:
+      - name: observation_key
+        description: Surrogate natural key (ipcc_category|gas|year).
+        tests:
+          - unique
+          - not_null
+      - name: year
+        description: Inventory year.
+        tests:
+          - not_null
+      - name: ipcc_category
+        description: >
+          IPCC source/sink category, source code and label combined as one
+          string (e.g. "1. Energy", "1.A. Fuel combustion") -- the sheet has
+          no separate code column.
+        tests:
+          - not_null
+      - name: gas
+        description: >
+          Gas/basket this row's value belongs to, derived from the source
+          column it was unpivoted from.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                ["net_co2", "ch4", "n2o", "hfcs", "pfcs",
+                 "unspecified_mix_hfc_pfc", "sf6", "nf3", "nox", "co",
+                 "nmvoc", "sox", "total_ghg"]
+      - name: unit
+        description: >
+          Unit of measurement. "kt" for single, well-defined substances
+          (native mass); "kt_co2eq" for the F-gas baskets (hfcs, pfcs,
+          unspecified_mix_hfc_pfc) and the total, which aggregate compounds
+          with different GWPs and so carry no native-mass unit (see the CRF
+          Summary1 footnotes referenced in the model file).
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["kt", "kt_co2eq"]
+      - name: value
+        description: >
+          Emission/removal value in the row's unit. Nullable -- the source
+          also uses UNFCCC notation keys (e.g. "NE" = not estimated) in place
+          of a number for some cells; those parse to NULL, never a
+          placeholder zero.
