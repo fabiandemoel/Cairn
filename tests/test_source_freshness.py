@@ -10,7 +10,7 @@ repo's real committed manifests.
 from __future__ import annotations
 
 import importlib.util
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -59,7 +59,7 @@ def test_rows_have_full_column_width_and_lag_arithmetic(tmp_path):
             ],
         },
     )
-    computed_at = datetime(2026, 7, 7, tzinfo=timezone.utc)
+    computed_at = datetime(2026, 7, 7, tzinfo=UTC)
     rows = mod.collect_freshness_rows(str(tmp_path), {"cbs": 2024}, computed_at=computed_at)
     assert len(rows) == 1
     assert all(len(r) == len(COLUMNS) for r in rows)
@@ -79,13 +79,20 @@ def test_unpinned_source_yields_null_release_and_age(tmp_path):
         "cbs_namea",
         {"source": "cbs_namea", "dataset": "air_emissions", "snapshots": []},
     )
-    computed_at = datetime(2026, 7, 7, tzinfo=timezone.utc)
+    computed_at = datetime(2026, 7, 7, tzinfo=UTC)
     rows = mod.collect_freshness_rows(str(tmp_path), {}, computed_at=computed_at)
     assert len(rows) == 1
     row = rows[0]
     assert row[_idx("is_pinned")] is False
     # No invented figures: every derived field is NULL, never a placeholder.
-    for col in ("release", "ingested_at", "ingest_age_days", "latest_covered_year", "coverage_lag_years"):
+    null_cols = (
+        "release",
+        "ingested_at",
+        "ingest_age_days",
+        "latest_covered_year",
+        "coverage_lag_years",
+    )
+    for col in null_cols:
         assert row[_idx(col)] is None
 
 
@@ -108,7 +115,7 @@ def test_source_with_no_matching_mart_has_null_coverage_lag(tmp_path):
             ],
         },
     )
-    computed_at = datetime(2026, 7, 7, tzinfo=timezone.utc)
+    computed_at = datetime(2026, 7, 7, tzinfo=UTC)
     # eua has no benchmark mart per invariant 5 (Scope note), so the caller
     # never supplies a "eua" entry in latest_covered_year.
     rows = mod.collect_freshness_rows(str(tmp_path), {}, computed_at=computed_at)
@@ -121,7 +128,7 @@ def test_source_with_no_matching_mart_has_null_coverage_lag(tmp_path):
 
 
 def test_reflects_committed_manifests():
-    computed_at = datetime(2026, 7, 7, tzinfo=timezone.utc)
+    computed_at = datetime(2026, 7, 7, tzinfo=UTC)
     rows = mod.collect_freshness_rows(
         str(REPO_ROOT / "sources"),
         {"cbs": 2024, "euets": 2024, "eurostat": 2024, "eurostat_gge": 2023},

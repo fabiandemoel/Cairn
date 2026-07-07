@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import glob
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -137,9 +137,7 @@ def model(dbt, session):
     # Manifests live at the repo root (process CWD for dbt here, matching the
     # *_raw_dir convention); override with CAIRN_MANIFESTS_DIR for tests.
     manifests_dir = os.environ.get("CAIRN_MANIFESTS_DIR", "sources")
-    rows = collect_freshness_rows(
-        manifests_dir, latest_covered_year, computed_at=datetime.now(timezone.utc)
-    )
+    rows = collect_freshness_rows(manifests_dir, latest_covered_year, computed_at=datetime.now(UTC))
 
     ddl_cols = ", ".join(f"{name} {dtype}" for name, dtype in COLUMNS)
     placeholders = ", ".join("?" for _ in COLUMNS)
