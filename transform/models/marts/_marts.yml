@@ -1015,3 +1015,68 @@ models:
           every rebuild.
         tests:
           - not_null
+
+  - name: mart_emissieregistratie_cbs_reconciliation
+    description: >
+      Cross-check of RIVM's Emissieregistratie (the CRF -- Common Reporting
+      Format -- national GHG inventory the Netherlands submits to the UNFCCC
+      each year) national total against the CBS 85669NED national total.
+      Grain: year. A provenance layer, not a second authority for the
+      national total: it traces a CBS-derived figure one layer deeper on the
+      territorial side, complementary to the residence-side NAMEA cross-check.
+    meta:
+      source_manifest: sources/emissieregistratie/manifest.yml
+      source_dataset: "crf_summary1"
+      cross_check_manifest: sources/cbs/manifest.yml
+      methodology: >
+        Emissieregistratie side: the CRF Reporter template's standard "Total
+        National Emissions and Removals" row (gas = 'total_ghg', CO2-eq kt,
+        converted to Mt). CBS side: category T001616 ("Totaal
+        klimaatsectoren"), gas T001372 (total GHG, CO2-eq), Definitief years
+        only. Both sources use the territorial principle, so no
+        residence-principle correction applies. Tolerance is asserted at 10%
+        via assert_emissieregistratie_nl_total_within_cbs, the same tolerance
+        and reasoning as assert_gge_nl_total_within_cbs (Emissieregistratie's
+        CRF submission is the same underlying UNFCCC inventory that Eurostat's
+        env_air_gge derives from).
+      known_limitations: >
+        (1) The committed CI fixture is a minimal excerpt that does not
+        include the "Total National Emissions and Removals" row, so this mart
+        and its tolerance test compile to zero rows in CI until a fuller
+        snapshot is ingested -- a vacuous pass, not a hidden failure. (2) CBS
+        revises its national-total estimate more often than the annual UNFCCC
+        submission cycle, so a multi-percent gap between the two sources is
+        expected, not a data-quality problem (see
+        assert_gge_nl_total_within_cbs's observed ~7% gap for the same
+        submission chain). (3) This mart intentionally surfaces only the
+        national total, not the IPCC category/gas breakdown the staging model
+        carries -- IPCC CRF categories are not NACE and are not mapped here.
+      references:
+        source_archive: https://unfccc.int/sites/default/files/resource/NLD-CRT-2026-V1.0.zip
+        cbs_source_table: https://opendata.cbs.nl/statline/#/CBS/nl/dataset/85669NED
+        gge_reconciliation_test: https://github.com/fabiandemoel/Cairn/blob/main/transform/tests/assert_gge_nl_total_within_cbs.sql
+        reconciliation_test: https://github.com/fabiandemoel/Cairn/blob/main/transform/tests/assert_emissieregistratie_nl_total_within_cbs.sql
+    columns:
+      - name: year
+        description: Reconciled calendar year (present in both sources, CBS Definitief only).
+        tests:
+          - unique
+          - not_null
+      - name: emissieregistratie_total_mt_co2eq
+        description: >
+          Emissieregistratie's CRF Summary1 "Total National Emissions and
+          Removals" total for the year (million tonnes CO2-equivalent).
+        tests:
+          - not_null
+      - name: cbs_total_mt_co2eq
+        description: >
+          CBS 85669NED national total for the year (million tonnes
+          CO2-equivalent), Definitief years only.
+        tests:
+          - not_null
+      - name: relative_deviation
+        description: >
+          Absolute difference between the two totals divided by the CBS
+          total. Asserted below 10% by assert_emissieregistratie_nl_total_within_cbs.
+        tests:
+          - not_null

@@ -161,45 +161,7 @@ pinned-snapshot, read/relabel model.
   typed pass-through. The hold is positioning, not missing plumbing — lift it
   only when the € overlay becomes the active priority.
 
-### 2. Emissieregistratie (RIVM) → deepen NL provenance + granularity
-<!-- dispatch
-source: emissieregistratie
-dataset: crf_summary1
-layers:
-  ingestion: sources/emissieregistratie/manifest.yml
-  staging: transform/models/staging/stg_emissieregistratie__crf_summary1.sql
-  mart: transform/models/marts/mart_emissieregistratie_cbs_reconciliation.sql
--->
-**Value: M · Effort: M · Spine-fit: H**
-
-The authoritative inventory under NL's UNFCCC submission; finer per substance/
-sector than CBS. Lets a CBS-derived figure be traced one layer deeper on the
-territorial side (complementary to NAMEA's residence-side story, candidate #5).
-- *Layers:*
-  - ingestion — **shipped** (issue #83, merged 2026-07-01):
-    `ingestion/emissieregistratie_pipeline.py` pins the CRF "Summary1" workbook
-    from the UNFCCC national-inventory submission archive
-    (emissieregistratie.nl's own portal has no headless-fetchable data API —
-    see the pipeline's module docstring). The manifest ships unpinned
-    (`snapshots: []`); the first real `cairn-ingest.yml` run establishes the pin.
-  - staging — **shipped** (issue #100, merged 2026-07-07):
-    `stg_emissieregistratie__crf_summary1` unpivots the pinned parquet into one
-    row per IPCC category/gas/year, dropping the raw sheet's units sub-header
-    row as structural noise (not a methodology filter). The
-    `emissieregistratie_crf_summary1_raw_dir` var points at the committed
-    fixture (`tests/fixtures/emissieregistratie/crf_summary1/2026-V1.0/`).
-  - mart — `mart_emissieregistratie_cbs_reconciliation`: a cross-check model
-    reconciling the CRF national total against the CBS national total, guarded
-    by a tolerance test in the `assert_gge_nl_total_within_cbs` mould. UNFCCC
-    submission timing vs CBS revision cycles applies here too — set the
-    tolerance from the observed gap and justify it in the test, don't default
-    to 0.5%.
-- *Watch:* it partly overlaps CBS national totals — keep it a cross-check /
-  provenance layer, **not** a second authority for the same figure. No site
-  layer is planned; if one turns out to be warranted, add it to the dispatch
-  block and this plan first.
-
-### 3. CBS NAMEA air emission accounts — residence-principle sector breakdown
+### 2. CBS NAMEA air emission accounts — residence-principle sector breakdown
 <!-- dispatch
 source: cbs_namea
 dataset: air_emissions
@@ -241,14 +203,21 @@ for the same sector — directly from CBS via the same OData v4 API.
 - *Watch:* residence-principle totals do **not** reconcile with 85669NED — the
   divergence is methodological by design, so document the bridge explicitly in
   a note, never a `<0.5%` test. Don't duplicate AEA's cross-country story:
-  keep this NL-only, provenance-depth. RIVM (#2) deepens NL provenance from
-  the territorial side — complementary, not redundant.
+  keep this NL-only, provenance-depth. Emissieregistratie (RIVM, shipped —
+  see Considered and rejected) deepens NL provenance from the territorial
+  side — complementary, not redundant.
 
 ---
 
 ## Considered and rejected
 *(Don't re-propose these. If circumstances change, move an item back up with the
 new reason it now fits.)*
+
+- **Emissieregistratie (RIVM) → deepen NL provenance + granularity.** Shipped:
+  merged in this PR (2026-07-08). `mart_emissieregistratie_cbs_reconciliation`
+  is live, cross-checking the CRF Summary1 national total against CBS
+  85669NED's national total, guarded by `assert_emissieregistratie_nl_total_within_cbs`
+  (10% tolerance).
 
 - **Field-completeness (NULL-rate) observability — how fully are the nullable
   columns populated?** Shipped: merged in this PR (2026-07-07).
