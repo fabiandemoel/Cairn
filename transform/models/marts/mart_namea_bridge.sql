@@ -94,8 +94,9 @@ select
     territorial.national_territorial_ghg_emissions_mt_co2eq
 from residence_by_sector
 full outer join territorial
-    on residence_by_sector.nace_section = territorial.nace_section
-    and residence_by_sector.year = territorial.year
+    on
+        residence_by_sector.nace_section = territorial.nace_section
+        and residence_by_sector.year = territorial.year
 left join national_residence
     on coalesce(residence_by_sector.year, territorial.year) = national_residence.year
 order by year, nace_section
