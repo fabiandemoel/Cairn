@@ -349,8 +349,18 @@ jobs:
       # gate, like the other priming steps.
       - name: Trim CLAUDE.md for the implement run
         continue-on-error: true
+        env:
+          ISSUE_LABELS: ${{ steps.model.outputs.labels }}
         run: |
-          python3 scripts/claude_md_for_implement.py > CLAUDE.implement.md
+          # A data-refresh run greps CLAUDE.md for its per-source checklist, so
+          # keep those (data-refresh profile). A feat run implements one new
+          # layer and never runs a refresh, so it also drops the per-source
+          # "### When ..." checklists (feat profile: ~65% lighter than the full
+          # file vs ~36% for data-refresh).
+          PROFILE=feat
+          case ",${ISSUE_LABELS}," in *,data-refresh,*) PROFILE=data-refresh ;; esac
+          echo "CLAUDE.md trim profile: $PROFILE"
+          python3 scripts/claude_md_for_implement.py --profile "$PROFILE" > CLAUDE.implement.md
           mv CLAUDE.implement.md CLAUDE.md
           git update-index --assume-unchanged CLAUDE.md
 
