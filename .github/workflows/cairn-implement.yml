@@ -135,24 +135,25 @@ jobs:
             core.setOutput("sha", sha);
             core.setOutput("url", url);
 
-      # Pre-build the environment so the agent starts from a green, fully-built
-      # tree instead of re-discovering and rebuilding it turn by turn. Mirrors
-      # ci.yml's lint/test/dbt-build/evidence-build jobs. Run logs showed the
-      # bulk of an implement run's turns went to re-deriving exactly this — does
-      # cairn.duckdb exist? where? why does build:strict 404 on the export
-      # download? what rebuilds the Evidence source layer? — all eliminated by
-      # having it already done (warehouse at ./cairn.duckdb, ESRS export bundle
-      # under site/static/downloads/esrs_e1/, site deps installed, source layer
-      # built). continue-on-error: a failure here just falls back to the agent
-      # building it itself, exactly as before — this is a pure cost
+      # Pre-build the environment so the agent starts from a VERIFIED-green tree
+      # instead of re-discovering and rebuilding it turn by turn. After
+      # installing deps we run scripts/verify.sh — the same one-shot wrapper
+      # `runner` uses — which runs ci.yml's whole gate (ruff, sqlfluff, pytest,
+      # dbt build -> ./cairn.duckdb, the ESRS export -> the site download bundle,
+      # and build:strict). Run logs showed the bulk of an implement run's turns
+      # went to re-deriving exactly this — does cairn.duckdb exist? why does
+      # build:strict 404 on the export download? — all eliminated by having it
+      # already done AND confirmed green, with every cache (dbt, npm, Evidence)
+      # warm for the agent's later re-verify. Using verify.sh here keeps this
+      # step and runner on one definition of the sequence. continue-on-error: a
+      # red main just falls back to the agent building it itself — a pure cost
       # optimization, not a correctness gate.
-      - name: Pre-build environment (deps, warehouse, ESRS export, site sources)
+      - name: Pre-build environment (deps + verified-green baseline)
         continue-on-error: true
         run: |
           uv sync --locked --all-groups
-          uv run dbt build --project-dir transform --profiles-dir transform
-          uv run python scripts/export_esrs_e1.py --out-dir site/static/downloads/esrs_e1
-          cd site && npm ci && npm run sources
+          (cd site && npm ci)
+          scripts/verify.sh
 
       # Generate the repo-orientation map and capture it for the prompt. Uses
       # plain python3 (the script is stdlib-only) so it works even if the
@@ -332,6 +333,55 @@ jobs:
             echo 'BRIEF_EOF'
           } >> "$GITHUB_OUTPUT"
 
+      # The new-source implementation guidance (manifest / --offline / blocker-
+      # draft rules) is only meaningful for an ingestion issue -- the same gate
+      # that fires the research step. Emit it into the prompt only then, so a
+      # mart/site/export/data-refresh run does not carry ~17 lines of
+      # ingestion-only instructions in every one of its turns. Skipped -> empty
+      # output -> the prompt's injection line renders blank.
+      - name: New-source guidance (ingestion issues only)
+        id: ingestion_guidance
+        if: steps.research_gate.outputs.needed == 'true'
+        run: |
+          {
+            echo 'guidance<<GUIDE_EOF'
+            cat .github/claude/new_source_guidance.md
+            echo
+            echo 'GUIDE_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # Shrink the CLAUDE.md the implement agent reads. The prompt has the agent
+      # read CLAUDE.md (invariants in full, the per-source checklist for a
+      # data-refresh), and every token it reads rides in every later turn -- the
+      # dominant repeated cost in the run logs. This strips the long "Agent
+      # automation (CI maintenance loop)" section (workflow-internals: dispatch/
+      # replenish/implement/cost-attribution) -- the largest single block and
+      # irrelevant to implementing any one issue -- from the EPHEMERAL checkout
+      # only, cutting ~35% of that file's context weight while leaving the
+      # invariants, the recurring-maintenance checklists, and the Gotchas intact.
+      # The committed CLAUDE.md is never touched: assume-unchanged keeps the
+      # overwrite out of any commit/stash runner makes. Generated from the tree
+      # (scripts/claude_md_for_implement.py, unit-tested) so it can't drift; a
+      # renamed heading degrades to an unchanged copy. continue-on-error: a
+      # failure just falls back to the full file -- a cost optimisation, not a
+      # gate, like the other priming steps.
+      - name: Trim CLAUDE.md for the implement run
+        continue-on-error: true
+        env:
+          ISSUE_LABELS: ${{ steps.model.outputs.labels }}
+        run: |
+          # A data-refresh run greps CLAUDE.md for its per-source checklist, so
+          # keep those (data-refresh profile). A feat run implements one new
+          # layer and never runs a refresh, so it also drops the per-source
+          # "### When ..." checklists (feat profile: ~65% lighter than the full
+          # file vs ~36% for data-refresh).
+          PROFILE=feat
+          case ",${ISSUE_LABELS}," in *,data-refresh,*) PROFILE=data-refresh ;; esac
+          echo "CLAUDE.md trim profile: $PROFILE"
+          python3 scripts/claude_md_for_implement.py --profile "$PROFILE" > CLAUDE.implement.md
+          mv CLAUDE.implement.md CLAUDE.md
+          git update-index --assume-unchanged CLAUDE.md
+
       - id: claude
         uses: anthropics/claude-code-action@v1
         with:
@@ -428,13 +478,13 @@ jobs:
             list_pull_requests. Every action runs in a separate subagent conversation
             via the Task tool:
               - `runner` (subagent_type: runner) runs ALL shell commands and git: the
-                build/verify sequence (ruff, sqlfluff, pytest, `dbt build`, the ESRS
-                export, `npm run build:strict`) and every git op (stage the files you
-                wrote, commit, push). On a failing command it iterates in its own
-                context to find the root cause and reports facts + a hypothesis; you
-                make the fix as an edit and ask it to re-run. Hand it batched work
-                ("run the full verify sequence and report what fails"), not one command
-                at a time.
+                whole CI gate via `scripts/verify.sh` (ruff, sqlfluff, pytest, `dbt
+                build`, the ESRS export, `npm run build:strict`, in the right order)
+                and every git op (stage the files you wrote, commit, push). On a
+                failing command it iterates in its own context to find the root cause
+                and reports facts + a hypothesis; you make the fix as an edit and ask
+                it to re-run. Hand it batched work ("run `scripts/verify.sh` and report
+                what fails"), not one command at a time.
               - `legwork` (subagent_type: legwork) does bulk search/reading of the
                 tree and fixtures.
             Code reaches the remote through exactly ONE path - `runner`'s git - and
@@ -442,11 +492,8 @@ jobs:
             ships the same way a new source does. A subagent's many turns stay in
             its own context, never yours - which is the point of the split. Neither
             subagent decides methodology or authors edits; those stay with you. Keep
-            your own
-            turns low: use only the Task tool (for runner/legwork) and TodoWrite, not
-            the background-task / agent-messaging tools (TaskCreate / TaskUpdate /
-            SendMessage), which add round trips without value; batch any tool-schema
-            lookups into one step.
+            your own turns low: use only Task (for runner/legwork) and TodoWrite, and
+            batch any tool-schema lookups into one step.
 
             This run is non-interactive - no human is watching to approve a tool call.
             If a tool returns "requires approval" or "you haven't granted it", that is
@@ -456,22 +503,15 @@ jobs:
             or git) and continue. Burning turns on an approval that will never arrive
             is the most expensive failure there is.
 
-            Run every subagent task SYNCHRONOUSLY and block on its result: dispatch a
-            runner/legwork Task and use its returned summary in the SAME turn. The
-            harness runs subagents in the BACKGROUND BY DEFAULT, so every Task call
-            MUST explicitly set run_in_background: false - a backgrounded subagent
-            dies silently when your turn ends. NEVER end your turn while a
-            subagent is still running. This run is a single non-interactive process -
-            when your turn ends, the run ends: there is no scheduled wakeup and no "the
-            runner will report back later" (ScheduleWakeup is disallowed at the
-            harness level for exactly this reason). If you hand build/commit/push to
-            `runner` and then stop your turn to "wait", the process terminates with
-            nothing pushed and the ship-guard fails the job with "shipped nothing" -
-            that is exactly what sank runs #42 AND #43 (both dispatched background
-            agents, then ended their turn "waiting" on a wakeup that can never fire
-            in a one-shot CI job). Only end your turn once `runner` has CONFIRMED the
-            branch is pushed and the PR is open (or you have opened a draft PR
-            explaining the blocker).
+            Run every subagent Task SYNCHRONOUSLY: the harness backgrounds subagents by
+            default, so every Task MUST set run_in_background: false, and you must NEVER
+            end your turn while one is still running - a backgrounded subagent dies
+            silently when the turn ends, and this one-shot job has no wakeup to resume it
+            (ScheduleWakeup is disallowed for that reason). If you hand build/commit/push
+            to `runner` and then end your turn to "wait", the process terminates with
+            nothing pushed and the ship-guard fails the job. Only end your turn once
+            `runner` has CONFIRMED the branch is pushed and the PR is open (or you opened
+            a draft PR explaining the blocker).
 
             Baseline: CI on `main` (commit ${{ steps.main_ci.outputs.sha }}) was last
             ${{ steps.main_ci.outputs.conclusion }} (${{ steps.main_ci.outputs.url }}).
@@ -548,23 +588,7 @@ jobs:
                 (`- **<name>.** Shipped: merged in this PR (<date>). <one sentence
                 naming the artifact now live>.`) and renumber the remaining candidates.
 
-            For a NEW data source, the research brief above (generated before this run
-            by an isolated web-research step) is your ONLY window on the live source -
-            you have no web access. Treat its verified facts as authoritative and
-            anything it marks UNVERIFIED as a hypothesis the committed fixture and
-            unit test must not silently depend on. If the brief is missing or lacks a
-            fact you genuinely cannot proceed without, hand `legwork` ONE narrowly
-            scoped fetch (an explicit curl via Bash, not open-ended exploration); if
-            that fails too, open a draft PR explaining the blocker - but WITHOUT
-            `sources/<source>/manifest.yml` in it: that file arms the per-source
-            register guards in tests/test_source_wiring.py, so a scaffold-only draft
-            that ships it can never go green. Revert the scaffolded files (`git rm` /
-            restore) so the draft carries only the blocker description, with CI
-            passing. Do NOT run the
-            real `--offline` ingest as a check - it downloads
-            the full dataset and writes a machine-specific `file://` snapshot into the
-            manifest that you would then have to detect and reset. Rely on the unit test
-            against the committed fixture; the manifest ships `snapshots: []`.
+            ${{ steps.ingestion_guidance.outputs.guidance }}
 
             Branch naming: `agent/<issue-number>-<short-slug>`. First check whether a
             previous run already made progress: list open PRs
@@ -578,15 +602,18 @@ jobs:
             end, so a run that hits the turn limit still leaves pushed progress the next
             run can resume.
 
-            Before opening the PR, have `runner` run and pass what CI runs, in the exact
-            order from the orientation map's "Build & verify sequence" (it mirrors
-            ci.yml) - one batched task, then act on the pass/fail summary. The export
-            step writes the ESRS E1 bundle into site/static/downloads/esrs_e1/, which
-            the disclosure page links to, so running build:strict before it (or after
-            changing the export without re-running it) fails the strict build on a 404
-            and triggers a long, expensive loop. The environment is pre-built, so
-            `runner` usually only re-runs steps downstream of what you changed. Open the
-            PR only once `runner` reports the sequence green.
+            Before opening the PR, have `runner` run `scripts/verify.sh` - ONE batched
+            task that runs the whole CI gate (ruff, sqlfluff, pytest, `dbt build`, the
+            ESRS export, `build:strict`) in the correct order and returns a compact
+            PASS/FAIL summary. It bakes in the export-before-`build:strict` ordering, so
+            neither you nor `runner` has to sequence those (getting it wrong 404s the
+            strict build and triggers a long, expensive loop). Ask for
+            `scripts/verify.sh --fix` so deterministic formatting (ruff/sqlfluff) is
+            auto-applied in place rather than bounced back to you as a failure to
+            hand-fix. Act on the summary: fix any FAIL as an edit and have `runner`
+            re-run. The environment is pre-built and the pristine tree already passes
+            verify, so a re-run only covers what you changed. Open the PR only once
+            `runner` reports verify green.
 
             Open ONE pull request against `main`, opening with a section headed
             "## Executive summary": 2-4 plain-language sentences for a reader with no

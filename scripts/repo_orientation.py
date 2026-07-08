@@ -24,9 +24,11 @@ from pathlib import Path
 
 # The canonical build/verify sequence, mirrored from ci.yml's lint/test/
 # dbt-build/evidence-build jobs. The cairn-implement workflow runs all of this
-# as real steps *before* the agent starts, so the agent inherits a green,
-# fully-built tree (warehouse + ESRS export bundle + installed site deps) and
-# only needs to re-run the parts it changes.
+# as real steps *before* the agent starts (via scripts/verify.sh), so the agent
+# inherits a verified-green tree (warehouse + ESRS export bundle + built site)
+# and only needs to re-run the parts it changes. The verify half of this
+# sequence (everything after the deps are installed) is wrapped by
+# scripts/verify.sh — the one command runner runs — so keep the two in sync.
 BUILD_SEQUENCE = [
     "uv sync --locked --all-groups",
     "uv run ruff check . && uv run ruff format --check .",
@@ -78,10 +80,16 @@ def build_orientation(root: Path) -> str:
 The build environment is ALREADY set up for you before this run: dependencies
 installed (`uv sync`, `npm ci`), the dbt warehouse built (`./cairn.duckdb`), the
 ESRS E1 export bundle written under `site/static/downloads/esrs_e1/`, and the
-Evidence source layer pre-built. So `cairn.duckdb` already exists and a clean
-site build already passes — you only need to re-run the parts you change.
+site built strictly. The pristine tree already PASSES the full verify, so you
+only need to re-verify the parts you change.
 
 ### Build & verify sequence (mirrors ci.yml; run before opening the PR)
+Run the whole gate in ONE command — `scripts/verify.sh` — which runs the steps
+below in order and prints a compact PASS/FAIL summary (it bakes in the
+export-before-`build:strict` ordering, so you never sequence those yourself).
+Add `--fix` to auto-apply the deterministic formatters (`ruff format`,
+`ruff check --fix`, `sqlfluff fix`) before verifying, so formatting nits are
+fixed in place instead of surfacing as failures. The underlying steps:
 {seq}
 
 ### Warehouse & Evidence wiring
