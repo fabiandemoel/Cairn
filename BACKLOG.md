@@ -224,9 +224,14 @@ for the same sector — directly from CBS via the same OData v4 API.
     naar lucht door de Nederlandse economie; nationale rekeningen", annual
     November update, verified live 2026-07-05); the v3-API-returns-406 gotcha
     applies here too.
-  - staging — `stg_cbs_namea__air_emissions`: NACE sector code, year, gas,
-    value, with the `cbs_namea_air_emissions_raw_dir` var and a small committed
-    fixture like the other CBS source.
+  - staging — **shipped** (issue #107, this PR): `stg_cbs_namea__air_emissions`
+    decodes the raw 83300NED observations (sector/measure/period codes to
+    labels) via the `cbs_namea_air_emissions_raw_dir` var. The manifest ships
+    unpinned, so the committed fixture
+    (`tests/fixtures/cbs_namea/air_emissions/2025-11-13/`) is synthetic, built by
+    `scripts/build_cbs_namea_fixture.py` through the pipeline's real
+    `_export_parquets`. No rows are filtered; the NACE mapping and the
+    residence-vs-territorial bridge stay for the mart+site layer.
   - mart + site (fused — one PR) — `mart_namea_bridge`: the NL
     residence-vs-territorial bridge per sector/year, presented as a
     provenance/methodology layer; **plus** its read-only site layer in the same
