@@ -161,52 +161,6 @@ pinned-snapshot, read/relabel model.
   typed pass-through. The hold is positioning, not missing plumbing — lift it
   only when the € overlay becomes the active priority.
 
-### 2. CBS NAMEA air emission accounts — residence-principle sector breakdown
-<!-- dispatch
-source: cbs_namea
-dataset: air_emissions
-layers:
-  ingestion: sources/cbs_namea/manifest.yml
-  staging: transform/models/staging/stg_cbs_namea__air_emissions.sql
-  mart+site: transform/models/marts/mart_namea_bridge.sql; site/sources/cairn/namea_bridge.sql
--->
-**Value: M · Effort: M · Spine-fit: H**
-
-CBS publishes NAMEA (National Accounting Matrix including Environmental
-Accounts) air emission data: annual GHG emissions by NACE sector under the
-**residence principle**, unlike 85669NED (territorial/production principle).
-The two diverge for transport, shipping, and multinationals with cross-border
-activity. NAMEA is the Dutch side of the Eurostat AEA picture (shipped:
-`benchmark_country_sector_emissions`) and explains why AEA and 85669NED diverge
-for the same sector — directly from CBS via the same OData v4 API.
-- *Layers:*
-  - ingestion — `ingestion/cbs_namea_pipeline.py` + `sources/cbs_namea/manifest.yml`,
-    following `cbs_pipeline.py` (OData v4, `Modified`-based release detection,
-    idempotent no-new-release exit). The NAMEA table is **83300NED** ("Emissies
-    naar lucht door de Nederlandse economie; nationale rekeningen", annual
-    November update, verified live 2026-07-05); the v3-API-returns-406 gotcha
-    applies here too.
-  - staging — **shipped** (issue #107, this PR): `stg_cbs_namea__air_emissions`
-    decodes the raw 83300NED observations (sector/measure/period codes to
-    labels) via the `cbs_namea_air_emissions_raw_dir` var. The manifest ships
-    unpinned, so the committed fixture
-    (`tests/fixtures/cbs_namea/air_emissions/2025-11-13/`) is synthetic, built by
-    `scripts/build_cbs_namea_fixture.py` through the pipeline's real
-    `_export_parquets`. No rows are filtered; the NACE mapping and the
-    residence-vs-territorial bridge stay for the mart+site layer.
-  - mart + site (fused — one PR) — `mart_namea_bridge`: the NL
-    residence-vs-territorial bridge per sector/year, presented as a
-    provenance/methodology layer; **plus** its read-only site layer in the same
-    PR — a `namea_bridge.sql` source query + a page explaining the two
-    attribution principles side by side. The site only reads the mart; keep the
-    bridge logic in the mart, tested there.
-- *Watch:* residence-principle totals do **not** reconcile with 85669NED — the
-  divergence is methodological by design, so document the bridge explicitly in
-  a note, never a `<0.5%` test. Don't duplicate AEA's cross-country story:
-  keep this NL-only, provenance-depth. Emissieregistratie (RIVM, shipped —
-  see Considered and rejected) deepens NL provenance from the territorial
-  side — complementary, not redundant.
-
 ---
 
 ## Considered and rejected
@@ -218,6 +172,14 @@ new reason it now fits.)*
   is live, cross-checking the CRF Summary1 national total against CBS
   85669NED's national total, guarded by `assert_emissieregistratie_nl_total_within_cbs`
   (10% tolerance).
+
+- **CBS NAMEA air emission accounts — residence-principle sector breakdown.**
+  Shipped: merged in this PR (2026-07-08). `mart_namea_bridge` is live,
+  bridging NAMEA (83300NED) residence-principle CO2 emissions against
+  `benchmark_sector_emissions`' (85669NED) territorial-principle total GHG
+  CO2-eq per NACE section and year, sourced from `sources/cbs_namea/manifest.yml`;
+  the `namea_bridge.sql` source query and bridge page (`namea-bridge.md`) are
+  deployed on the Evidence site.
 
 - **Field-completeness (NULL-rate) observability — how fully are the nullable
   columns populated?** Shipped: merged in this PR (2026-07-07).

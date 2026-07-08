@@ -56,6 +56,99 @@ models:
         tests:
           - not_null
 
+  - name: mart_namea_bridge
+    description: >
+      NL residence-principle CO2 emissions (CBS NAMEA, 83300NED) per NACE
+      section and year, presented side by side with the territorial-principle
+      total GHG CO2-eq figure from benchmark_sector_emissions (CBS 85669NED) --
+      a provenance/methodology bridge explaining why the two CBS sources (and
+      the Eurostat AEA cross-country mart, which also uses the residence
+      principle) diverge for the same sector. Not a reconciliation: the two
+      figures are never expected to match.
+    meta:
+      source_manifest: sources/cbs_namea/manifest.yml
+      source_dataset: "83300NED"
+      cross_check_manifest: sources/cbs/manifest.yml
+      methodology: >
+        Headline NAMEA measure = CO2 (matched via measure_label ilike
+        '%kooldioxide%'), because 83300NED's measure dimension carries no
+        pre-aggregated "total GHG in CO2-equivalent" figure analogous to
+        85669NED's T001372 -- so the bridge differs in gas scope (CO2 only vs
+        total GHG CO2-eq) in addition to attribution principle. Sector codes
+        are mapped to NACE sections via the reviewed seed
+        sector_mapping_cbs_namea; only leaf categories (seed aggregate =
+        false) are summed per sector-year, and the seed's "Totale Nederlandse
+        economie" aggregate row is read directly as the official national
+        residence-principle total rather than re-summed. The territorial side
+        is read straight from benchmark_sector_emissions (already NACE-mapped,
+        T001372) -- no logic duplicated. A FULL OUTER JOIN on (nace_section,
+        year) surfaces a sector-year present on only one side with NULLs on
+        the other, rather than dropping it.
+      known_limitations: >
+        (1) This is a provenance/methodology bridge, not a reconciliation:
+        residence-principle and territorial-principle totals are not expected
+        to match, and the gap is not tested to a tight tolerance (see the
+        candidate's "Watch" note in BACKLOG.md). (2) The bridge also mixes gas
+        scope (CO2 only vs total GHG CO2-eq) with attribution principle,
+        because 83300NED has no pre-aggregated GHG total; do not read the gap
+        as a pure principle effect. (3) CBS reports NAMEA values without a
+        stated unit in the measure dimension; this mart assumes millions of kg
+        (kilotonnes), consistent with CBS's other emission accounts, and
+        divides by 1,000 for megatonnes -- confirm against the real 83300NED
+        metadata on first ingest and revisit in a reviewed PR if it differs.
+        (4) The seed sector_mapping_cbs_namea currently catalogues only the
+        two sector codes present in the committed synthetic fixture (the
+        manifest ships unpinned, sources/cbs_namea/manifest.yml); coverage
+        grows via reviewed PRs once 83300NED is ingested for real.
+        (5) Provisional years (period_status <> 'Definitief') are excluded on
+        both sides, mirroring benchmark_sector_emissions.
+      references:
+        source_table: https://opendata.cbs.nl/statline/#/CBS/nl/dataset/83300NED
+        namea_methodology: https://ec.europa.eu/eurostat/web/environmental-accounts/methodology/namea
+        nace_rev2: https://ec.europa.eu/eurostat/web/nace
+        disclosure_context_esrs_e1: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
+    columns:
+      - name: bridge_key
+        description: Surrogate natural key (nace_section|year).
+        tests:
+          - unique
+          - not_null
+      - name: "year"
+        description: Calendar year.
+        tests:
+          - not_null
+      - name: nace_section
+        description: NACE Rev.2 section letter, or 'UNMAPPED'.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["A", "B", "C", "D", "E", "F", "UNMAPPED"]
+      - name: nace_label
+        description: Human-readable NACE section label, or the unmapped note.
+        tests:
+          - not_null
+      - name: residence_co2_emissions_mt
+        description: >
+          NAMEA (83300NED) CO2 emissions for the sector-year under the
+          residence principle (assumed megatonnes; see known_limitations).
+          Nullable -- NULL when this sector-year has no NAMEA observation.
+      - name: national_residence_co2_emissions_mt
+        description: >
+          The NAMEA "Totale Nederlandse economie" CO2 total for the year
+          (assumed megatonnes), read directly rather than re-summed. Nullable
+          -- NULL when the year has no NAMEA national total.
+      - name: territorial_ghg_emissions_mt_co2eq
+        description: >
+          The territorial-principle total GHG CO2-eq figure for the
+          sector-year, from benchmark_sector_emissions (CBS 85669NED).
+          Nullable -- NULL when this sector-year has no territorial
+          observation.
+      - name: national_territorial_ghg_emissions_mt_co2eq
+        description: >
+          The territorial-principle national total GHG CO2-eq figure for the
+          year, from benchmark_sector_emissions. Nullable -- NULL when the
+          year has no territorial observation.
+
   - name: benchmark_installation_emissions
     description: >
       Per NL stationary installation and year, its verified EU ETS emissions

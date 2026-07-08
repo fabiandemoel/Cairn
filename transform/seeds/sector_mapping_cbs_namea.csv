@@ -1,0 +1,3 @@
+namea_sector_code,namea_sector_label,nace_section,nace_label,aggregate,notes
+B000579,Totale Nederlandse economie,,,true,"Grand total of the Dutch economy under the residence principle (NAMEA). CBS aggregate; excluded from the per-sector sum and read directly as the official national residence-principle total, mirroring T001616 in sector_mapping_cbs."
+B000581,"Landbouw, bosbouw en visserij",A,"Agriculture, forestry and fishing",false,"Direct match to NACE Rev.2 section A. Only non-aggregate NAMEA sector code catalogued so far -- the one present in the committed synthetic fixture (sources/cbs_namea/manifest.yml ships unpinned); more codes will be added via reviewed PRs once 83300NED is ingested for real."
