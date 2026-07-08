@@ -47,9 +47,9 @@ select
     o.perioden as period_code,
     cast(trim(periods.label) as integer) as year,
     periods.status as period_status,
-    o.value as value,
-    o.string_value as string_value,
-    o.value_attribute as value_attribute,
+    o.value,
+    o.string_value,
+    o.value_attribute,
     -- surrogate natural key: sector | measure (pollutant/gas) | period
     o.nederlandse_economie || '|' || o.measure || '|' || o.perioden as observation_key
 from observations as o
