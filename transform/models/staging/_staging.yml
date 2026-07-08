@@ -301,3 +301,55 @@ models:
           also uses UNFCCC notation keys (e.g. "NE" = not estimated) in place
           of a number for some cells; those parse to NULL, never a
           placeholder zero.
+
+  - name: stg_cbs_namea__air_emissions
+    description: >
+      Typed, decoded 1:1 view of the raw CBS 83300NED observations (NAMEA air
+      emission accounts: annual emissions to air by NAMEA economic sector,
+      pollutant/gas measure, and year, under the residence principle). One row
+      per (sector, measure, period). Unlike stg_cbs__emissions (85669NED,
+      territorial principle), totals here are attributed to Dutch-resident
+      economic activity, not Dutch territory -- the two sources are expected to
+      diverge for transport, shipping, and multinationals with cross-border
+      activity; see the model file's accounting note. No rows are filtered;
+      provisional-year and hierarchy handling belong in a downstream mart.
+    columns:
+      - name: observation_key
+        description: Surrogate natural key (sector_code|measure_code|period_code).
+        tests:
+          - unique
+          - not_null
+      - name: sector_code
+        description: CBS Nederlandse economie (NAMEA sector) code.
+        tests:
+          - not_null
+      - name: measure_code
+        description: >
+          CBS measure code identifying the pollutant/gas (and its unit) this
+          observation reports -- see measure_label for the decoded meaning.
+        tests:
+          - not_null
+      - name: period_code
+        description: CBS period code (e.g. 1990JJ00).
+        tests:
+          - not_null
+      - name: year
+        description: Calendar year parsed from the period label.
+        tests:
+          - not_null
+      - name: period_status
+        description: >
+          CBS period status label (e.g. "Definitief"/"Voorlopige cijfers").
+          Nullable if the source period carries none.
+      - name: value
+        description: >
+          Observation value in the measure's native unit (see measure_label for
+          the pollutant/unit context). Nullable -- a few cells carry no numeric
+          observation (see string_value); NULL is left as NULL, never a
+          placeholder zero.
+      - name: string_value
+        description: >
+          CBS fallback text for a non-numeric observation (e.g. a suppressed
+          cell). Nullable -- most rows carry a numeric value instead.
+      - name: value_attribute
+        description: CBS value-attribute flag for the observation. Nullable -- most cells carry none.
