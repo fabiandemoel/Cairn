@@ -19,6 +19,27 @@ seeds:
         tests:
           - not_null
 
+  - name: sector_mapping_cbs_namea
+    description: >
+      Maps each CBS NAMEA (83300NED) "Nederlandse economie" sector category to
+      a NACE Rev.2 section. The source manifest ships unpinned
+      (sources/cbs_namea/manifest.yml), so only the two codes present in the
+      committed synthetic fixture are catalogued so far; more will be added
+      via reviewed PRs once 83300NED is ingested for real. `aggregate = true`
+      marks the CBS grand-total row ("Totale Nederlandse economie"), excluded
+      from the mart's per-sector sum and read instead as the official national
+      residence-principle total.
+    columns:
+      - name: namea_sector_code
+        description: CBS NAMEA "Nederlandse economie" sector code (primary key).
+        tests:
+          - unique
+          - not_null
+      - name: aggregate
+        description: True for the CBS grand-total ("Totale Nederlandse economie") row.
+        tests:
+          - not_null
+
   - name: lei_mapping_euets
     description: >
       Reviewed mapping of euets.info (EUTL) installations to their operating
