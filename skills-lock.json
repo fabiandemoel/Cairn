@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "skills": {
+    "analytics": {
+      "source": "langwatch/skills",
+      "sourceType": "github",
+      "skillPath": "analytics/SKILL.md",
+      "computedHash": "572203de8e44c869ff729dca6eae685cafbb1232db520f9d8a89bfb5e27ed8e4"
+    },
+    "datasets": {
+      "source": "langwatch/skills",
+      "sourceType": "github",
+      "skillPath": "datasets/SKILL.md",
+      "computedHash": "1adfc1628b1a3131cfdc95cf795242010102130586033a7789342a57118928ad"
+    },
+    "evaluations": {
+      "source": "langwatch/skills",
+      "sourceType": "github",
+      "skillPath": "evaluations/SKILL.md",
+      "computedHash": "3ff0402d44c44721d88d9c8320199bd43c3f1ee7e5ef89a632d58afbb0a0fa22"
+    },
+    "level-up": {
+      "source": "langwatch/skills",
+      "sourceType": "github",
+      "skillPath": "level-up/SKILL.md",
+      "computedHash": "cb27d3d6cbb024867d09780848c6ba4f31f8763e0dbe5740048dfff8b81c267f"
+    },
+    "prompts": {
+      "source": "langwatch/skills",
+      "sourceType": "github",
+      "skillPath": "prompts/SKILL.md",
+      "computedHash": "be3f4c7162d1cefd368d797c5690c1d7581a1c90c2b9037a56b2dc914738e67f"
+    },
+    "scenarios": {
+      "source": "langwatch/skills",
+      "sourceType": "github",
+      "skillPath": "scenarios/SKILL.md",
+      "computedHash": "f90d202dae12d4135308681061875d4df832203ce04d300617adba8d6b498cf1"
+    },
+    "tracing": {
+      "source": "langwatch/skills",
+      "sourceType": "github",
+      "skillPath": "tracing/SKILL.md",
+      "computedHash": "b5f6f07de9e8ec4ba35074a8bdc503c6f86a4735aa05bd60f4f0dd87ef83c762"
+    }
+  }
+}
