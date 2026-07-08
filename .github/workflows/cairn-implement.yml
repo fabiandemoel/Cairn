@@ -135,24 +135,25 @@ jobs:
             core.setOutput("sha", sha);
             core.setOutput("url", url);
 
-      # Pre-build the environment so the agent starts from a green, fully-built
-      # tree instead of re-discovering and rebuilding it turn by turn. Mirrors
-      # ci.yml's lint/test/dbt-build/evidence-build jobs. Run logs showed the
-      # bulk of an implement run's turns went to re-deriving exactly this — does
-      # cairn.duckdb exist? where? why does build:strict 404 on the export
-      # download? what rebuilds the Evidence source layer? — all eliminated by
-      # having it already done (warehouse at ./cairn.duckdb, ESRS export bundle
-      # under site/static/downloads/esrs_e1/, site deps installed, source layer
-      # built). continue-on-error: a failure here just falls back to the agent
-      # building it itself, exactly as before — this is a pure cost
+      # Pre-build the environment so the agent starts from a VERIFIED-green tree
+      # instead of re-discovering and rebuilding it turn by turn. After
+      # installing deps we run scripts/verify.sh — the same one-shot wrapper
+      # `runner` uses — which runs ci.yml's whole gate (ruff, sqlfluff, pytest,
+      # dbt build -> ./cairn.duckdb, the ESRS export -> the site download bundle,
+      # and build:strict). Run logs showed the bulk of an implement run's turns
+      # went to re-deriving exactly this — does cairn.duckdb exist? why does
+      # build:strict 404 on the export download? — all eliminated by having it
+      # already done AND confirmed green, with every cache (dbt, npm, Evidence)
+      # warm for the agent's later re-verify. Using verify.sh here keeps this
+      # step and runner on one definition of the sequence. continue-on-error: a
+      # red main just falls back to the agent building it itself — a pure cost
       # optimization, not a correctness gate.
-      - name: Pre-build environment (deps, warehouse, ESRS export, site sources)
+      - name: Pre-build environment (deps + verified-green baseline)
         continue-on-error: true
         run: |
           uv sync --locked --all-groups
-          uv run dbt build --project-dir transform --profiles-dir transform
-          uv run python scripts/export_esrs_e1.py --out-dir site/static/downloads/esrs_e1
-          cd site && npm ci && npm run sources
+          (cd site && npm ci)
+          scripts/verify.sh
 
       # Generate the repo-orientation map and capture it for the prompt. Uses
       # plain python3 (the script is stdlib-only) so it works even if the
@@ -460,13 +461,13 @@ jobs:
             list_pull_requests. Every action runs in a separate subagent conversation
             via the Task tool:
               - `runner` (subagent_type: runner) runs ALL shell commands and git: the
-                build/verify sequence (ruff, sqlfluff, pytest, `dbt build`, the ESRS
-                export, `npm run build:strict`) and every git op (stage the files you
-                wrote, commit, push). On a failing command it iterates in its own
-                context to find the root cause and reports facts + a hypothesis; you
-                make the fix as an edit and ask it to re-run. Hand it batched work
-                ("run the full verify sequence and report what fails"), not one command
-                at a time.
+                whole CI gate via `scripts/verify.sh` (ruff, sqlfluff, pytest, `dbt
+                build`, the ESRS export, `npm run build:strict`, in the right order)
+                and every git op (stage the files you wrote, commit, push). On a
+                failing command it iterates in its own context to find the root cause
+                and reports facts + a hypothesis; you make the fix as an edit and ask
+                it to re-run. Hand it batched work ("run `scripts/verify.sh` and report
+                what fails"), not one command at a time.
               - `legwork` (subagent_type: legwork) does bulk search/reading of the
                 tree and fixtures.
             Code reaches the remote through exactly ONE path - `runner`'s git - and
@@ -610,15 +611,18 @@ jobs:
             end, so a run that hits the turn limit still leaves pushed progress the next
             run can resume.
 
-            Before opening the PR, have `runner` run and pass what CI runs, in the exact
-            order from the orientation map's "Build & verify sequence" (it mirrors
-            ci.yml) - one batched task, then act on the pass/fail summary. The export
-            step writes the ESRS E1 bundle into site/static/downloads/esrs_e1/, which
-            the disclosure page links to, so running build:strict before it (or after
-            changing the export without re-running it) fails the strict build on a 404
-            and triggers a long, expensive loop. The environment is pre-built, so
-            `runner` usually only re-runs steps downstream of what you changed. Open the
-            PR only once `runner` reports the sequence green.
+            Before opening the PR, have `runner` run `scripts/verify.sh` - ONE batched
+            task that runs the whole CI gate (ruff, sqlfluff, pytest, `dbt build`, the
+            ESRS export, `build:strict`) in the correct order and returns a compact
+            PASS/FAIL summary. It bakes in the export-before-`build:strict` ordering, so
+            neither you nor `runner` has to sequence those (getting it wrong 404s the
+            strict build and triggers a long, expensive loop). Ask for
+            `scripts/verify.sh --fix` so deterministic formatting (ruff/sqlfluff) is
+            auto-applied in place rather than bounced back to you as a failure to
+            hand-fix. Act on the summary: fix any FAIL as an edit and have `runner`
+            re-run. The environment is pre-built and the pristine tree already passes
+            verify, so a re-run only covers what you changed. Open the PR only once
+            `runner` reports verify green.
 
             Open ONE pull request against `main`, opening with a section headed
             "## Executive summary": 2-4 plain-language sentences for a reader with no
