@@ -182,13 +182,12 @@ territorial side (complementary to NAMEA's residence-side story, candidate #5).
     (emissieregistratie.nl's own portal has no headless-fetchable data API —
     see the pipeline's module docstring). The manifest ships unpinned
     (`snapshots: []`); the first real `cairn-ingest.yml` run establishes the pin.
-  - staging — `stg_emissieregistratie__crf_summary1`: stage the pinned parquet
-    into one row per CRF category/gas/year with clearly labelled units, plus
-    the usual schema tests (`not_null`/`unique` on the grain). Add the
-    `emissieregistratie_crf_summary1_raw_dir` var to `transform/dbt_project.yml`
-    pointing at the committed fixture
-    (`tests/fixtures/emissieregistratie/crf_summary1/<release>/`, rebuilt via
-    `scripts/build_emissieregistratie_fixture.py`).
+  - staging — **shipped** (issue #100, merged 2026-07-07):
+    `stg_emissieregistratie__crf_summary1` unpivots the pinned parquet into one
+    row per IPCC category/gas/year, dropping the raw sheet's units sub-header
+    row as structural noise (not a methodology filter). The
+    `emissieregistratie_crf_summary1_raw_dir` var points at the committed
+    fixture (`tests/fixtures/emissieregistratie/crf_summary1/2026-V1.0/`).
   - mart — `mart_emissieregistratie_cbs_reconciliation`: a cross-check model
     reconciling the CRF national total against the CBS national total, guarded
     by a tolerance test in the `assert_gge_nl_total_within_cbs` mould. UNFCCC
@@ -240,62 +239,23 @@ for the same sector — directly from CBS via the same OData v4 API.
   keep this NL-only, provenance-depth. RIVM (#2) deepens NL provenance from
   the territorial side — complementary, not redundant.
 
-### 4. Field-completeness (NULL-rate) observability — how fully are the nullable columns populated?
-<!-- dispatch
-layers:
-  mart+site: transform/models/marts/mart_field_completeness.sql; site/sources/cairn/field_completeness.sql
--->
-**Value: M · Effort: L · Spine-fit: H**
-
-Several mart columns are deliberately nullable — `lei`, `allocated_total`,
-`surrendered_allowances` on the installation mart; the `UNMAPPED`/NULL NACE on
-CBS. Their completeness is itself a data-quality signal ("what fraction of
-installation-years carry an LEI / a free-allocation figure?") and lets
-reviewed-seed coverage (e.g. the LEI mapping) be watched as it grows over time.
-- *Layers:*
-  - mart + site (fused — one PR) — `mart_field_completeness`: per
-    mart/column/year, populated-vs-NULL counts and the resulting share,
-    computed over the existing marts. Counts only; enumerate the tracked columns
-    explicitly in the model rather than introspecting the schema, so a new
-    nullable column is a reviewed addition. **Plus** its read-only site layer in
-    the same PR — a `field_completeness.sql` source query + a section on the
-    Data quality page.
-- *Watch:* pure counts/shares of populated vs NULL; **never impute or fill a
-  NULL**, and never present completeness as a quality verdict on the figures
-  themselves. Honour the existing nullability semantics — a NULL LEI /
-  allocation / surrender is legitimate (not-yet-mapped or genuinely absent),
-  not an error to "fix".
-
-### 5. Freshness / staleness observability — how current is each source?
-<!-- dispatch
-layers:
-  mart+site: transform/models/marts/mart_source_freshness.py; site/sources/cairn/source_freshness.sql
--->
-**Value: M · Effort: L · Spine-fit: H**
-
-The manifests pin each source's release and ingest date; the marts know the
-latest covered year. How current the data is — release-to-now lag per source,
-the known euets.info-vs-EEA latency, the latest `Definitief` CBS year vs the
-provisional one — is a data-quality dimension that today lives only in README
-prose and the source quirks.
-- *Layers:*
-  - mart + site (fused — one PR) — `mart_source_freshness`: a Python dbt model
-    (like `mart_data_provenance.py`, which already reads the manifests — hence
-    the `.py` sentinel): per source, the pinned release and ingest date, the
-    latest covered year from the matching mart, and the observed lag between
-    them. **Plus** its read-only site layer in the same PR — a
-    `source_freshness.sql` source query + a section on the Data quality page.
-- *Watch:* freshness is **descriptive**, computed from pinned dates and the
-  marts' `max(year)` — not a freshness SLA or alarm (that is the weekly
-  reproducibility job's / the dispatcher's role) and never a score. Don't
-  invent an "expected next release" date for a source with no official
-  cadence; state the observed lag, not a verdict.
-
 ---
 
 ## Considered and rejected
 *(Don't re-propose these. If circumstances change, move an item back up with the
 new reason it now fits.)*
+
+- **Field-completeness (NULL-rate) observability — how fully are the nullable
+  columns populated?** Shipped: merged in this PR (2026-07-07).
+  `mart_field_completeness` (per mart/tracked column/year, populated-vs-NULL
+  counts and share) and its `field_completeness.sql` site source query are
+  live, surfaced in a new section on the Data quality page.
+
+- **Freshness / staleness observability — how current is each source?**
+  Shipped: merged in this PR (2026-07-07). `mart_source_freshness` (per source,
+  pinned release/ingest date, latest covered year, and the observed
+  ingest-age/coverage-lag) and its `source_freshness.sql` site source query are
+  live, surfaced in a new section on the Data quality page.
 
 - **EUTL surrendered allowances → verified-vs-surrendered compliance-integrity
   axis.** Shipped: mart layer merged in PR #42 (2026-06-26), site layer merged in

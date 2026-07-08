@@ -798,6 +798,79 @@ models:
         tests:
           - not_null
 
+  - name: mart_field_completeness
+    description: >
+      Field-completeness (NULL-rate) observability: per mart, tracked column,
+      and year, the populated-vs-NULL row counts and the resulting share.
+      Several mart columns are deliberately nullable -- lei, allocated_total,
+      surrendered_allowances on the two EU ETS marts; the UNMAPPED sentinel
+      NACE on CBS -- and their completeness is itself a data-quality signal,
+      e.g. what fraction of installation-years carry an LEI, letting reviewed-
+      seed coverage (the LEI mapping) be watched as it grows over time.
+    meta:
+      source_manifest: sources/cbs/manifest.yml, sources/euets/manifest.yml
+      methodology: >
+        Tracked columns are enumerated explicitly in the model, not
+        introspected from the schema, so a newly added nullable column is a
+        reviewed addition. "Populated" means the column is not NULL, except
+        for benchmark_sector_emissions.nace_section, where CBS categories
+        that cannot be attributed to a single NACE section carry the
+        sentinel 'UNMAPPED' rather than NULL, so populated there means
+        nace_section != 'UNMAPPED'. Pure counts over the existing marts --
+        never a re-derivation, an imputation, or a quality verdict on any
+        single figure.
+      known_limitations: >
+        (1) The tracked-column list is curated, not exhaustive of every
+        nullable column in every mart -- extending coverage is a reviewed
+        addition to this model. (2) A NULL (or UNMAPPED) value is a
+        legitimate, documented state -- not-yet-mapped in a reviewed seed
+        (lei), genuinely absent upstream (allocated_total,
+        surrendered_allowances), or CBS's own non-attribution (nace_section)
+        -- never an error this mart "fixes", and never surfaced in the ESRS
+        E1 export. (3) populated_share is a plain row-count share, not
+        weighted by emissions magnitude.
+      references:
+        installation_mart_lei: https://github.com/fabiandemoel/Cairn/blob/main/transform/models/marts/_marts.yml
+        gleif_lei: https://www.gleif.org/en/about-lei/introducing-the-legal-entity-identifier-lei
+    columns:
+      - name: mart_column_year_key
+        description: Surrogate natural key (mart_name|column_name|year).
+        tests:
+          - unique
+          - not_null
+      - name: mart_name
+        description: The mart the tracked column belongs to.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                ["benchmark_sector_emissions", "benchmark_installation_emissions",
+                 "benchmark_transport_emissions"]
+      - name: column_name
+        description: The tracked column within mart_name.
+        tests:
+          - not_null
+      - name: "year"
+        description: Calendar / compliance year.
+        tests:
+          - not_null
+      - name: total_count
+        description: Total rows for this mart/year.
+        tests:
+          - not_null
+      - name: populated_count
+        description: Rows where the tracked column is populated (see methodology).
+        tests:
+          - not_null
+      - name: null_count
+        description: total_count - populated_count.
+        tests:
+          - not_null
+      - name: populated_share
+        description: populated_count divided by total_count.
+        tests:
+          - not_null
+
   - name: mart_business_glossary
     description: >
       Business glossary: one row per curated definition of a cross-cutting Cairn
@@ -857,3 +930,88 @@ models:
           resource (enforced by the guard test). NULL when none.
       - name: reference_url
         description: Official reference URL for the term. NULL when none.
+
+  - name: mart_source_freshness
+    description: >
+      Freshness/staleness observability: per source, its pinned release and
+      ingest date, the latest calendar year its benchmark mart actually
+      covers, and the observed lag between "now" (this mart's own build time)
+      and those two facts. How current the data is, surfaced as a standing
+      fact rather than left in README prose and source-quirk notes.
+    config:
+      tags: ["data-quality"]
+    meta:
+      source_manifest: sources/
+      methodology: >
+        Built by transform/models/marts/mart_source_freshness.py, which reads
+        every sources/*/manifest.yml (the same pin of record
+        mart_data_provenance.py reads) for the pinned release/ingest date, and
+        dbt.ref()s each source's benchmark mart for max(year) -- the latest
+        calendar year of data the mart actually covers. ingest_age_days is the
+        whole-day gap between the pinned snapshot's ingested_at and this mart's
+        own build time (computed_at); coverage_lag_years is computed_at's
+        calendar year minus latest_covered_year. Both are descriptive facts
+        about pinned/built state, never a live probe of the upstream source --
+        that is scripts/check_freshness.py's (the no-LLM dispatcher's) role,
+        and never a freshness SLA, alarm, or quality score.
+      known_limitations: >
+        (1) computed_at is this mart's own build time, not a pinned figure --
+        ingest_age_days and coverage_lag_years drift on every rebuild by
+        design, so a stale warehouse under-reports its own staleness until
+        rebuilt. (2) latest_covered_year is NULL for a source with no benchmark
+        mart yet (eea, eua, cbs_namea, emissieregistratie at the time this mart
+        shipped) -- never an invented year; eua in particular has no mart per
+        invariant 5's Scope note (the auction clearing price never joins a
+        benchmark figure). (3) euets's latest_covered_year is the more recent of
+        benchmark_installation_emissions and benchmark_transport_emissions --
+        both derive from the same euets.info pin, so there is one euets row,
+        not two. (4) An unpinned source (release/ingested_at NULL) still
+        reports is_pinned = false rather than being hidden. (5) No "expected
+        next release" date is ever computed -- several sources (euets.info,
+        EEX/eua) have no official publication cadence, so only the observed lag
+        is stated, never a predicted one.
+      references:
+        manifest_logic: https://github.com/fabiandemoel/Cairn/blob/main/ingestion/manifest.py
+        upstream_freshness_diff: https://github.com/fabiandemoel/Cairn/blob/main/scripts/check_freshness.py
+        reproducibility_check: https://github.com/fabiandemoel/Cairn/blob/main/scripts/verify_reproducibility.py
+    columns:
+      - name: freshness_key
+        description: Surrogate natural key (the source identifier).
+        tests:
+          - unique
+          - not_null
+      - name: source
+        description: Source identifier (cbs, euets, eea, ...).
+        tests:
+          - not_null
+      - name: dataset
+        description: Dataset identifier within the source (e.g. 85669NED, eutl).
+        tests:
+          - not_null
+      - name: is_pinned
+        description: Whether the source has at least one pinned snapshot.
+        tests:
+          - not_null
+      - name: release
+        description: Source release identifier of the current pin. NULL when unpinned.
+      - name: ingested_at
+        description: When Cairn ingested the current pin (UTC). NULL when unpinned.
+      - name: ingest_age_days
+        description: >
+          Whole days between ingested_at and this mart's build time
+          (computed_at). NULL when unpinned.
+      - name: latest_covered_year
+        description: >
+          The largest calendar year present in the source's benchmark mart.
+          NULL when the source has no benchmark mart yet.
+      - name: coverage_lag_years
+        description: >
+          computed_at's calendar year minus latest_covered_year. NULL when
+          latest_covered_year is NULL.
+      - name: computed_at
+        description: >
+          This mart's own build time (UTC) -- the "now" every age/lag figure
+          on this row is measured against. Not a pinned value; changes on
+          every rebuild.
+        tests:
+          - not_null
