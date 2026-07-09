@@ -55,18 +55,17 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
 
-      # data-refresh issues are a mechanical checklist (run the idempotent
-      # ingest, confirm a new snapshot, refresh fixtures, run dbt/pytest) â€”
-      # Haiku is sufficient and ~much cheaper. feat issues require design
-      # judgement (new dbt models, mappings, site queries) and stay on
-      # Sonnet 5. Falls back to Sonnet 5 if the label can't be read.
-      - name: Determine model based on issue labels
-        id: model
+      # Fetch the issue once; its title/labels/body feed the strategy step,
+      # every priming step below, and the prompt. The model/plan routing
+      # itself is decided by the unit-tested strategy step that follows, not
+      # here. Falls back to empty outputs (=> Sonnet, no plan step) if the
+      # issue can't be read.
+      - name: Fetch issue title, labels and body
+        id: issue
         uses: actions/github-script@v7
         with:
           script: |
             const issueNumber = ${{ github.event.issue.number || github.event.inputs.issue_number }};
-            let model = "claude-sonnet-5";
             let title = "";
             let labelsCsv = "";
             let body = "";
@@ -80,19 +79,36 @@ jobs:
               labelsCsv = labels.join(",");
               title = issue.title || "";
               body = issue.body || "";
-              model = labels.includes("data-refresh") ? "claude-haiku-4-5-20251001" : "claude-sonnet-5";
-              core.info(`Issue #${issueNumber} labels: ${labelsCsv} -> model ${model}`);
+              core.info(`Issue #${issueNumber} labels: ${labelsCsv}`);
             } catch (err) {
-              core.warning(`Could not read labels for #${issueNumber}, defaulting to Sonnet: ${err}`);
+              core.warning(`Could not read issue #${issueNumber}: ${err}`);
             }
-            // title/labels feed the per-layer reference generator below, and
-            // title/labels/body feed the layer-scaffold step; on a read
-            // failure they stay empty and both generators fall back to a
-            // "write it yourself" note rather than crashing.
-            core.setOutput("model", model);
+            // title/labels feed the strategy and per-layer reference steps,
+            // and title/labels/body feed the layer-scaffold step; on a read
+            // failure they stay empty and every consumer falls back to its
+            // conservative default rather than crashing.
             core.setOutput("title", title);
             core.setOutput("labels", labelsCsv);
             core.setOutput("body", body);
+
+      # No-LLM routing (scripts/implement_strategy.py, unit-tested): which
+      # model runs the orchestrator, and whether an isolated read-only Sonnet
+      # plan step runs first. data-refresh (fixed checklist) and staging
+      # (scaffolded near-copy of the exemplar) run Haiku alone; ingestion and
+      # unclassifiable issues keep the Sonnet orchestrator; every other feat
+      # layer (mart / site / fused mart+site / export) gets a Sonnet-written
+      # plan and a Haiku orchestrator. Cost data (PRs #121/#122) showed the
+      # Sonnet orchestrator was ~84% of a feat run's cost, nearly all of it
+      # execution turns Haiku can drive once the design is settled.
+      - name: Decide orchestrator model and plan step
+        id: strategy
+        env:
+          ISSUE_TITLE: ${{ steps.issue.outputs.title }}
+          ISSUE_LABELS: ${{ steps.issue.outputs.labels }}
+        run: >-
+          python3 -m scripts.implement_strategy gate
+          --title "$ISSUE_TITLE" --labels "$ISSUE_LABELS"
+          >> "$GITHUB_OUTPUT"
 
       # Timestamp the run start so the cost step can find the PR this run opens
       # (branch agent/<issue>-*) without grabbing an older one.
@@ -183,8 +199,8 @@ jobs:
       - name: Generate canonical reference for the issue's layer
         id: reference
         env:
-          ISSUE_TITLE: ${{ steps.model.outputs.title }}
-          ISSUE_LABELS: ${{ steps.model.outputs.labels }}
+          ISSUE_TITLE: ${{ steps.issue.outputs.title }}
+          ISSUE_LABELS: ${{ steps.issue.outputs.labels }}
         run: |
           {
             echo 'ref<<REF_EOF'
@@ -211,9 +227,9 @@ jobs:
         id: scaffold
         continue-on-error: true
         env:
-          ISSUE_TITLE: ${{ steps.model.outputs.title }}
-          ISSUE_LABELS: ${{ steps.model.outputs.labels }}
-          ISSUE_BODY: ${{ steps.model.outputs.body }}
+          ISSUE_TITLE: ${{ steps.issue.outputs.title }}
+          ISSUE_LABELS: ${{ steps.issue.outputs.labels }}
+          ISSUE_BODY: ${{ steps.issue.outputs.body }}
         run: |
           {
             echo 'note<<SCAFFOLD_EOF'
@@ -243,9 +259,9 @@ jobs:
       - name: Gate live-source research
         id: research_gate
         env:
-          ISSUE_TITLE: ${{ steps.model.outputs.title }}
-          ISSUE_LABELS: ${{ steps.model.outputs.labels }}
-          ISSUE_BODY: ${{ steps.model.outputs.body }}
+          ISSUE_TITLE: ${{ steps.issue.outputs.title }}
+          ISSUE_LABELS: ${{ steps.issue.outputs.labels }}
+          ISSUE_BODY: ${{ steps.issue.outputs.body }}
         run: >-
           python3 -m scripts.source_research gate
           --title "$ISSUE_TITLE" --labels "$ISSUE_LABELS" --body "$ISSUE_BODY"
@@ -303,10 +319,10 @@ jobs:
                gates — anything that changes how a pipeline must fetch this.
 
             Issue #${{ github.event.issue.number || github.event.inputs.issue_number }},
-            titled "${{ steps.model.outputs.title }}":
+            titled "${{ steps.issue.outputs.title }}":
 
             <issue-body>
-            ${{ steps.model.outputs.body }}
+            ${{ steps.issue.outputs.body }}
             </issue-body>
 
             URLs found in the issue body (may be empty; verify, don't assume):
@@ -350,6 +366,103 @@ jobs:
             echo 'GUIDE_EOF'
           } >> "$GITHUB_OUTPUT"
 
+      # TWO-STEP PLAN->EXECUTE SPLIT (mart/site/export feat issues): the
+      # design judgement those issues need — grain, columns, tests, which
+      # staging columns to read, the site query shape — is produced HERE by a
+      # short, read-only Sonnet step, and the orchestrator below then runs on
+      # Haiku (the strategy step set both). Same pattern as the research step
+      # above: the plan step's final message is extracted from its execution
+      # log and injected into the implement prompt, so the expensive model
+      # pays for a few planning turns instead of riding every execution turn.
+      # Everything degrades: a failed or empty plan becomes a fallback note
+      # telling the orchestrator to work from the issue body and the layer
+      # reference — a cost optimisation, never a correctness gate.
+      - name: Plan the implementation (isolated read-only Sonnet step)
+        id: plan
+        if: steps.strategy.outputs.plan_needed == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.CAIRN_BOT_TOKEN }}
+          show_full_output: true
+          # Read/Grep/Glob only: this step may observe the tree and report,
+          # nothing else — no shell, no writes, no subagents, no web. The
+          # background/wakeup tools are disallowed explicitly because they
+          # bypass the allowlist (same rationale as the research step).
+          claude_args: >-
+            --max-turns 25
+            --model claude-sonnet-5
+            --allowedTools "Read,Grep,Glob"
+            --disallowedTools "ScheduleWakeup,TaskCreate,TaskUpdate,TaskGet,TaskList,TaskOutput,TaskStop,SendMessage"
+          prompt: |
+            You are the planning front half of a two-step pipeline. A separate
+            implementation agent on a smaller model will receive your FINAL MESSAGE
+            verbatim as its implementation plan — it will follow it, so be concrete
+            and complete. You have only Read/Grep/Glob: no shell, no writes, no web,
+            no subagents. If a tool is denied, that is terminal — work with what you
+            have.
+
+            Context: the repository is Cairn, a provenance-first emissions data
+            warehouse (dlt ingest -> pinned raw snapshots -> dbt staging/marts on
+            DuckDB -> a read-only Evidence site + ESRS export). Non-negotiable
+            invariants: raw data is immutable, manifests are append-only, new
+            numbers are computed and tested in a dbt mart, the site and export only
+            read the warehouse, and figures/mappings are never invented — real
+            source categories or explicit NULL + a note.
+
+            ${{ steps.orient.outputs.map }}
+
+            ${{ steps.reference.outputs.ref }}
+
+            Plan the implementation of issue
+            #${{ github.event.issue.number || github.event.inputs.issue_number }},
+            titled "${{ steps.issue.outputs.title }}". Treat its body (between the
+            <issue-body> tags) as the authoritative spec — plan ONLY the layer(s)
+            it asks for, within its "Scope" and "watch" caveats.
+
+            <issue-body>
+            ${{ steps.issue.outputs.body }}
+            </issue-body>
+
+            Write a concrete, file-by-file implementation plan:
+            1. Every file to create or edit, with its exact path (use the sentinel
+               paths the issue body names; flag it explicitly if you deviate).
+            2. For a dbt model: the grain, the column list (name, type, meaning),
+               which staging/mart models it refs and how they join or filter, and
+               the schema tests to declare (unique / not_null / accepted_values /
+               relationships, plus any singular assert test with its tolerance).
+               Read the models you plan to ref and quote their actual column
+               names — the implementer must not have to guess them.
+            3. For a site page: the sources/cairn/*.sql query (columns, ordering)
+               and the page structure, modelled on the exemplar.
+            4. The BACKLOG.md upkeep edits the implement prompt requires (sentinel
+               path + Layers bullet, or retiring the candidate if this is its last
+               layer).
+            5. The few most likely failure points for THIS change (e.g. sqlfluff
+               casing rules, camelCase source columns, fixture coverage) — one
+               line each.
+            Where the issue body leaves a genuine design choice open, pick one,
+            state the alternative, and say why. Never invent figures, mappings, or
+            source categories. Your final message must be the plan itself: no
+            preamble, no narration of your exploration, under ~150 lines.
+
+      # Extract the plan step's final message from its execution log and wrap
+      # it as the markdown section the implement prompt inlines. A missing/
+      # failed plan degrades to a fallback note (never fails the job).
+      - name: Capture implementation plan
+        id: plan_brief
+        if: steps.strategy.outputs.plan_needed == 'true'
+        env:
+          EXECUTION_FILE: ${{ steps.plan.outputs.execution_file }}
+        run: |
+          {
+            echo 'plan<<PLAN_EOF'
+            python3 -m scripts.implement_strategy plan --execution-file "$EXECUTION_FILE"
+            echo
+            echo 'PLAN_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       # Shrink the CLAUDE.md the implement agent reads. The prompt has the agent
       # read CLAUDE.md (invariants in full, the per-source checklist for a
       # data-refresh), and every token it reads rides in every later turn -- the
@@ -368,7 +481,7 @@ jobs:
       - name: Trim CLAUDE.md for the implement run
         continue-on-error: true
         env:
-          ISSUE_LABELS: ${{ steps.model.outputs.labels }}
+          ISSUE_LABELS: ${{ steps.issue.outputs.labels }}
         run: |
           # A data-refresh run greps CLAUDE.md for its per-source checklist, so
           # keep those (data-refresh profile). A feat run implements one new
@@ -442,14 +555,16 @@ jobs:
           #
           # --max-turns 100: a full new-source slice (ingestion + mart + test
           # + site) needs room; 20 then 60 both hit error_max_turns mid-work
-          # (runs 28085542460, 28173119243). --model sets the ORCHESTRATOR model:
-          # the model step above runs it as Sonnet 5 for feat issues (design
-          # judgement) and drops to Haiku for data-refresh (a fixed checklist).
-          # The runner and legwork subagents are pinned to Haiku regardless.
+          # (runs 28085542460, 28173119243). --model sets the ORCHESTRATOR model,
+          # decided by the strategy step above (scripts/implement_strategy.py):
+          # Sonnet for ingestion/unclassifiable issues, Haiku for data-refresh,
+          # staging, and the plan-backed mart/site/export issues (a read-only
+          # Sonnet plan step already settled the design for those). The runner
+          # and legwork subagents are pinned to Haiku regardless.
           show_full_output: true
           claude_args: >-
             --max-turns 100
-            --model ${{ steps.model.outputs.model }}
+            --model ${{ steps.strategy.outputs.model }}
             --allowedTools "Read,Write,Edit,Glob,Grep,TodoWrite,Task,Bash,mcp__github__get_issue,mcp__github__create_pull_request,mcp__github__list_pull_requests"
             --disallowedTools "ScheduleWakeup,TaskCreate,TaskUpdate,TaskGet,TaskList,TaskOutput,TaskStop,SendMessage"
           prompt: |
@@ -540,9 +655,11 @@ jobs:
 
             ${{ steps.research_brief.outputs.brief }}
 
+            ${{ steps.plan_brief.outputs.plan }}
+
             Implement issue
             #${{ github.event.issue.number || github.event.inputs.issue_number }},
-            titled "${{ steps.model.outputs.title }}". Its body is inlined between the
+            titled "${{ steps.issue.outputs.title }}". Its body is inlined between the
             <issue-body> tags below, fetched at the start of this run - do NOT spend a
             turn re-fetching it with get_issue (that tool is a fallback for the rare
             case the block below is empty because the fetch failed). Treat it as the
@@ -553,7 +670,7 @@ jobs:
             it is genuinely insufficient or ambiguous.
 
             <issue-body>
-            ${{ steps.model.outputs.body }}
+            ${{ steps.issue.outputs.body }}
             </issue-body>
             - `data-refresh`: follow the matching CLAUDE.md "Recurring maintenance"
               checklist exactly (idempotent ingest, new append-only snapshot, refresh CI
@@ -671,10 +788,10 @@ jobs:
               );
             }
 
-      # Cost visibility (best-effort; never fails the run). Parse both Claude
-      # steps' execution_files (research + implement; the research one is empty
-      # when the step was skipped, which the script ignores) into one merged
-      # markdown summary + the total cost in USD.
+      # Cost visibility (best-effort; never fails the run). Parse every Claude
+      # step's execution_file (research + plan + implement; a skipped step's
+      # empty path is ignored by the script) into one merged markdown summary
+      # + the total cost in USD.
       - name: Summarise run cost
         id: cost
         if: always()
@@ -682,6 +799,7 @@ jobs:
           python3 scripts/ai_cost_summary.py \
             --execution-file "${{ steps.claude.outputs.execution_file }}" \
             --execution-file "${{ steps.research.outputs.execution_file }}" \
+            --execution-file "${{ steps.plan.outputs.execution_file }}" \
             --label "Cairn Implement" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             -o "${{ runner.temp }}/ai_cost.md"

@@ -362,6 +362,21 @@ by turn (the dominant repeated cost in the run logs):
   subagents, scheduled a wakeup that can never fire in a one-shot CI job, and
   ended their turn having shipped nothing — and `ScheduleWakeup` bypasses the
   `--allowedTools` allowlist, so only `--disallowedTools` actually stops it).
+- **Plan→execute split (implement only, gated).** `scripts/implement_strategy.py`
+  (stdlib-only, unit-tested in `tests/test_implement_strategy.py`) routes each
+  issue to an orchestrator model and decides whether a plan step runs first:
+  data-refresh (fixed checklist) and staging (scaffolded near-copy) run the
+  orchestrator on Haiku directly; ingestion and unclassifiable issues keep the
+  Sonnet orchestrator; every other feat layer (mart, site, fused mart+site,
+  export) first gets a short **read-only Sonnet plan step** (Read/Grep/Glob
+  only — the same isolation pattern as the research step) whose final message —
+  exact file paths, mart grain/columns/tests, site query shape, BACKLOG upkeep —
+  is extracted from the execution log and injected into the implement prompt,
+  and then runs the orchestrator on **Haiku**. Rationale: run-cost analysis
+  (PRs #121/#122) put the Sonnet orchestrator at ~84% of a feat run's cost,
+  nearly all of it execution turns; the split keeps the design judgement on the
+  stronger model at a few read-only turns' price. A failed or empty plan
+  degrades to a fallback note, never a job failure.
 - **Upstream freshness (now fully no-LLM).** `scripts/check_freshness.py`
   (stdlib-only, unit-tested in `tests/test_check_freshness.py`) computes the
   live-vs-pinned diff per source; `scripts/dispatch.py` consumes its structured
@@ -390,8 +405,8 @@ cost step). `scripts/ai_cost_summary.py` (stdlib-only, unit-tested in
 `execution_file` output — its `total_cost_usd`, `usage`, `modelUsage`,
 `num_turns`, `duration_ms` — into a markdown comment and the total cost in USD.
 It accepts `--execution-file` more than once and merges them, so implement's
-research + implement steps surface as one total (an empty path from a skipped
-research step is ignored).
+research + plan + implement steps surface as one total (empty paths from
+skipped steps are ignored).
 The shared `.github/scripts/attribute_run_cost.js` github-script module then
 posts that comment and sets a Projects v2 Number field for the PR the run
 opened, resolved by branch prefix (`agent/<issue>-*`, `replenish/*`).
