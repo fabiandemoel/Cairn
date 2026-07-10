@@ -4,7 +4,7 @@ Cairn builds reproducible climate datasets from official EU/NL public sources
 (CBS, EEA, EU ETS) with full lineage — every figure traces back to a versioned,
 pinned source. It answers, per sector: "how do your emissions compare to the
 sector average?", and supports ESRS E1-6 reporting as one application of that
-auditability.
+auditability. 
 
 [![Live site](https://img.shields.io/badge/live%20site-cairn.fabiandemoel.net-2563eb?logo=githubpages&logoColor=white)](https://cairn.fabiandemoel.net/)
 [![Version](https://img.shields.io/badge/version-v1.1.0%20%C2%B7%20Phase%204-45a1bf)](https://github.com/fabiandemoel/Cairn)
