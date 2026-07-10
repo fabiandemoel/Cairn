@@ -74,3 +74,39 @@ order by emissions_share desc
     <Column id=sector_emissions_mt_co2eq title="Emissions (Mt CO₂-eq)" fmt='#,##0.0' />
     <Column id=emissions_share title="Share of national total" fmt='0.0%' contentType=colorscale />
 </DataTable>
+
+## Gas composition by sector
+
+Which gases dominate each sector's footprint? CO₂-heavy energy and industry, or
+non-CO₂-heavy agriculture? This breakdown shows the four constituent greenhouse
+gases CBS reports in CO₂-equivalent: CO₂, N₂O, CH₄, and F-gases.
+
+<Dropdown data={years} name=year_gas value=year defaultValue={years[0].year} />
+
+```sql gas_mix
+select
+    nace_section,
+    gas_label,
+    emissions_mt_co2eq,
+    gas_share
+from cairn.sector_gas_composition
+where year = '${inputs.year_gas.value}'
+order by nace_section, gas_label
+```
+
+<BarChart
+    data={gas_mix}
+    x=nace_section
+    y=emissions_mt_co2eq
+    series=gas_label
+    type=stacked
+    yAxisTitle="Mt CO₂-eq"
+    title="GHG composition by gas type, {inputs.year_gas.value}"
+/>
+
+<DataTable data={gas_mix} rows=all>
+    <Column id=nace_section title="NACE section" />
+    <Column id=gas_label title="Gas" />
+    <Column id=emissions_mt_co2eq title="Emissions (Mt CO₂-eq)" fmt='#,##0.0' />
+    <Column id=gas_share title="Share of sector total" fmt='0.0%' contentType=colorscale />
+</DataTable>
