@@ -96,7 +96,8 @@ compliance as (
         year,
         verified_emissions_t_co2eq,
         allocated_total,
-        surrendered
+        surrendered,
+        excess_emissions_penalty_eur
     from {{ ref('stg_euets__compliance') }}
     where
         reported_in_system = 'euets'
@@ -133,7 +134,13 @@ installation_year as (
         -- compliance triple: allowances the operator actually handed back.
         -- Nullable: surrender can lag and a single surrender may cover multiple
         -- years; NULL stays NULL (never a placeholder zero).
-        compliance.surrendered as surrendered_allowances_t_co2eq
+        compliance.surrendered as surrendered_allowances_t_co2eq,
+        -- Excess emissions penalty (Article 16, EU ETS Directive 2003/87/EC):
+        -- the EUR 100/tonne penalty EUTL records when surrendered allowances
+        -- fall short of verified emissions. A labelled measure straight from
+        -- the pinned snapshot's penalty column -- never computed or inferred
+        -- by Cairn. Nullable/zero for the common case (no shortfall).
+        compliance.excess_emissions_penalty_eur
     from compliance
     inner join installations on installations.installation_id = compliance.installation_id
     left join carbon_leakage on carbon_leakage.code = installations.nace_code
@@ -171,6 +178,7 @@ select
     installation_year.installation_emissions_t_co2eq,
     installation_year.allocated_total_t_co2eq,
     installation_year.surrendered_allowances_t_co2eq,
+    installation_year.excess_emissions_penalty_eur,
     sector_benchmark.sector_installation_count,
     sector_benchmark.sector_mean_emissions_t_co2eq,
     sector_benchmark.sector_median_emissions_t_co2eq,

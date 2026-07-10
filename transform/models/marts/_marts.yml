@@ -269,7 +269,12 @@ models:
         from the reviewed carbon_leakage_list seed (Commission Delegated
         Decision (EU) 2019/708, OJ L 120, 8.5.2019, p. 20, Annex points 1-3) on
         the installation's NACE code -- pure policy context, never a computed
-        figure and never a free-allocation entitlement.
+        figure and never a free-allocation entitlement. Excess emissions penalty
+        (excess_emissions_penalty_eur) is a fourth labelled measure over the EUTL
+        compliance triple -- the EUR 100/tonne Article 16 penalty EUTL itself
+        records when surrendered allowances fall short of verified emissions,
+        read straight from the pinned snapshot's penalty column. Guarded by
+        assert_penalty_only_on_shortfall; never re-derived or estimated by Cairn.
       known_limitations: >
         (1) euets.info lags the EEA release (latest data ~2023 vs 2025).
         (2) Installations without a NACE code are excluded (cannot be sector-
@@ -293,7 +298,11 @@ models:
         are never joined, since euets.info carries no Prodcom classification
         per installation; they exist in the seed as documented context only.
         Never derive a free-allocation entitlement from this flag -- it is a
-        policy-context label, not an allocation calculation.
+        policy-context label, not an allocation calculation. (11) The penalty is
+        nonzero only for the rare installation-years EUTL itself flagged as
+        non-compliant; an empty or near-empty result across the full snapshot is
+        expected, not a bug. Never a recomputed or estimated figure -- pass-through
+        only.
       references:
         installation_source: https://www.euets.info/
         eutl_database_doc: https://euets-info-public.s3.eu-central-1.amazonaws.com/Description_EUTL_database.pdf
@@ -392,6 +401,14 @@ models:
           cover multiple years, so some installation-years legitimately carry
           NULL (never a placeholder zero). Presented as a labelled measure only,
           not a compliance verdict.
+      - name: excess_emissions_penalty_eur
+        description: >
+          The EUR 100/tonne excess emissions penalty (Article 16, EU ETS
+          Directive 2003/87/EC) EUTL recorded for the installation-year, read
+          straight from the pinned euets.info snapshot's penalty column.
+          Nullable/zero for the common case of no shortfall -- never
+          estimated or backfilled by Cairn; guarded by
+          assert_penalty_only_on_shortfall.
       - name: sector_mean_emissions_t_co2eq
         description: Mean verified emissions across the sector-year population.
         tests:
