@@ -1,23 +1,23 @@
 name: CI
 
 on:
-  # paths-ignore skips the build/lint/test matrix when a PR/push touches ONLY
-  # these pure-docs files (no build depends on them) â€” chiefly the weekly
-  # replenish PR, which edits BACKLOG.md alone. A mixed PR (docs + code) still
-  # runs CI, and BACKLOG.md-only changes are still gated by backlog-check.yml
-  # (the dispatch-block guard test, which this skip would otherwise silence).
-  # NB: site/**/*.md are Evidence pages and are deliberately NOT
-  # listed â€” changing one must still trigger evidence-build. CAVEAT: if these
-  # jobs are required status checks under branch protection, a fully-skipped
-  # run reports no check and the PR can stay "expected" â€” verify before relying
-  # on it for the replenish PR.
+  # The workflow triggers on EVERY PR; the `changes` job below then skips the
+  # build/lint/test matrix at the JOB level when the PR touches ONLY pure-docs
+  # files (no build depends on them) -- chiefly the weekly replenish PR, which
+  # edits BACKLOG.md alone. Job-level skips (via `if:`) still report a
+  # "skipped" conclusion, which SATISFIES required status checks under branch
+  # protection; a trigger-level paths-ignore reports nothing at all and leaves
+  # the PR stuck on "Expected -- waiting for status to be reported" forever.
+  # That is why pull_request must NOT carry paths-ignore. A mixed PR
+  # (docs + code) still runs the full matrix, and BACKLOG.md-only changes are
+  # still gated by backlog-check.yml (the dispatch-block guard test).
+  # NB: site/**/*.md are Evidence pages and deliberately count as code --
+  # changing one must still trigger evidence-build.
   pull_request:
-    paths-ignore:
-      - "BACKLOG.md"
-      - "README.md"
-      - "CLAUDE.md"
   push:
     branches: [main]
+    # push has no required-check semantics, so the trigger-level skip is safe
+    # here and avoids a wasted matrix run when a docs-only PR merges.
     paths-ignore:
       - "BACKLOG.md"
       - "README.md"
@@ -31,8 +31,32 @@ env:
   DBT_PROFILES_DIR: transform
 
 jobs:
+  changes:
+    # Detects whether the PR touches anything beyond the pure-docs files.
+    # With predicate-quantifier "every", `code` is true iff at least one
+    # changed file matches ALL the negated patterns, i.e. is none of
+    # BACKLOG.md / README.md / CLAUDE.md.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          predicate-quantifier: "every"
+          filters: |
+            code:
+              - "!BACKLOG.md"
+              - "!README.md"
+              - "!CLAUDE.md"
+
   lint:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    needs: changes
+    # !cancelled() lets this run even though `changes` is skipped on push;
+    # `!= 'false'` (not `== 'true'`) fails safe: if the filter job ever breaks
+    # and outputs nothing, the matrix runs rather than silently skipping.
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'push') && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +74,11 @@ jobs:
         run: uv run sqlfluff lint transform/models transform/tests
 
   test:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    needs: changes
+    # !cancelled() lets this run even though `changes` is skipped on push;
+    # `!= 'false'` (not `== 'true'`) fails safe: if the filter job ever breaks
+    # and outputs nothing, the matrix runs rather than silently skipping.
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'push') && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +92,11 @@ jobs:
         run: uv run pytest -q
 
   dbt-build:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    needs: changes
+    # !cancelled() lets this run even though `changes` is skipped on push;
+    # `!= 'false'` (not `== 'true'`) fails safe: if the filter job ever breaks
+    # and outputs nothing, the matrix runs rather than silently skipping.
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'push') && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,7 +112,11 @@ jobs:
   evidence-build:
     # Smoke-test the Evidence site: build the dbt warehouse from fixtures, then
     # build the site strictly (fails on any query error). Static output only.
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    needs: changes
+    # !cancelled() lets this run even though `changes` is skipped on push;
+    # `!= 'false'` (not `== 'true'`) fails safe: if the filter job ever breaks
+    # and outputs nothing, the matrix runs rather than silently skipping.
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'push') && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,7 +147,8 @@ jobs:
         run: npm run build:strict
 
   benchmark-diff:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
