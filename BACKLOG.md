@@ -161,6 +161,128 @@ pinned-snapshot, read/relabel model.
   typed pass-through. The hold is positioning, not missing plumbing — lift it
   only when the € overlay becomes the active priority.
 
+### 2. Eurostat GGE CRF-sector cross-country benchmark — IPCC sectoral cross-check
+<!-- dispatch
+layers:
+  mart+site: transform/models/marts/mart_gge_sector_totals.sql; site/sources/cairn/gge_sector_totals.sql
+-->
+**Value: M · Effort: L · Spine-fit: H**
+
+`stg_eurostat__gge` already stages every CRF-sector row (`src_crf` beyond
+`TOTXMEMO`) for every EU/EEA country and year — `mart_gge_national_totals`'s
+own model doc says the sector-level rows are "kept in the staging layer but
+are not surfaced here". Surfacing them is a genuinely new axis: a
+cross-country GHG benchmark by **IPCC/UNFCCC CRF top-level category**
+(Energy, Industrial processes and product use, Agriculture, Waste, LULUCF),
+independent of the NACE-based `benchmark_country_sector_emissions` (Eurostat
+AEA) — two different classification systems answering the same "which
+sector emits how much, across which countries" question from two
+independent EU statistical sources, at zero new-ingestion cost (the source
+is already pinned).
+- *Layers:*
+  - mart+site (fused) — a new mart reading `stg_eurostat__gge` filtered to
+    the dataset's top-level CRF codes (confirm the exact `src_crf` code list
+    against the pinned parquet before hardcoding a `where src_crf in (...)`
+    list; exclude `TOTXMEMO` itself, which `mart_gge_national_totals` already
+    owns), grain country × CRF sector × year, `airpol = 'GHG'`,
+    `unit = 'MIO_T'`, NULL `obs_value` cells excluded (never zero-filled).
+    Guard with a coverage test in the spirit of
+    `assert_national_total_reconciles`: the sum of the surfaced CRF sectors
+    reconciles against `mart_gge_national_totals`'s own total per
+    country-year within a stated tolerance (LULUCF and memo items are
+    legitimately excluded from `TOTXMEMO`, so the test must account for that
+    gap, not force an exact match). Site query + a new section on the country
+    GHG page (`countries-ghg.md`) alongside the existing national totals.
+- *Watch:* CRF sectors are an IPCC/UNFCCC classification, not NACE — per
+  `mart_gge_national_totals`'s own documented limitation, do not attempt a
+  CRF-to-NACE crosswalk here or join it to `benchmark_country_sector_emissions`
+  as if they were the same taxonomy. Read/relabel only: filter and rename,
+  never recompute a sector total from finer rows.
+
+### 3. CBS NAMEA — residence-principle GHG composition by gas
+<!-- dispatch
+layers:
+  mart+site: transform/models/marts/mart_namea_gas_composition.sql; site/sources/cairn/namea_gas_composition.sql
+-->
+**Value: M · Effort: L · Spine-fit: H**
+
+`mart_namea_bridge` reads only the CO2 measure out of
+`stg_cbs_namea__air_emissions` (83300NED's `measure` dimension carries more
+than one gas — the pinned CI fixture alone already carries both `A044109`
+CO2 and `A044110` N2O; the full snapshot likely carries the same CBS gas
+codes `mart_sector_gas_composition` already uses for 85669NED). A second
+mart presenting NAMEA's residence-principle emissions broken out **by gas**,
+per NACE section and year, mirrors `mart_sector_gas_composition`'s
+already-shipped territorial-principle gas split — giving the same "which
+gas, how much, by sector" question answered under both attribution
+principles, again at zero new-ingestion cost.
+- *Layers:*
+  - mart+site (fused) — `mart_namea_gas_composition`, grain nace_section ×
+    gas_code × year: reuse `sector_mapping_cbs_namea` (leaf categories only,
+    same as `mart_namea_bridge`) and `period_status = 'Definitief'`. Confirm
+    the full (non-fixture) `dim_measures` gas list against the live snapshot
+    before hardcoding the `measure_code` filter — include every genuine gas
+    code the table carries, not just the two the CI fixture happens to
+    sample. Site query + a new section on the NAMEA bridge page
+    (`namea-bridge.md`).
+- *Watch:* Same accounting caveats as `mart_namea_bridge` apply per gas, not
+  just for CO2 — residence vs territorial attribution still diverges for
+  transport/multinationals, so this is a composition breakdown, never a
+  reconciliation against `mart_sector_gas_composition`'s territorial figures.
+  CBS NAMEA values carry no stated unit in the measure dimension; follow
+  `mart_namea_bridge`'s existing kt→Mt assumption for consistency rather than
+  re-deriving it.
+
+### 4. RIVM/UNFCCC CRF sectoral tables — IPCC energy-sector breakdown
+<!-- dispatch
+source: emissieregistratie_energy
+dataset: crf_table1a
+layers:
+  ingestion: sources/emissieregistratie_energy/manifest.yml
+  staging: transform/models/staging/stg_emissieregistratie_energy__table1a.sql
+  mart+site: transform/models/marts/mart_emissieregistratie_energy_breakdown.sql; site/sources/cairn/emissieregistratie_energy_breakdown.sql
+-->
+**Value: M · Effort: M · Spine-fit: H**
+
+`ingestion/emissieregistratie_pipeline.py` already pins the Netherlands'
+annual UNFCCC CRF submission zip, but reads only each workbook's `Summary1`
+sheet (the national total by IPCC category). The same already-pinned
+workbooks carry the standard CRF Reporter breakdown of the Energy sector's
+sub-categories (IPCC 1.A.1–1.A.4: energy industries, manufacturing
+industries and construction, transport, other sectors) — RIVM's own,
+independently reported sectoral split of the national inventory, one layer
+upstream of CBS's SBI/NACE-mapped sectors. This is a second cross-check axis
+alongside the already-shipped `mart_emissieregistratie_cbs_reconciliation`
+(which only cross-checks the national *total*), this time at sector
+granularity.
+- *Layers:*
+  - ingestion — a second dataset off the **same** archive URL
+    (`ingestion/emissieregistratie_pipeline.py`'s `DEFAULT_URL` — no new
+    external source to discover or pin), as its own source/manifest
+    (`sources/emissieregistratie_energy/manifest.yml`, dataset
+    `crf_table1a`, mirroring how `cbs_namea` is a separate source from `cbs`
+    despite sharing an origin): parse the CRF Reporter's `Table1.A(a)s1`–`s4`
+    sheets (IPCC 1.A energy sub-categories, by fuel type) from each
+    inventory-year workbook already inside the pinned zip. Confirm the exact
+    sheet name(s) and data range against the real downloaded workbook before
+    coding (mirroring how the existing pipeline verified `Summary1`'s
+    `B8:O67` range) — do not assume the layout from this description alone.
+  - staging — `stg_emissieregistratie_energy__table1a`, a 1:1 typed view,
+    mirroring `stg_emissieregistratie__crf_summary1`'s all-VARCHAR-then-cast
+    pattern.
+  - mart+site (fused) — `mart_emissieregistratie_energy_breakdown`: RIVM's own
+    IPCC 1.A.1–1.A.4 split of the national energy-sector total, per
+    inventory year, presented as its own standalone read/relabel figure
+    (never summed against or reconciled to CBS's NACE sections — the two are
+    independent classification systems, same caveat as `mart_namea_bridge`).
+    Site query + a new section on the Data quality page.
+- *Watch:* IPCC 1.A sub-categories and NACE/SBI sections are different
+  classification systems — present this as an independent RIVM-native view,
+  never a forced crosswalk or a tight-tolerance reconciliation test against
+  CBS. Read/relabel only, mirroring `crf_summary1`'s "raw faithfulness": keep
+  every category row, exclude the units sub-header row in staging, never
+  invent a missing category.
+
 ---
 
 ## Considered and rejected
