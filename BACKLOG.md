@@ -129,43 +129,7 @@ Order _Live candidates_ by value, then spine-fit, then (inverse) effort.
 
 ## Live candidates
 
-### 1. EU ETS excess emissions penalty — compliance-enforcement axis
-<!-- dispatch
-layers:
-  mart+site: transform/tests/assert_penalty_only_on_shortfall.sql; site/sources/cairn/compliance_penalties.sql
--->
-**Value: M · Effort: L · Spine-fit: H**
-
-`benchmark_installation_emissions` already carries the compliance-integrity
-axis's *shortfall* side (verified vs. surrendered, shipped). euets.info's
-already-pinned `compliance.parquet` also carries a `penalty` column — the
-€100/tonne excess emissions penalty (Article 16, EU ETS Directive
-2003/87/EC) EUTL records when an installation's surrendered allowances fall
-short of its verified emissions — and it isn't exposed anywhere in
-`stg_euets__compliance` or the mart. Surfacing it is the *enforcement*
-complement to the existing shortfall figure: same pinned snapshot, no new
-source, no new ingestion layer.
-- *Layers:*
-  - mart+site (fused) — extend `stg_euets__compliance` to expose
-    `try_cast(penalty as double)`, add `excess_emissions_penalty_eur` to
-    `benchmark_installation_emissions`, and guard it with a new singular test
-    `assert_penalty_only_on_shortfall.sql` (penalty is null/zero unless
-    `verified_emissions_t_co2eq > surrendered_allowances_t_co2eq` for that
-    installation-year) — the same "extend the 1:1 staging view, add a
-    reviewed test" shape `assert_surrendered_nonnegative.sql` used for the
-    surrendered-allowances column. New site query
-    `compliance_penalties.sql` surfacing installation-years with a nonzero
-    penalty, as a new "Compliance enforcement" section on the installations
-    page — a dedicated, clearly-labelled list rather than one more column
-    folded into the already-dense installations table.
-- *Watch:* penalties are rare — most installations comply, so an
-  empty-or-near-empty result on the full snapshot is correct, not a bug.
-  Never estimate or backfill a penalty for an installation Cairn's own
-  numbers suggest under-surrendered — imposing a penalty is EUTL's
-  regulatory act, not Cairn's to infer; only pass through the value EUTL
-  itself already recorded.
-
-### 2. EUA carbon price → € valuation overlay
+### 1. EUA carbon price → € valuation overlay
 <!-- dispatch
 hold: site-overlay-only; deferred unless commercial positioning becomes the active priority
 layers:
@@ -203,6 +167,10 @@ pinned-snapshot, read/relabel model.
 *(Don't re-propose these. If circumstances change, move an item back up with the
 new reason it now fits.)*
 
+- **EU ETS excess emissions penalty — compliance-enforcement axis.** Shipped:
+  merged in this PR (2026-07-10). `excess_emissions_penalty_eur` is live on
+  `benchmark_installation_emissions`, guarded by `assert_penalty_only_on_shortfall`,
+  and surfaced in a new "Compliance enforcement" section on the installations page.
 - **Emissieregistratie (RIVM) → deepen NL provenance + granularity.** Shipped:
   merged in this PR (2026-07-08). `mart_emissieregistratie_cbs_reconciliation`
   is live, cross-checking the CRF Summary1 national total against CBS
