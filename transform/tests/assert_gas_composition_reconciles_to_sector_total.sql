@@ -7,15 +7,23 @@
 -- Why an absolute (not percentage) tolerance: CBS publishes every figure — each
 -- gas AND the aggregate total — independently rounded to 0.1 Mt. The gap between
 -- the summed gas rows and the aggregate is therefore an *absolute* rounding
--- error that accumulates at most one 0.1 Mt step per leaf category summed into
--- the sector, not a fixed percentage. A percentage tolerance mis-fires on small
--- sectors: a single 0.1 Mt step on a 1.5 Mt sector (mining, water/waste) is
--- 6.7%, while the same step on 200 Mt manufacturing is 0.05%. Across the full
--- 1990-2025 history the gap never exceeds 0.1 Mt x source_category_count (the
--- single-leaf sectors B/D/E hit exactly that bound). Bound it in those terms;
--- the +0.05 Mt absorbs float noise and a half-step of release-to-release slack.
--- A genuine mapping/coverage gap (a whole leaf category, several Mt) clears this
--- budget and still fails the test.
+-- error that scales with the number of leaf categories summed into the sector,
+-- not a fixed percentage. A percentage tolerance mis-fires on small sectors: a
+-- single 0.1 Mt step on a 1.5 Mt sector (mining, water/waste) is 6.7%, while the
+-- same step on 200 Mt manufacturing is 0.05%.
+--
+-- The budget is 0.1 Mt x source_category_count (+0.05 Mt for float noise). Note
+-- that 0.1 Mt/leaf is the *empirical* bound: across the full 1990-2025 history
+-- the observed gap never exceeds it (single-leaf sectors B/D/E sit exactly on
+-- it). The *theoretical* per-leaf worst case is 0.2 Mt — four gas roundings can
+-- swing +/-0.2 combined and the total rounding another +/-0.05, all on the 0.1
+-- grid — but that requires all roundings to err maximally in the same direction,
+-- which CBS's non-adversarial rounding never realises here. We keep the tighter
+-- empirical 0.1/leaf to stay sensitive to real gaps (0.2/leaf would mask a ~3 Mt
+-- divergence in manufacturing). If a future CBS release ever trips this test by
+-- a small margin, check whether it is benign rounding drift toward that 0.2/leaf
+-- ceiling before treating it as a mapping bug. A genuine mapping/coverage gap (a
+-- whole leaf category, several Mt) clears the budget and still fails the test.
 
 with composition_total as (
     select distinct
