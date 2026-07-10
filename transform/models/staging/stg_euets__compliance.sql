@@ -1,5 +1,5 @@
 -- Staging: 1:1 typed view of the euets.info compliance table -- verified
--- emissions (and allocation/surrender) per installation per year. Raw values
+-- emissions (allocation/surrender/penalty) per installation per year. Raw values
 -- are VARCHAR (a lossless copy of the source CSV); they are cast here. No rows
 -- are filtered: future phase years carry NULL verified emissions, and the NL
 -- filter and the euets-vs-chets system split are applied in the mart.
@@ -20,6 +20,7 @@ select
     try_cast(verified as double) as verified_emissions_t_co2eq,
     try_cast(allocatedtotal as double) as allocated_total,
     try_cast(surrendered as double) as surrendered,
+    try_cast(penalty as double) as excess_emissions_penalty_eur,
     -- surrogate natural key: one compliance row per installation-year-system
     installation_id || '|' || year || '|' || reportedinsystem_id as compliance_key
 from compliance

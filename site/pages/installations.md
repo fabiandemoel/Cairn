@@ -218,3 +218,26 @@ order by i.installation_emissions_t_co2eq desc
     <Column id=emissions_vs_allocated title="vs. free allocation" fmt='0.0"×"' contentType=colorscale />
     <Column id=carbon_leakage_exposed title="Carbon leakage exposed" />
 </DataTable>
+
+## Compliance enforcement
+
+```sql compliance_penalties
+select *
+from cairn.compliance_penalties
+```
+
+Installation-years where EUTL recorded an excess emissions penalty (EUR
+100/tonne, Article 16 of the EU ETS Directive) because surrendered allowances
+fell short of verified emissions. This is the *enforcement* complement to the
+shortfall figures above — read straight from the pinned snapshot; Cairn never
+estimates or infers a penalty itself. Penalties are rare: most installations
+comply, so an empty table here is correct, not a bug.
+
+<DataTable data={compliance_penalties} rows=15 rowShading={true}>
+    <Column id=installation_name title="Installation" />
+    <Column id=nace_section title="NACE section" />
+    <Column id=year title="Year" />
+    <Column id=installation_emissions_t_co2eq title="Verified emissions (t CO₂-eq)" fmt='#,##0' />
+    <Column id=surrendered_allowances_t_co2eq title="Surrendered allowances (t CO₂-eq)" fmt='#,##0' />
+    <Column id=excess_emissions_penalty_eur title="Penalty (EUR)" fmt='#,##0' />
+</DataTable>
