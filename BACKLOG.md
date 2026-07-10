@@ -129,51 +129,7 @@ Order _Live candidates_ by value, then spine-fit, then (inverse) effort.
 
 ## Live candidates
 
-### 1. GHG composition by gas type per sector
-<!-- dispatch
-layers:
-  mart+site: transform/models/marts/mart_sector_gas_composition.sql; site/sources/cairn/sector_gas_composition.sql
--->
-**Value: H · Effort: L · Spine-fit: H**
-
-`benchmark_sector_emissions` already discards everything but the aggregate
-"Totaal broeikasgassen" gas row (`gas_code = 'T001372'`) from CBS 85669NED.
-The same pinned snapshot's `dim_emissies` dimension also carries the four
-constituent gases CBS itself already expresses in CO2-equivalent —
-`A044109` CO2, `A044110` N2O, `A044107` CH4, `A052484` F-gases — so a
-per-sector gas-composition mart is a pure read/relabel of rows Cairn has
-ingested and staged since day one (`stg_cbs__emissions` is a 1:1 view over
-every gas code, not just the aggregate). It answers a materially different
-question than the existing aggregate benchmark: whether a sector's footprint
-is CO2-dominated (energy, industry) or non-CO2-dominated (agriculture's
-CH4 + N2O) — a distinction the current mart erases by design. No new source,
-no new ingestion, no new staging model.
-- *Layers:*
-  - mart+site (fused — the site query is a thin read-only reshape of the new
-    mart) — new `mart_sector_gas_composition`: per NACE section/gas/year,
-    `emissions_mt_co2eq` and each gas's share of that sector-year's total,
-    joining `stg_cbs__emissions` (filtered to the four constituent gas codes
-    above, `period_status = 'Definitief'`) through the same
-    `sector_mapping_cbs` seed and leaf/aggregate hierarchy resolution
-    `benchmark_sector_emissions` already uses — don't diverge the two marts'
-    hierarchy handling. Guard it with a new singular test (mirroring
-    `assert_national_total_reconciles`'s pattern) asserting the four gas rows
-    sum to the existing aggregate mart's total per sector/year within a tight
-    tolerance — a reconciliation check on Cairn's own join, not a
-    recomputation of CBS's figures. New site query
-    `sector_gas_composition.sql` plus a new section on the existing
-    `sectors.md` page (a per-sector gas-mix breakdown alongside the current
-    aggregate view).
-- *Watch:* the four gas figures are CBS's own CO2-eq-converted values — never
-  re-derive CO2-eq from raw tonnes and a GWP factor; only pass through CBS's
-  `value` column labelled by gas. Reuse `benchmark_sector_emissions`'s exact
-  `period_status = 'Definitief'` filter and bunkers exclusion — a second,
-  diverging implementation of the sector hierarchy is a maintenance trap. If
-  CBS ever adds/renames a gas category in `dim_emissies`, the new
-  reconciliation test fails loudly — extend the gas-code list, don't suppress
-  the test.
-
-### 2. EU ETS excess emissions penalty — compliance-enforcement axis
+### 1. EU ETS excess emissions penalty — compliance-enforcement axis
 <!-- dispatch
 layers:
   mart+site: transform/tests/assert_penalty_only_on_shortfall.sql; site/sources/cairn/compliance_penalties.sql
@@ -209,7 +165,7 @@ source, no new ingestion layer.
   regulatory act, not Cairn's to infer; only pass through the value EUTL
   itself already recorded.
 
-### 3. EUA carbon price → € valuation overlay
+### 2. EUA carbon price → € valuation overlay
 <!-- dispatch
 hold: site-overlay-only; deferred unless commercial positioning becomes the active priority
 layers:
@@ -311,6 +267,10 @@ new reason it now fits.)*
   the tests already compute.** Shipped: merged in this PR (2026-07-05).
   `mart_coverage_observability` is live, surfacing the reconciliation drift,
   UNMAPPED share, and covered share on the Data quality site page.
+- **GHG composition by gas type per sector.** Shipped: merged in this PR
+  (2026-07-10). `mart_sector_gas_composition` and `sector_gas_composition.sql`
+  are live, sourced from `sources/cbs/manifest.yml`; the gas-composition
+  breakdown is surfaced in a new section on the `sectors.md` page.
 - **Public read/query API.** Category jump in complexity and maintenance for a
   static, R2-pinned Pages site; solves no current user's problem. (ChatGPT review.)
 - **Interactive lineage graph.** Same — the static Architecture page covers the
