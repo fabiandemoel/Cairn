@@ -1,27 +1,48 @@
 name: Backlog Check
 
-# ci.yml deliberately path-ignores BACKLOG.md, so a docs-only PR — chiefly the
-# weekly replenish PR — skips the whole build/test matrix, including the one
-# test such a PR actually needs: tests/test_dispatch.py's guard that every live
-# candidate's <!-- dispatch --> block parses and lists its layers in dependency
-# order. A malformed block degrades to a silent skip at dispatch time, which
-# starves the automation loop; this tiny job gates it instead. The dispatch
-# machinery is stdlib-only, so plain pytest is enough — no uv sync, no project
-# dependencies. NB: same caveat as ci.yml — if this is made a required status
-# check under branch protection, PRs that don't touch BACKLOG.md report no run
-# for it and stay "expected".
+# ci.yml's heavy matrix self-skips on a docs-only PR -- chiefly the weekly
+# replenish PR -- which would also skip the one test such a PR actually needs:
+# tests/test_dispatch.py's guard that every live candidate's <!-- dispatch -->
+# block parses and lists its layers in dependency order. A malformed block
+# degrades to a silent skip at dispatch time, which starves the automation
+# loop; this tiny job gates it instead. The dispatch machinery is stdlib-only,
+# so plain pytest is enough -- no uv sync, no project dependencies.
+#
+# Like ci.yml, the workflow triggers on EVERY PR and the path filtering lives
+# at the JOB level: a job skipped via `if:` reports "skipped", which satisfies
+# a required status check under branch protection, whereas a trigger-level
+# `paths:` filter reports nothing and would leave PRs that don't touch
+# BACKLOG.md stuck on "Expected" if dispatch-blocks were made required.
 
 on:
   pull_request:
-    paths:
-      - "BACKLOG.md"
   push:
     branches: [main]
+    # push has no required-check semantics, so the trigger-level filter is
+    # safe here and avoids a wasted run on non-BACKLOG merges.
     paths:
       - "BACKLOG.md"
 
 jobs:
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      backlog: ${{ steps.filter.outputs.backlog }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backlog:
+              - "BACKLOG.md"
+
   dispatch-blocks:
+    needs: changes
+    # !cancelled() lets this run even though `changes` is skipped on push;
+    # `!= 'false'` (not `== 'true'`) fails safe: if the filter job ever breaks
+    # and outputs nothing, the guard runs rather than silently skipping.
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'push') && needs.changes.outputs.backlog != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

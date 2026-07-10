@@ -4,8 +4,10 @@ name: Cairn Replenish
 # retires dead/off-spine ideas to "Considered and rejected" â€” as a docs-only PR
 # touching ONLY BACKLOG.md. You merge it; your merge is the curation step (a menu
 # a bot can silently rewrite is no longer curated). Uses CAIRN_BOT_TOKEN so the PR
-# triggers CI under branch protection; ci.yml is wasteful on a docs-only change but
-# harmless â€” add a paths-ignore filter to ci.yml if you want to skip it.
+# triggers CI under branch protection; ci.yml triggers on the docs-only PR but its
+# heavy jobs self-skip at the job level (see the `changes` job there), so the
+# required checks report "skipped" -- which satisfies branch protection --
+# instead of never reporting and leaving the PR stuck on "Expected".
 
 on:
   schedule:
