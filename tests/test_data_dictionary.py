@@ -149,6 +149,7 @@ def test_reflects_committed_schema():
         "mart_esrs_e1",
         "benchmark_country_sector_emissions",
         "mart_gge_national_totals",
+        "mart_gge_sector_totals",
         "mart_data_provenance",
         "mart_data_dictionary",
         "mart_business_glossary",

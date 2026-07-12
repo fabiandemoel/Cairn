@@ -204,9 +204,10 @@ terms:
     definition: >
       The IPCC/UNFCCC sector classification (Energy, Industrial processes,
       Agriculture, Waste, LULUCF) used in env_air_gge. CRF is not NACE and cannot
-      be mapped to it without significant assumptions, so Cairn keeps only the
-      national total, not the CRF breakdown.
-    related_models: [stg_eurostat__gge, mart_gge_national_totals]
+      be mapped to it without significant assumptions. Cairn surfaces the
+      top-level CRF breakdown read-only for peer benchmarking, alongside the
+      national total.
+    related_models: [stg_eurostat__gge, mart_gge_national_totals, mart_gge_sector_totals]
     reference: https://unfccc.int/ghg-inventories-annex-i-parties/2025
 
   - term: Leaf versus aggregate category

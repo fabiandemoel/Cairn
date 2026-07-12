@@ -1,6 +1,6 @@
 ---
 title: Country GHG totals — Eurostat GGE
-description: National greenhouse-gas totals (Eurostat env_air_gge, territorial principle) for all EU member states. Compare NL with peer countries over time.
+description: National greenhouse-gas totals and CRF-sector comparisons (Eurostat env_air_gge, territorial principle) for all EU member states. Compare NL with peer countries over time.
 ---
 
 National greenhouse-gas totals (million tonnes CO₂-equivalent) for all EU27
@@ -78,4 +78,95 @@ order by national_ghg_mt_co2eq desc
 <DataTable data={all_countries} rows=30 rowShading={true} search={true}>
     <Column id=country title="Country" />
     <Column id=national_ghg_mt_co2eq title="Emissions (Mt CO₂-eq)" fmt='#,##0.0' />
+</DataTable>
+
+## CRF-sector benchmark (IPCC / UNFCCC taxonomy)
+
+```sql sector_years
+select distinct year from cairn.gge_sector_totals order by year desc
+```
+
+The same dataset also publishes top-level **CRF** sectors (Energy, Industrial
+processes and product use, Agriculture, LULUCF, Waste). CRF is an
+IPCC/UNFCCC classification, **not** NACE — do not compare it one-to-one with the
+[EU sector benchmark (AEA)](/sectors-eu).
+
+<Alert status="warning">
+
+**CRF-sector sums do not equal the national-total chart without an adjustment.**
+The national-total `TOTXMEMO` row excludes LULUCF and international aviation /
+shipping memo items by definition. This section surfaces the top-level CRF rows
+for peer benchmarking, so the LULUCF row is informative context rather than part
+of the national-total denominator.
+
+</Alert>
+
+<Dropdown data={sector_years} name=sector_year value=year defaultValue={sector_years[0].year} />
+
+```sql peers_by_crf_sector
+select
+    country,
+    crf_sector_label,
+    sector_ghg_mt_co2eq
+from cairn.gge_sector_totals
+where year = ${inputs.sector_year.value}
+  and country in ('NL', 'DE', 'FR', 'BE')
+order by crf_sector_code, country
+```
+
+<BarChart
+    data={peers_by_crf_sector}
+    x=crf_sector_label
+    y=sector_ghg_mt_co2eq
+    series=country
+    yAxisTitle="Mt CO₂-eq"
+    title="Top-level CRF sectors — NL vs DE, FR, BE ({inputs.sector_year.value})"
+/>
+
+## CRF-sector trend by country
+
+```sql crf_sectors
+select distinct crf_sector_code, crf_sector_label
+from cairn.gge_sector_totals
+order by crf_sector_code
+```
+
+<Dropdown data={crf_sectors} name=crf_sector value=crf_sector_code defaultValue="CRF1" />
+
+```sql peers_crf_over_time
+select
+    year,
+    country,
+    sector_ghg_mt_co2eq
+from cairn.gge_sector_totals
+where crf_sector_code = '${inputs.crf_sector.value}'
+  and country in ('NL', 'DE', 'FR', 'BE')
+order by year, country
+```
+
+<LineChart
+    data={peers_crf_over_time}
+    x=year
+    y=sector_ghg_mt_co2eq
+    series=country
+    yAxisTitle="Mt CO₂-eq"
+    title="CRF sector {inputs.crf_sector.value} — emissions over time"
+/>
+
+## Browse all countries and CRF sectors
+
+```sql all_country_sectors
+select
+    country,
+    crf_sector_label,
+    sector_ghg_mt_co2eq
+from cairn.gge_sector_totals
+where year = ${inputs.sector_year.value}
+order by crf_sector_code, country
+```
+
+<DataTable data={all_country_sectors} rows=25 rowShading={true} search={true}>
+    <Column id=country title="Country" />
+    <Column id=crf_sector_label title="CRF sector" />
+    <Column id=sector_ghg_mt_co2eq title="Emissions (Mt CO₂-eq)" fmt='#,##0.0' />
 </DataTable>
