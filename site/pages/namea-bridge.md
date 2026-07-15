@@ -73,3 +73,38 @@ order by nace_section
     <Column id=residence_co2_emissions_mt title="Residence CO2 (Mt, NAMEA)" fmt='#,##0.0' />
     <Column id=territorial_ghg_emissions_mt_co2eq title="Territorial GHG CO2-eq (Mt, 85669NED)" fmt='#,##0.0' />
 </DataTable>
+
+## Residence-principle gas composition by sector
+
+Which gases dominate each sector's footprint under the residence principle?
+Same four constituent gases as the [territorial breakdown](/sectors#gas-composition-by-sector),
+here from CBS NAMEA (83300NED) — a composition view, not a reconciliation
+against that territorial mart (see the accounting caveat above).
+
+```sql namea_gas_mix
+select
+    nace_section,
+    gas_label,
+    emissions_mt,
+    gas_share
+from cairn.namea_gas_composition
+where year = '${inputs.year.value}'
+order by nace_section, gas_label
+```
+
+<BarChart
+    data={namea_gas_mix}
+    x=nace_section
+    y=emissions_mt
+    series=gas_label
+    type=stacked
+    yAxisTitle="Mt"
+    title="NAMEA residence-principle GHG composition by gas, {inputs.year.value}"
+/>
+
+<DataTable data={namea_gas_mix} rows=all>
+    <Column id=nace_section title="NACE section" />
+    <Column id=gas_label title="Gas" />
+    <Column id=emissions_mt title="Emissions (Mt)" fmt='#,##0.0' />
+    <Column id=gas_share title="Share of sector total" fmt='0.0%' contentType=colorscale />
+</DataTable>

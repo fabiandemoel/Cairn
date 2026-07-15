@@ -199,41 +199,7 @@ is already pinned).
   as if they were the same taxonomy. Read/relabel only: filter and rename,
   never recompute a sector total from finer rows.
 
-### 3. CBS NAMEA — residence-principle GHG composition by gas
-<!-- dispatch
-layers:
-  mart+site: transform/models/marts/mart_namea_gas_composition.sql; site/sources/cairn/namea_gas_composition.sql
--->
-**Value: M · Effort: L · Spine-fit: H**
-
-`mart_namea_bridge` reads only the CO2 measure out of
-`stg_cbs_namea__air_emissions` (83300NED's `measure` dimension carries more
-than one gas — the pinned CI fixture alone already carries both `A044109`
-CO2 and `A044110` N2O; the full snapshot likely carries the same CBS gas
-codes `mart_sector_gas_composition` already uses for 85669NED). A second
-mart presenting NAMEA's residence-principle emissions broken out **by gas**,
-per NACE section and year, mirrors `mart_sector_gas_composition`'s
-already-shipped territorial-principle gas split — giving the same "which
-gas, how much, by sector" question answered under both attribution
-principles, again at zero new-ingestion cost.
-- *Layers:*
-  - mart+site (fused) — `mart_namea_gas_composition`, grain nace_section ×
-    gas_code × year: reuse `sector_mapping_cbs_namea` (leaf categories only,
-    same as `mart_namea_bridge`) and `period_status = 'Definitief'`. Confirm
-    the full (non-fixture) `dim_measures` gas list against the live snapshot
-    before hardcoding the `measure_code` filter — include every genuine gas
-    code the table carries, not just the two the CI fixture happens to
-    sample. Site query + a new section on the NAMEA bridge page
-    (`namea-bridge.md`).
-- *Watch:* Same accounting caveats as `mart_namea_bridge` apply per gas, not
-  just for CO2 — residence vs territorial attribution still diverges for
-  transport/multinationals, so this is a composition breakdown, never a
-  reconciliation against `mart_sector_gas_composition`'s territorial figures.
-  CBS NAMEA values carry no stated unit in the measure dimension; follow
-  `mart_namea_bridge`'s existing kt→Mt assumption for consistency rather than
-  re-deriving it.
-
-### 4. RIVM/UNFCCC CRF sectoral tables — IPCC energy-sector breakdown
+### 3. RIVM/UNFCCC CRF sectoral tables — IPCC energy-sector breakdown
 <!-- dispatch
 source: emissieregistratie_energy
 dataset: crf_table1a
@@ -483,6 +449,11 @@ new reason it now fits.)*
   CO2-eq per NACE section and year, sourced from `sources/cbs_namea/manifest.yml`;
   the `namea_bridge.sql` source query and bridge page (`namea-bridge.md`) are
   deployed on the Evidence site.
+
+- **CBS NAMEA — residence-principle GHG composition by gas.** Shipped: merged
+  in this PR (2026-07-15). `mart_namea_gas_composition` and its `namea_gas_composition.sql`
+  source query are live, sourced from `sources/cbs_namea/manifest.yml`; the gas
+  breakdown is surfaced in a new section on the NAMEA bridge page (`namea-bridge.md`).
 
 - **Field-completeness (NULL-rate) observability — how fully are the nullable
   columns populated?** Shipped: merged in this PR (2026-07-07).

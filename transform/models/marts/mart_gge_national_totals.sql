@@ -3,10 +3,10 @@
 --
 -- Uses the territorial principle (same as CBS 85669NED and EU ETS) -- NL figures
 -- are a direct cross-check of the CBS national total (< 1% via
--- assert_gge_nl_total_within_cbs). CRF sector breakdowns are kept in the staging
--- layer but are not surfaced here: CRF sectors (Energy, Industrial processes,
--- Agriculture, Waste, LULUCF) are an IPCC/UNFCCC classification, not NACE, and
--- cannot be mapped to NACE without significant assumptions.
+-- assert_gge_nl_total_within_cbs). The companion mart_gge_sector_totals model
+-- surfaces env_air_gge's top-level CRF-sector rows for peer benchmarking, but
+-- CRF remains an IPCC/UNFCCC classification (not NACE) and must not be
+-- cross-walked to benchmark_country_sector_emissions as if the taxonomies matched.
 --
 -- UNFCCC submission lag: the latest available year trails the current year by 1-2
 -- years. As of the 2026-06-02 fixture the latest covered year is 2024.

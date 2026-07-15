@@ -98,7 +98,9 @@ sector average?" It ingests four sources end-to-end.
   cross-check of the NL national total (`assert_gge_nl_total_within_cbs`,
   ±10% tolerance to accommodate UNFCCC submission-vs-CBS revision cycles).
 - **Transformation**: `mart_gge_national_totals` — national GHG per country and
-  year (`TOTXMEMO`, GHG, MIO_T), used on the country GHG page.
+  year (`TOTXMEMO`, GHG, MIO_T), plus `mart_gge_sector_totals` — top-level
+  CRF-sector GHG per country and year (`CRF1`-`CRF5`, GHG, MIO_T). Both are used
+  on the country GHG page.
 
 **Common spine** ([`ingestion/`](ingestion/), [`transform/`](transform/)): every
 source writes immutable per-release parquet and pins each snapshot in its own
@@ -455,8 +457,9 @@ The **Eurostat `env_air_gge`** source has its own quirks:
   Common Reporting Format (CRF) classification (`CRF1` = Energy, `CRF2` =
   Industrial processes, etc.), which cannot be mapped to NACE without significant
   assumptions. The national totals (`src_crf = 'TOTXMEMO'`, excluding memo items)
-  are the only grain used for the CBS cross-check; sector-level CRF rows are kept
-  raw for completeness but are not used in any mart.
+  remain the only grain used for the CBS cross-check; the top-level CRF rows are
+  now surfaced read-only in `mart_gge_sector_totals` for peer benchmarking, but
+  they still must not be cross-walked to NACE.
 - **Territorial principle — same as CBS.** Unlike the AEA (`env_ac_ainah_r2`,
   which uses the residence principle), `env_air_gge` uses the territorial
   principle, so the Netherlands total is a direct cross-check of CBS 85669NED
