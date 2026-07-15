@@ -251,6 +251,183 @@ granularity.
 
 ---
 
+### Site-review correctness & polish (2026-07-15 external review)
+
+The six entries below come from an external review of the live site + repo. Unlike
+the expansion candidates above, they are correctness / disclosure / presentation
+fixes (plus one manual euets refresh), one PR each — they add **no** new benchmark
+axis, so they sit outside the value ordering the expansion candidates follow and are
+kept in the review's P1→P2 order. Dispatch reality: the no-LLM dispatcher opens at
+most one issue per run for the *top* candidate's next not-yet-built layer, and only
+a **new-file** sentinel triggers it — so entry 5 (new methodology source query) and
+entry 10 (new og:image asset) are genuinely dispatchable, while the edit-only entries
+(6, 7, 9) and the manual euets refresh (8) carry an existing-file sentinel the
+dispatcher treats as already-present and skips. Work those (and any of these you want
+sooner than the queue reaches them) by raising the GitHub issue by hand and labelling
+it `approved` — the supported manual implement path.
+
+### 5. Methodology Sources table documents only 3 of 8 pinned sources (P1)
+<!-- dispatch
+layers:
+  site: site/sources/cairn/methodology_sources.sql
+-->
+**Value: M · Effort: L · Spine-fit: H**
+
+`index.md` promises "the full provenance of every figure on this site", but
+`methodology.md`'s Sources table lists only CBS `85669NED`, euets.info, and EEA —
+while five more pinned sources feed live pages/marts: Eurostat AEA (`sources/eurostat/`,
+/sectors-eu), Eurostat GGE (`sources/eurostat_gge/`, /countries-ghg), CBS NAMEA
+`83300NED` (`sources/cbs_namea/`, /namea-bridge), emissieregistratie
+(`sources/emissieregistratie/`, the reconciliation mart), and GLEIF/LEI (the LEI
+columns on the installation benchmark). For a provenance-first product, the
+provenance doc lagging the data is the worst place to drift.
+- *Layers:*
+  - site — extend the Sources table in `site/pages/methodology.md` so every
+    `sources/<slug>/manifest.yml` that feeds a published page or mart has a row
+    (source, role, dataset, manifest path), plus a 2–5-bullet method-and-limitations
+    subsection per newly documented source in the same register as the existing
+    CBS/EU ETS ones (summarise and link the caveats already on /sectors-eu,
+    /countries-ghg and /namea-bridge rather than duplicate them). Harden it against
+    re-drift by rendering the table from `cairn.data_provenance` via a **new**
+    `site/sources/cairn/methodology_sources.sql` query (the sentinel commits the
+    candidate to this variant); keep the prose subsections static. Guard:
+    `evidence-build` green.
+- *Watch:* docs/site only — no mart or manifest changes. This is the *documentation*
+  of invariant 1 (pinned provenance) catching up, not a numeric change. If a source
+  is intentionally left undocumented, rescope the homepage "every figure" claim
+  instead of leaving it false.
+
+### 6. Homepage narrates "two benchmarks" but the site ships five pages; three have zero inbound links (P1)
+<!-- dispatch
+layers:
+  site: site/pages/index.md
+-->
+**Value: M · Effort: L · Spine-fit: H**
+
+`index.md` still narrates "The two benchmarks" (/sectors, /installations). Published
+but absent from the homepage: /architecture, /countries-ghg, /namea-bridge,
+/sectors-eu, /transport — and /countries-ghg, /namea-bridge and /transport have **zero
+inbound links from any page**, reachable only via the auto-generated sidebar. Phase 4
+grew the data; the front door didn't.
+- *Layers:*
+  - site (edit-only — the `site/pages/index.md` sentinel already exists, so the
+    dispatcher skips it; raise the issue by hand and label `approved`) — rework "The
+    two benchmarks" to present the NL spine (sectors + installations) first and the
+    EU/cross-check pages (sectors-eu, countries-ghg, namea-bridge, transport) as a
+    second tier of one-line cards in the existing card style; link /architecture from
+    the "Why it is auditable" section. Fix the two `<BigValue>` blocks whose
+    comparison slot renders "▲ 2024" (reads as "emissions up"): move the year into the
+    title/caption and reserve ▲/▼ for real deltas (or drop the comparison slot). Drop
+    "software vendors" from the audience line (a public API is on the rejected list)
+    or point them explicitly at the disclosure CSV bundle + the GitHub repo. Guard:
+    every published page reachable from the homepage with contextual copy, no BigValue
+    using the comparison slot for a non-delta, `evidence-build` green.
+- *Watch:* site copy only — do **not** add any rejected feature (public API, lineage
+  graph, confidence badges) while rewording. The 297 coverage caption is out of scope
+  here (entry 7 owns it); keep this index.md diff disjoint from entry 7's.
+
+### 7. "297 installations benchmarked" silently excludes NACE-unmapped installations; caveat lives on the wrong page (P1)
+<!-- dispatch
+layers:
+  site: site/pages/installations.md
+-->
+**Value: M · Effort: L · Spine-fit: H**
+
+`benchmark_installation_emissions.sql` filters `stg.nace_section is not null` (plus
+stationary-only and `verified_emissions_t_co2eq is not null`). The NL stationary ETS
+population is ~330, so roughly a tenth of installations are absent from the 297.
+`installations.md` discloses the aircraft/maritime exclusion but **not** the NACE one;
+only /data-quality surfaces it, via `assert_euets_coverage_within_eea`. An auditor
+landing on /installations — the page that displays the number — cannot see the
+exclusion.
+- *Layers:*
+  - site (edit-only — `site/pages/installations.md`/`index.md` sentinels exist, so
+    the dispatcher skips; raise by hand and label `approved`) — `installations.md`:
+    extend the source paragraph with 1–2 sentences that installations without a NACE
+    section in the pinned euets.info snapshot are excluded (they have no peer group),
+    linking the /data-quality coverage section for the live captured-share count.
+    `index.md`: adjust the 297 BigValue caption/title so "benchmarked" reads as a
+    subset (e.g. "NL ETS installations benchmarked (stationary, NACE-mapped)"). Guard:
+    exclusion disclosed on /installations with a working /data-quality link, homepage
+    caption signals subset-ness, `evidence-build` green.
+- *Watch:* disclosure only — do **not** "fix" coverage by imputing NACE sections; the
+  mapping stays reviewed-seed read/relabel (no recomputation). No SQL changes — the
+  count is correct. Keep the index.md diff disjoint from entry 6.
+
+### 8. euets pin is release 2024-10 (latest year 2023); 2024 verified emissions are long published (P2, data-refresh route)
+<!-- dispatch
+layers:
+  ingestion: sources/euets/manifest.yml
+-->
+**Value: M · Effort: M · Spine-fit: H**
+
+`sources/euets/manifest.yml` pins the euets.info 2024-10 snapshot, so the installation
+and transport benchmarks top out at compliance year 2023. Verified 2024 emissions have
+been in the EUTL since spring 2025 and euets.info has shipped newer reprocessed
+releases since. The lag is honestly surfaced on /data-quality, but the benchmark is
+now ~1.5 compliance years behind what an auditor can pull from the official source.
+- *Layers:*
+  - ingestion (manual data-refresh — euets is **human-watched and never probed**, so
+    neither the freshness dispatcher nor the backlog dispatcher opens this; the
+    `sources/euets/manifest.yml` sentinel already exists. Run `cairn-ingest.yml`
+    (source `euets`, new `--url`) by hand per the euets checklist in `CLAUDE.md`) —
+    append a new snapshot entry (new versioned R2 path + sha256) to the manifest
+    (never mutate the 2024-10 entry), refresh the CI fixture under
+    `tests/fixtures/euets/<release>/`, bump the `euets_raw_dir` defaults, and let
+    staging/marts pick up the new release. Guard: `assert_euets_coverage_within_eea`
+    and the reconciliation tests pass against the new snapshot; `benchmark-diff` is
+    the human gate.
+- *Watch:* raw data immutable, manifest append-only — the 2024-10 entry stays
+  byte-identical. This entry is the manual trigger, **not** a change to the never-probe
+  policy. /installations and /transport should show latest year 2024 afterwards.
+
+### 9. Data pages never link the glossary; NACE/verified-emissions jargon undefined at point of use (P2)
+<!-- dispatch
+layers:
+  site: site/pages/sectors.md
+-->
+**Value: L · Effort: L · Spine-fit: H**
+
+Zero links to /data-dictionary from /sectors, /installations, /transport, /sectors-eu,
+/countries-ghg. Terms carrying real methodological weight — NACE section, verified
+emissions, carbon leakage exposure, residence vs territorial principle, CO₂-eq —
+appear undefined at point of use; the definitions exist in the glossary but nothing
+routes a reader there.
+- *Layers:*
+  - site (edit-only across the five data pages — the sentinel `site/pages/sectors.md`
+    already exists, so the dispatcher skips; raise by hand and label `approved`) — on
+    each of the five pages, link the first use of each glossary-defined term to its
+    /data-dictionary anchor (adding heading anchors to the glossary render is in scope
+    if per-term anchors don't exist). First use only — don't litter. Guard: each page
+    links /data-dictionary at least once at the first occurrence of a defined term,
+    links resolve (no dead anchors) in `evidence-build`.
+- *Watch:* copy/links only — no glossary content rewrites beyond anchors.
+
+### 10. Site chrome: Evidence default `twitter:site @evidence_dev`, no og:image, chart palette off-brand (P2)
+<!-- dispatch
+layers:
+  site: site/static/og-image.png
+-->
+**Value: L · Effort: L · Spine-fit: H**
+
+Two small credibility leaks when the site is shared or compared to the portfolio:
+social meta still carries Evidence's default `twitter:site` (`@evidence_dev`) with no
+og:image override; and `site/evidence.config.yaml` charts lead with `#236aa4` (light
+and dark, lines 9/20) while the homepage pill and fabiandemoel.nl use Tailwind
+blue-600 `#2563eb` — two different blues on one brand.
+- *Layers:*
+  - site — override the social meta via Evidence's head/customization mechanism
+    (remove or replace `twitter:site`, set og:image from a **new** static branded card
+    asset `site/static/og-image.png` — the sentinel); align the first `colorPalettes`
+    entry in `site/evidence.config.yaml` (light + dark) with the brand blue `#2563eb`,
+    keeping dark-mode contrast acceptable and leaving the rest of the categorical
+    palette unless it clashes. Guard: rendered HTML head no longer advertises
+    `@evidence_dev`, og:image resolves, first series colour on /sectors and
+    /installations is the brand blue in both themes, `evidence-build` green.
+- *Watch:* presentation only — no data or copy changes.
+
+---
+
 ## Considered and rejected
 *(Don't re-propose these. If circumstances change, move an item back up with the
 new reason it now fits.)*
