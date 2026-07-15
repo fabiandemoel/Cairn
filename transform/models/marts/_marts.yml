@@ -233,6 +233,98 @@ models:
           year, from benchmark_sector_emissions. Nullable -- NULL when the
           year has no territorial observation.
 
+  - name: mart_namea_gas_composition
+    description: >
+      NAMEA (83300NED) residence-principle GHG composition by constituent gas
+      type per NACE section and year. For each NACE section and year, the
+      emissions of the four constituent gases CBS NAMEA reports and each gas's
+      share of that sector-year's total. Final (Definitief) CBS years only.
+      Complements mart_namea_bridge's aggregate CO2 view with a per-gas
+      breakdown under the residence principle (e.g., is the sector's footprint
+      CO2-dominated or non-CO2-dominated when measured on the residence
+      principle?).
+    meta:
+      source_manifest: sources/cbs_namea/manifest.yml
+      source_dataset: "83300NED"
+      methodology: >
+        The four constituent gases are filtered by measure_label pattern
+        (CO2: '%kooldioxide%', N2O: '%distikstofoxide%', CH4: '%methaan%',
+        F-gases: '%fluor%') because stg_cbs_namea__air_emissions's measure
+        codes carry an opaque version suffix (e.g. A044109_2) that diverges
+        from the bare CBS codes mart_sector_gas_composition uses. Leaf/aggregate
+        hierarchy resolution and NACE sector mapping via sector_mapping_cbs_namea
+        seed are identical to mart_namea_bridge -- do not diverge the two.
+        Categories that cannot be attributed to a single NACE section are
+        bucketed as 'UNMAPPED' and still counted (same as mart_namea_bridge).
+        CBS NAMEA values carry no stated unit in the measure dimension; this
+        mart assumes millions of kg (kilotonnes), consistent with CBS's other
+        emission accounts, and divides by 1,000 for megatonnes (same assumption
+        as mart_namea_bridge).
+      known_limitations: >
+        (1) The fixture only samples CO2 and N2O rows; CH4 and F-gases will not
+        appear in CI, which is expected. (2) Unit assumption (kilotonnes →
+        megatonnes) is unverified against real 83300NED metadata; confirm
+        against the live snapshot on first ingestion and revisit in a reviewed
+        PR if it differs. (3) The seed sector_mapping_cbs_namea currently
+        catalogues only the two sector codes present in the committed synthetic
+        fixture; coverage grows via reviewed PRs once 83300NED is ingested for
+        real. (4) ~30-35% of emissions land in UNMAPPED, same as
+        mart_namea_bridge, so unmapped rows carry four gas rows each (one per
+        gas code). (5) Provisional years (period_status <> 'Definitief') are
+        excluded, mirroring mart_namea_bridge. (6) Composition breakdown, never
+        a reconciliation against mart_sector_gas_composition's territorial-
+        principle figures — residence vs territorial attribution diverges
+        per-gas the same way it diverges in aggregate, and there is no
+        separately-published NAMEA aggregate-GHG figure to reconcile against.
+      references:
+        source_table: https://opendata.cbs.nl/statline/#/CBS/nl/dataset/83300NED
+        namea_methodology: https://ec.europa.eu/eurostat/web/environmental-accounts/methodology/namea
+        nace_rev2: https://ec.europa.eu/eurostat/web/nace
+        disclosure_context_esrs_e1: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202302772
+    columns:
+      - name: namea_gas_year_key
+        description: Surrogate natural key (nace_section|gas_code|year).
+        tests:
+          - unique
+          - not_null
+      - name: "year"
+        description: Calendar year.
+        tests:
+          - not_null
+      - name: nace_section
+        description: NACE Rev.2 section letter, or 'UNMAPPED'.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["A", "B", "C", "D", "E", "F", "UNMAPPED"]
+      - name: nace_label
+        description: Human-readable NACE section label, or the unmapped note.
+        tests:
+          - not_null
+      - name: gas_code
+        description: CBS gas code from dim_measures (with possible version suffix).
+        tests:
+          - not_null
+      - name: gas_label
+        description: Human-readable gas label from dim_measures (e.g. "Kooldioxide (CO2)").
+        tests:
+          - not_null
+      - name: emissions_mt
+        description: Emissions for this gas in the sector-year (Mt, assumed from kilotonnes).
+        tests:
+          - not_null
+      - name: sector_total_all_gases_mt
+        description: >
+          The sum of emissions_mt across all constituent gases for this
+          sector-year (Mt, assumed from kilotonnes). Constant across all gas
+          rows for the same sector-year.
+        tests:
+          - not_null
+      - name: gas_share
+        description: This gas's emissions divided by sector_total_all_gases_mt.
+        tests:
+          - not_null
+
   - name: benchmark_installation_emissions
     description: >
       Per NL stationary installation and year, its verified EU ETS emissions
