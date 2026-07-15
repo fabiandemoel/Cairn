@@ -1,13 +1,20 @@
--- Singular test: the top-level GGE CRF-sector rows should reconcile to the
--- national total once the surfaced LULUCF row (CRF4) is removed.
+-- Singular test: the top-level GGE CRF-sector rows should sum (LULUCF included)
+-- to the national total, up to the small "indirect CO2" residual.
 --
--- env_air_gge's TOTXMEMO row excludes international aviation and shipping memo
--- items and also excludes LULUCF. This mart surfaces CRF1-CRF5 for peer
--- benchmarking, so the sector sum is not expected to equal TOTXMEMO directly.
--- Instead we compare the non-LULUCF sector sum to mart_gge_national_totals.
+-- env_air_gge's TOTXMEMO ("Total excluding memo items") is the national total.
+-- Memo items are the international aviation/shipping bunkers and biomass-CO2 rows
+-- (CRF1D*), which are excluded by definition. LULUCF (CRF4) is a main CRF sector
+-- and IS included in TOTXMEMO -- so the five top-level sectors CRF1-CRF5 (LULUCF
+-- included) are expected to sum to TOTXMEMO, not to differ from it.
 --
--- Because both sides come from the same dataset/unit and the mart is read/relabel
--- only, any residual gap should be at most rounding noise. The tolerance is 0.5%.
+-- The one component in TOTXMEMO that is not attributed to a top-level CRF sector
+-- is "Indirect CO2" (CRF_INDCO2), which this mart does not surface. It is small
+-- (< 1% of the national total for every observed country-year; the largest gap
+-- in the current release is ~0.74% for DK), so the sum of CRF1-CRF5 falls just
+-- short of TOTXMEMO by that residual. The tolerance is set at 1.5% -- wide enough
+-- to absorb the indirect-CO2 residual across the full country set, tight enough
+-- to still catch a unit error or a dropped sector (which would be orders of
+-- magnitude).
 --
 -- Returns zero rows on success.
 
@@ -15,19 +22,9 @@ with sector_totals as (
     select
         country,
         year,
-        sum(
-            case
-                when crf_sector_code <> 'CRF4' then sector_ghg_mt_co2eq
-                else 0
-            end
-        ) as non_lulucf_sector_sum_mt,
-        max(
-            case
-                when crf_sector_code = 'CRF4' then sector_ghg_mt_co2eq
-            end
-        ) as lulucf_mt
+        sum(sector_ghg_mt_co2eq) as sector_sum_mt
     from {{ ref('mart_gge_sector_totals') }}
-    group by 1, 2
+    group by country, year
 ),
 
 national_totals as (
@@ -42,13 +39,12 @@ select
     s.country,
     s.year,
     n.national_ghg_mt_co2eq,
-    s.non_lulucf_sector_sum_mt,
-    s.lulucf_mt,
-    abs(s.non_lulucf_sector_sum_mt - n.national_ghg_mt_co2eq)
+    s.sector_sum_mt,
+    abs(s.sector_sum_mt - n.national_ghg_mt_co2eq)
     / n.national_ghg_mt_co2eq as relative_deviation
 from sector_totals as s
 inner join national_totals as n
     using (country, year)
 where
-    abs(s.non_lulucf_sector_sum_mt - n.national_ghg_mt_co2eq)
-    / n.national_ghg_mt_co2eq >= 0.005
+    abs(s.sector_sum_mt - n.national_ghg_mt_co2eq)
+    / n.national_ghg_mt_co2eq >= 0.015

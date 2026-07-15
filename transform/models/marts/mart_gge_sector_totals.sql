@@ -6,9 +6,14 @@
 -- mart must never be cross-walked to benchmark_country_sector_emissions as if
 -- they were the same taxonomy.
 --
--- TOTXMEMO remains owned by mart_gge_national_totals. LULUCF (CRF4) is surfaced
--- here for completeness but is excluded from TOTXMEMO, so reconciliation tests
--- must subtract it before comparing sector sums to the national total.
+-- TOTXMEMO ("Total excluding memo items") remains owned by
+-- mart_gge_national_totals. LULUCF (CRF4) is a main CRF sector and IS included in
+-- TOTXMEMO, so the five top-level sectors CRF1-CRF5 sum to the national total up
+-- to a small "indirect CO2" (CRF_INDCO2) residual that TOTXMEMO carries but no
+-- top-level sector does (< 1% of the national total; asserted at 1.5% by
+-- assert_gge_sector_totals_reconcile_to_national_total). CRF4 can be negative --
+-- LULUCF is a net carbon sink in some countries (e.g. FR) and a net source in
+-- others (e.g. NL, DE) -- so sector rows may carry either sign.
 
 select
     country || '|' || src_crf || '|' || cast(year as varchar) as country_crf_year_key,

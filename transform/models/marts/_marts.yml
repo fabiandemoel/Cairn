@@ -759,16 +759,20 @@ models:
         Read straight from stg_eurostat__gge filtered to env_air_gge's top-level
         CRF rows (CRF1-CRF5), airpol = 'GHG', and unit = 'MIO_T'. NULL observation
         cells are excluded (never zero-filled). No CRF sector total is recomputed
-        from finer rows. The reconciliation test compares the non-LULUCF sector
-        sum to mart_gge_national_totals because TOTXMEMO excludes LULUCF and
-        international-bunker memo items by definition.
+        from finer rows. LULUCF (CRF4) is a main CRF sector included in TOTXMEMO,
+        so the reconciliation test (assert_gge_sector_totals_reconcile_to_national_total)
+        sums all five top-level sectors (LULUCF included) and compares them to
+        mart_gge_national_totals; the residual is the small "indirect CO2"
+        (CRF_INDCO2) component that TOTXMEMO carries but no top-level CRF sector
+        does (< 1%, asserted at 1.5%).
       known_limitations: >
         (1) CRF is an IPCC/UNFCCC classification, not NACE -- do not cross-walk
         this mart to benchmark_country_sector_emissions as if the taxonomies
         matched. (2) env_air_gge lags the current year by 1-2 years (UNFCCC
-        submission timeline). (3) LULUCF (CRF4) is surfaced here for completeness
-        but is excluded from TOTXMEMO, so the sector rows do not sum directly to
-        mart_gge_national_totals without that adjustment.
+        submission timeline). (3) LULUCF (CRF4) can be negative -- it is a net
+        carbon sink in some countries and a net source in others -- so sector
+        rows may carry either sign, and the five sectors sum to TOTXMEMO only up
+        to the small indirect-CO2 residual described in the methodology.
       references:
         source_table: https://ec.europa.eu/eurostat/databrowser/view/env_air_gge
         unfccc_inventories: https://unfccc.int/ghg-inventories-annex-i-parties/2025
