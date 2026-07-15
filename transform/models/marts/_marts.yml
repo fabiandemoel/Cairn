@@ -701,10 +701,10 @@ models:
       and year, from the Eurostat env_air_gge dataset. Grain: country × year.
       Territorial principle -- same as CBS 85669NED and EU ETS, so NL figures are
       a direct cross-check of the CBS national total (asserted at < 1% via
-      assert_gge_nl_total_within_cbs). CRF sector breakdowns are kept in the staging
-      layer but are not surfaced here: CRF (Energy, Industrial processes, Agriculture,
-      Waste, LULUCF) is an IPCC/UNFCCC classification, not NACE, and cannot be mapped
-      without significant assumptions.
+      assert_gge_nl_total_within_cbs). The companion mart_gge_sector_totals model
+      surfaces the top-level CRF rows for peer benchmarking, but CRF (Energy,
+      Industrial processes, Agriculture, LULUCF, Waste) is an IPCC/UNFCCC
+      classification, not NACE, and cannot be mapped without significant assumptions.
     meta:
       source_manifest: sources/eurostat_gge/manifest.yml
       source_dataset: "env_air_gge"
@@ -716,8 +716,9 @@ models:
         replaced with placeholder zeros). No recomputation.
       known_limitations: >
         (1) env_air_gge lags the current year by 1-2 years (UNFCCC submission
-        timeline). (2) CRF sectors are not surfaced here and cannot be mapped to
-        NACE without significant assumptions. (3) NL figures may differ from CBS
+        timeline). (2) Even where the top-level CRF rows are surfaced in
+        mart_gge_sector_totals, CRF cannot be mapped to NACE without significant
+        assumptions. (3) NL figures may differ from CBS
         85669NED by up to ~1% due to submission-timing and revision-cycle
         differences (see assert_gge_nl_total_within_cbs).
       references:
@@ -742,6 +743,67 @@ models:
           National GHG total (million tonnes CO2-equivalent = megatonnes) excluding
           international aviation and shipping (memo items). Comparable to CBS
           85669NED's national total (same territorial principle, same exclusions).
+        tests:
+          - not_null
+
+  - name: mart_gge_sector_totals
+    description: >
+      Top-level Eurostat env_air_gge CRF-sector greenhouse-gas totals (million
+      tonnes CO2-equivalent) per country, CRF sector, and year. Grain: country ×
+      CRF sector × year. The mart is a read/relabel view over env_air_gge's own
+      top-level CRF rows (CRF1-CRF5) for cross-country peer benchmarking.
+    meta:
+      source_manifest: sources/eurostat_gge/manifest.yml
+      source_dataset: "env_air_gge"
+      methodology: >
+        Read straight from stg_eurostat__gge filtered to env_air_gge's top-level
+        CRF rows (CRF1-CRF5), airpol = 'GHG', and unit = 'MIO_T'. NULL observation
+        cells are excluded (never zero-filled). No CRF sector total is recomputed
+        from finer rows. LULUCF (CRF4) is a main CRF sector included in TOTXMEMO,
+        so the reconciliation test (assert_gge_sector_totals_reconcile_to_national_total)
+        sums all five top-level sectors (LULUCF included) and compares them to
+        mart_gge_national_totals; the residual is the small "indirect CO2"
+        (CRF_INDCO2) component that TOTXMEMO carries but no top-level CRF sector
+        does (< 1%, asserted at 1.5%).
+      known_limitations: >
+        (1) CRF is an IPCC/UNFCCC classification, not NACE -- do not cross-walk
+        this mart to benchmark_country_sector_emissions as if the taxonomies
+        matched. (2) env_air_gge lags the current year by 1-2 years (UNFCCC
+        submission timeline). (3) LULUCF (CRF4) can be negative -- it is a net
+        carbon sink in some countries and a net source in others -- so sector
+        rows may carry either sign, and the five sectors sum to TOTXMEMO only up
+        to the small indirect-CO2 residual described in the methodology.
+      references:
+        source_table: https://ec.europa.eu/eurostat/databrowser/view/env_air_gge
+        unfccc_inventories: https://unfccc.int/ghg-inventories-annex-i-parties/2025
+        ipcc_methodology: https://www.ipcc.ch/report/2006-ipcc-guidelines-for-national-greenhouse-gas-inventories/
+    columns:
+      - name: country_crf_year_key
+        description: Surrogate natural key (country|crf_sector_code|year).
+        tests:
+          - unique
+          - not_null
+      - name: country
+        description: ISO 3166-1 alpha-2 country code (e.g. NL, DE, FR).
+        tests:
+          - not_null
+      - name: crf_sector_code
+        description: Top-level IPCC Common Reporting Format sector code (CRF1-CRF5).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["CRF1", "CRF2", "CRF3", "CRF4", "CRF5"]
+      - name: crf_sector_label
+        description: Human-readable top-level CRF sector label.
+        tests:
+          - not_null
+      - name: year
+        description: Reporting year.
+        tests:
+          - not_null
+      - name: sector_ghg_mt_co2eq
+        description: GHG emissions for the country-CRF-sector-year (Mt CO2-eq).
         tests:
           - not_null
 
