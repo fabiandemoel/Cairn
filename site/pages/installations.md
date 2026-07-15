@@ -4,14 +4,19 @@ description: Per NL stationary installation, its verified emissions versus its N
 ---
 
 The installation-level **numerator**: for each NL stationary installation, its
-verified EU ETS emissions (tonnes CO₂-eq) against its NACE-section mean and
-median over the ETS population. This is the **large-emitter** benchmark — EU ETS
-covers only large emitters, not the whole economy (the [sector page](/sectors)
-carries that).
+[verified EU ETS emissions](/data-dictionary#business-glossary) (tonnes CO₂-eq)
+against its NACE-section mean and median over the ETS population. This is the
+**large-emitter** benchmark — EU ETS covers only large emitters, not the whole
+economy (the [sector page](/sectors) carries that).
 
 Source: [euets.info](https://www.euets.info/) (reprocessed EU Transaction Log),
 cross-checked against the EEA Union Registry aggregate. Stationary installations
-only; aircraft and maritime operators excluded.
+only; aircraft and maritime operators excluded. Installations without a
+[NACE section](/data-dictionary#business-glossary) in the pinned euets.info
+snapshot are also excluded — they have no peer group to benchmark against, so
+the headline count is stationary **and** NACE-mapped installations; see
+[coverage on Data quality](/data-quality#how-complete-is-the-coverage) for how
+much of the EEA stationary aggregate the benchmarked set captures.
 
 ```sql installations
 select distinct
