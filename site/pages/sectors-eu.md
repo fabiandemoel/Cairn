@@ -10,7 +10,8 @@ NACE section and year for all EU member states. Data from
 
 <Alert status="warning">
 
-**Residence principle — not the same as CBS or EU ETS figures.** AEA attributes
+**[Residence principle](/data-dictionary#business-glossary) — not the same as
+CBS or EU ETS figures.** AEA attributes
 emissions to the country of the *producing entity*, regardless of where
 production physically occurs. CBS `85669NED` and the EU ETS instead use the
 *territorial* principle (emissions within national borders). NL figures from this

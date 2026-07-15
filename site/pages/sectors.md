@@ -4,8 +4,9 @@ description: GHG emissions and share of the national total per NACE section and 
 ---
 
 The whole-economy **denominator**: greenhouse-gas emissions (total GHG in
-CO₂-equivalent, megatonnes) per NACE section and year, with each sector's share
-of the national total. Final (`Definitief`) CBS years only.
+[CO₂-equivalent](/data-dictionary#business-glossary), megatonnes) per
+[NACE section](/data-dictionary#business-glossary) and year, with each sector's
+share of the national total. Final (`Definitief`) CBS years only.
 
 Source: CBS StatLine [`85669NED`](https://opendata.cbs.nl/statline/#/CBS/nl/dataset/85669NED),
 IPCC method. See [Methodology & sources](/methodology) for limitations (notably

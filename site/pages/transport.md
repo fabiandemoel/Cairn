@@ -4,8 +4,9 @@ description: Per NL aviation/maritime EU ETS operator, its verified emissions ve
 ---
 
 The transport-axis **numerator**: for each NL aviation or maritime EU ETS
-operator, its verified emissions (tonnes CO₂-eq) against its operator-type mean
-and median over the ETS population. These operators are benchmarked against
+operator, its [verified emissions](/data-dictionary#business-glossary) (tonnes
+CO₂-eq) against its operator-type mean and median over the ETS population. These
+operators are benchmarked against
 each other by **operator type** (aircraft vs. maritime), never against
 stationary NACE sectors — they are classified by vehicle, not industry, and are
 kept out of the [installation benchmark](/installations), the

@@ -10,7 +10,8 @@ member states plus Norway, Iceland, and the UK, from
 
 <Alert status="info">
 
-**Territorial principle — directly comparable to CBS and EU ETS.** Unlike the
+**[Territorial principle](/data-dictionary#business-glossary) — directly
+comparable to CBS and EU ETS.** Unlike the
 [EU sector benchmark (AEA)](/sectors-eu), which uses the residence principle,
 `env_air_gge` uses the *territorial* principle (emissions physically occurring
 within national borders), the same as CBS `85669NED` and the EU ETS. NL totals

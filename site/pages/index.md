@@ -34,29 +34,33 @@ from cairn.installation_emissions
     data={sector_headline}
     value=national_total_mt
     fmt='#,##0.0" Mt CO₂-eq"'
-    title="NL emissions, latest CBS year"
-    comparison=latest_year
-    comparisonTitle="year"
-    comparisonFmt='0'
+    title="NL emissions (CBS, latest year)"
 />
 
 <BigValue
     data={installation_headline}
     value=installations
     fmt='#,##0'
-    title="NL ETS installations benchmarked"
-    comparison=latest_year
-    comparisonTitle="year"
-    comparisonFmt='0'
+    title="NL ETS installations benchmarked (stationary, NACE-mapped)"
 />
+
+Latest years: CBS **{sector_headline[0].latest_year}**, EU ETS
+**{installation_headline[0].latest_year}**. "Benchmarked" counts stationary,
+NACE-mapped installations only — installations without a NACE section in the
+pinned euets.info snapshot have no peer group and are excluded; see
+[coverage on Data quality](/data-quality#how-complete-is-the-coverage) for how
+much of the EEA aggregate the included set captures.
 
 We build reproducible climate datasets from official public sources with
 complete lineage — CSRD/ESRS reporting is one application.
 
-For sustainability teams, auditors, and software vendors who need to prove every
-number back to an official source.
+For sustainability teams and auditors who need to prove every number back to an
+official source. Integrators can build directly on the
+[disclosure CSV bundle](/disclosure) and the
+[open repository](https://github.com/fabiandemoel/Cairn) — Cairn ships no hosted
+API.
 
-## The two benchmarks
+## The NL benchmark spine
 
 Cairn pairs two official sources that answer the question at two altitudes —
 the whole-economy **denominator** and the installation-level **numerator**.
@@ -85,6 +89,51 @@ Transaction Log), cross-checked against the EEA Union Registry aggregate.
 
 </div>
 
+## EU context & cross-checks
+
+Beyond the NL spine, four more official views widen the picture and cross-check
+it from independent sources and accounting principles.
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+<div>
+
+### [EU sector benchmark — Eurostat AEA →](/sectors-eu)
+
+The same NACE-section cut for every EU member state, on the residence principle
+— compare NL with its peers, from the Eurostat Air Emissions Accounts.
+
+</div>
+
+<div>
+
+### [Country GHG totals — Eurostat GGE →](/countries-ghg)
+
+National greenhouse-gas totals (territorial principle, UNFCCC submissions) for
+the EU27 plus peers — directly comparable to the CBS figures.
+
+</div>
+
+<div>
+
+### [NAMEA bridge — CBS →](/namea-bridge)
+
+CBS NAMEA residence-principle emissions bridged against the territorial sector
+benchmark, per NACE section — the same emissions, two accounting principles.
+
+</div>
+
+<div>
+
+### [Transport benchmark — EU ETS →](/transport)
+
+NL aviation and maritime EU ETS operators, benchmarked by operator type rather
+than by industry sector.
+
+</div>
+
+</div>
+
 ## Why it is auditable
 
 Cairn is built on a few load-bearing rules, so a number can never drift away
@@ -98,10 +147,12 @@ from its source:
 - **CI guards the methodology** — reconciliation and coverage tests fail the
   build if a source shifts under us.
 
-See **[Methodology & sources →](/methodology)** for the full provenance of
-every figure on this site, or **[Data quality →](/data-quality)** for the live
-pin status of each source — whether every figure is still chained, by hash, to
-an immutable official source. The **[Data dictionary & glossary →](/data-dictionary)**
+See the **[Architecture →](/architecture)** page for how raw ingest, pinned
+manifests, dbt marts, and this read-only site fit together end to end,
+**[Methodology & sources →](/methodology)** for the full provenance of every
+figure on this site, or **[Data quality →](/data-quality)** for the live pin
+status of each source — whether every figure is still chained, by hash, to an
+immutable official source. The **[Data dictionary & glossary →](/data-dictionary)**
 lists every model and column with the tests that guard it, and defines the
 cross-cutting concepts behind the numbers.
 
