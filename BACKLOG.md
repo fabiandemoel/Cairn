@@ -259,14 +259,18 @@ expansion candidates above, they are correctness / disclosure / presentation fix
 they sit outside the value ordering the expansion candidates follow and are kept in the
 review's P1→P2 order. The three edit-only P1 fixes from this review (homepage IA, the
 NACE-coverage disclosure, and the glossary links) shipped in PR #140 (2026-07-15) and
-have moved to _Considered and rejected_ below. Dispatch reality: the no-LLM dispatcher
-opens at most one issue per run for the *top* candidate's next not-yet-built layer, and
-only a **new-file** sentinel triggers it — so entry 4 (new methodology source query)
-and entry 6 (new og:image asset) are genuinely dispatchable, while the manual euets
-refresh (entry 5) carries an existing-file sentinel the dispatcher treats as
-already-present and skips. Run that one by hand per the euets checklist; any
-dispatchable entry you want sooner than the queue reaches it can be raised as a GitHub
-issue by hand and labelled `approved`.
+have moved to _Considered and rejected_ below.
+
+**These entries are not auto-dispatched.** `scripts/dispatch.py` (`parse_backlog`)
+ends the "Live candidates" section at the first `---` rule — the one directly above
+this sub-header — so nothing in this subgroup is ever seen by the no-LLM backlog
+dispatcher. The `<!-- dispatch -->` blocks below are kept only as a per-entry record of
+the layer and sentinel each fix touches, **not** as a dispatch trigger. Work all three
+by hand: raise a GitHub issue and label it `approved` for the implement agent (entry 4,
+the methodology Sources table; entry 6, the site chrome), or, for the euets refresh
+(entry 5), run `cairn-ingest.yml` per the euets checklist in `CLAUDE.md`. (To make an
+entry genuinely dispatchable it would have to be moved above that `---`, into the
+parsed part of the section.)
 
 ### 4. Methodology Sources table documents only 3 of 8 pinned sources (P1)
 <!-- dispatch
