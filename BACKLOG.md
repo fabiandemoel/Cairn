@@ -249,35 +249,16 @@ granularity.
   every category row, exclude the units sub-header row in staging, never
   invent a missing category.
 
----
-
-### Site-review correctness & polish (2026-07-15 external review)
-
-These entries come from an external review of the live site + repo. Unlike the
-expansion candidates above, they are correctness / disclosure / presentation fixes
-(plus one manual euets refresh), one PR each — they add **no** new benchmark axis, so
-they sit outside the value ordering the expansion candidates follow and are kept in the
-review's P1→P2 order. The three edit-only P1 fixes from this review (homepage IA, the
-NACE-coverage disclosure, and the glossary links) shipped in PR #140 (2026-07-15) and
-have moved to _Considered and rejected_ below.
-
-**These entries are not auto-dispatched.** `scripts/dispatch.py` (`parse_backlog`)
-ends the "Live candidates" section at the first `---` rule — the one directly above
-this sub-header — so nothing in this subgroup is ever seen by the no-LLM backlog
-dispatcher. The `<!-- dispatch -->` blocks below are kept only as a per-entry record of
-the layer and sentinel each fix touches, **not** as a dispatch trigger. Work all three
-by hand: raise a GitHub issue and label it `approved` for the implement agent (entry 4,
-the methodology Sources table; entry 6, the site chrome), or, for the euets refresh
-(entry 5), run `cairn-ingest.yml` per the euets checklist in `CLAUDE.md`. (To make an
-entry genuinely dispatchable it would have to be moved above that `---`, into the
-parsed part of the section.)
-
 ### 4. Methodology Sources table documents only 3 of 8 pinned sources (P1)
 <!-- dispatch
 layers:
   site: site/sources/cairn/methodology_sources.sql
 -->
 **Value: M · Effort: L · Spine-fit: H**
+
+*(From the 2026-07-15 site review — a provenance-documentation fix rather than a
+new benchmark axis, kept here as a dispatchable single-layer site candidate. Its
+sibling site-review fixes shipped in PR #140; see _Considered and rejected_.)*
 
 `index.md` promises "the full provenance of every figure on this site", but
 `methodology.md`'s Sources table lists only CBS `85669NED`, euets.info, and EEA —
@@ -303,39 +284,15 @@ provenance doc lagging the data is the worst place to drift.
   is intentionally left undocumented, rescope the homepage "every figure" claim
   instead of leaving it false.
 
-### 5. euets pin is release 2024-10 (latest year 2023); 2024 verified emissions are long published (P2, data-refresh route)
-<!-- dispatch
-layers:
-  ingestion: sources/euets/manifest.yml
--->
-**Value: M · Effort: M · Spine-fit: H**
-
-`sources/euets/manifest.yml` pins the euets.info 2024-10 snapshot, so the installation
-and transport benchmarks top out at compliance year 2023. Verified 2024 emissions have
-been in the EUTL since spring 2025 and euets.info has shipped newer reprocessed
-releases since. The lag is honestly surfaced on /data-quality, but the benchmark is
-now ~1.5 compliance years behind what an auditor can pull from the official source.
-- *Layers:*
-  - ingestion (manual data-refresh — euets is **human-watched and never probed**, so
-    neither the freshness dispatcher nor the backlog dispatcher opens this; the
-    `sources/euets/manifest.yml` sentinel already exists. Run `cairn-ingest.yml`
-    (source `euets`, new `--url`) by hand per the euets checklist in `CLAUDE.md`) —
-    append a new snapshot entry (new versioned R2 path + sha256) to the manifest
-    (never mutate the 2024-10 entry), refresh the CI fixture under
-    `tests/fixtures/euets/<release>/`, bump the `euets_raw_dir` defaults, and let
-    staging/marts pick up the new release. Guard: `assert_euets_coverage_within_eea`
-    and the reconciliation tests pass against the new snapshot; `benchmark-diff` is
-    the human gate.
-- *Watch:* raw data immutable, manifest append-only — the 2024-10 entry stays
-  byte-identical. This entry is the manual trigger, **not** a change to the never-probe
-  policy. /installations and /transport should show latest year 2024 afterwards.
-
-### 6. Site chrome: Evidence default `twitter:site @evidence_dev`, no og:image, chart palette off-brand (P2)
+### 5. Site chrome: Evidence default `twitter:site @evidence_dev`, no og:image, chart palette off-brand (P2)
 <!-- dispatch
 layers:
   site: site/static/og-image.png
 -->
 **Value: L · Effort: L · Spine-fit: H**
+
+*(From the 2026-07-15 site review — a presentation/branding fix rather than a new
+benchmark axis, kept here as a dispatchable single-layer site candidate.)*
 
 Two small credibility leaks when the site is shared or compared to the portfolio:
 social meta still carries Evidence's default `twitter:site` (`@evidence_dev`) with no
