@@ -249,29 +249,16 @@ granularity.
   every category row, exclude the units sub-header row in staging, never
   invent a missing category.
 
----
-
-### Site-review correctness & polish (2026-07-15 external review)
-
-The six entries below come from an external review of the live site + repo. Unlike
-the expansion candidates above, they are correctness / disclosure / presentation
-fixes (plus one manual euets refresh), one PR each — they add **no** new benchmark
-axis, so they sit outside the value ordering the expansion candidates follow and are
-kept in the review's P1→P2 order. Dispatch reality: the no-LLM dispatcher opens at
-most one issue per run for the *top* candidate's next not-yet-built layer, and only
-a **new-file** sentinel triggers it — so entry 5 (new methodology source query) and
-entry 10 (new og:image asset) are genuinely dispatchable, while the edit-only entries
-(6, 7, 9) and the manual euets refresh (8) carry an existing-file sentinel the
-dispatcher treats as already-present and skips. Work those (and any of these you want
-sooner than the queue reaches them) by raising the GitHub issue by hand and labelling
-it `approved` — the supported manual implement path.
-
-### 5. Methodology Sources table documents only 3 of 8 pinned sources (P1)
+### 4. Methodology Sources table documents only 3 of 8 pinned sources (P1)
 <!-- dispatch
 layers:
   site: site/sources/cairn/methodology_sources.sql
 -->
 **Value: M · Effort: L · Spine-fit: H**
+
+*(From the 2026-07-15 site review — a provenance-documentation fix rather than a
+new benchmark axis, kept here as a dispatchable single-layer site candidate. Its
+sibling site-review fixes shipped in PR #140; see _Considered and rejected_.)*
 
 `index.md` promises "the full provenance of every figure on this site", but
 `methodology.md`'s Sources table lists only CBS `85669NED`, euets.info, and EEA —
@@ -297,118 +284,15 @@ provenance doc lagging the data is the worst place to drift.
   is intentionally left undocumented, rescope the homepage "every figure" claim
   instead of leaving it false.
 
-### 6. Homepage narrates "two benchmarks" but the site ships five pages; three have zero inbound links (P1)
-<!-- dispatch
-layers:
-  site: site/pages/index.md
--->
-**Value: M · Effort: L · Spine-fit: H**
-
-`index.md` still narrates "The two benchmarks" (/sectors, /installations). Published
-but absent from the homepage: /architecture, /countries-ghg, /namea-bridge,
-/sectors-eu, /transport — and /countries-ghg, /namea-bridge and /transport have **zero
-inbound links from any page**, reachable only via the auto-generated sidebar. Phase 4
-grew the data; the front door didn't.
-- *Layers:*
-  - site (edit-only — the `site/pages/index.md` sentinel already exists, so the
-    dispatcher skips it; raise the issue by hand and label `approved`) — rework "The
-    two benchmarks" to present the NL spine (sectors + installations) first and the
-    EU/cross-check pages (sectors-eu, countries-ghg, namea-bridge, transport) as a
-    second tier of one-line cards in the existing card style; link /architecture from
-    the "Why it is auditable" section. Fix the two `<BigValue>` blocks whose
-    comparison slot renders "▲ 2024" (reads as "emissions up"): move the year into the
-    title/caption and reserve ▲/▼ for real deltas (or drop the comparison slot). Drop
-    "software vendors" from the audience line (a public API is on the rejected list)
-    or point them explicitly at the disclosure CSV bundle + the GitHub repo. Guard:
-    every published page reachable from the homepage with contextual copy, no BigValue
-    using the comparison slot for a non-delta, `evidence-build` green.
-- *Watch:* site copy only — do **not** add any rejected feature (public API, lineage
-  graph, confidence badges) while rewording. The 297 coverage caption is out of scope
-  here (entry 7 owns it); keep this index.md diff disjoint from entry 7's.
-
-### 7. "297 installations benchmarked" silently excludes NACE-unmapped installations; caveat lives on the wrong page (P1)
-<!-- dispatch
-layers:
-  site: site/pages/installations.md
--->
-**Value: M · Effort: L · Spine-fit: H**
-
-`benchmark_installation_emissions.sql` filters `stg.nace_section is not null` (plus
-stationary-only and `verified_emissions_t_co2eq is not null`). The NL stationary ETS
-population is ~330, so roughly a tenth of installations are absent from the 297.
-`installations.md` discloses the aircraft/maritime exclusion but **not** the NACE one;
-only /data-quality surfaces it, via `assert_euets_coverage_within_eea`. An auditor
-landing on /installations — the page that displays the number — cannot see the
-exclusion.
-- *Layers:*
-  - site (edit-only — `site/pages/installations.md`/`index.md` sentinels exist, so
-    the dispatcher skips; raise by hand and label `approved`) — `installations.md`:
-    extend the source paragraph with 1–2 sentences that installations without a NACE
-    section in the pinned euets.info snapshot are excluded (they have no peer group),
-    linking the /data-quality coverage section for the live captured-share count.
-    `index.md`: adjust the 297 BigValue caption/title so "benchmarked" reads as a
-    subset (e.g. "NL ETS installations benchmarked (stationary, NACE-mapped)"). Guard:
-    exclusion disclosed on /installations with a working /data-quality link, homepage
-    caption signals subset-ness, `evidence-build` green.
-- *Watch:* disclosure only — do **not** "fix" coverage by imputing NACE sections; the
-  mapping stays reviewed-seed read/relabel (no recomputation). No SQL changes — the
-  count is correct. Keep the index.md diff disjoint from entry 6.
-
-### 8. euets pin is release 2024-10 (latest year 2023); 2024 verified emissions are long published (P2, data-refresh route)
-<!-- dispatch
-layers:
-  ingestion: sources/euets/manifest.yml
--->
-**Value: M · Effort: M · Spine-fit: H**
-
-`sources/euets/manifest.yml` pins the euets.info 2024-10 snapshot, so the installation
-and transport benchmarks top out at compliance year 2023. Verified 2024 emissions have
-been in the EUTL since spring 2025 and euets.info has shipped newer reprocessed
-releases since. The lag is honestly surfaced on /data-quality, but the benchmark is
-now ~1.5 compliance years behind what an auditor can pull from the official source.
-- *Layers:*
-  - ingestion (manual data-refresh — euets is **human-watched and never probed**, so
-    neither the freshness dispatcher nor the backlog dispatcher opens this; the
-    `sources/euets/manifest.yml` sentinel already exists. Run `cairn-ingest.yml`
-    (source `euets`, new `--url`) by hand per the euets checklist in `CLAUDE.md`) —
-    append a new snapshot entry (new versioned R2 path + sha256) to the manifest
-    (never mutate the 2024-10 entry), refresh the CI fixture under
-    `tests/fixtures/euets/<release>/`, bump the `euets_raw_dir` defaults, and let
-    staging/marts pick up the new release. Guard: `assert_euets_coverage_within_eea`
-    and the reconciliation tests pass against the new snapshot; `benchmark-diff` is
-    the human gate.
-- *Watch:* raw data immutable, manifest append-only — the 2024-10 entry stays
-  byte-identical. This entry is the manual trigger, **not** a change to the never-probe
-  policy. /installations and /transport should show latest year 2024 afterwards.
-
-### 9. Data pages never link the glossary; NACE/verified-emissions jargon undefined at point of use (P2)
-<!-- dispatch
-layers:
-  site: site/pages/sectors.md
--->
-**Value: L · Effort: L · Spine-fit: H**
-
-Zero links to /data-dictionary from /sectors, /installations, /transport, /sectors-eu,
-/countries-ghg. Terms carrying real methodological weight — NACE section, verified
-emissions, carbon leakage exposure, residence vs territorial principle, CO₂-eq —
-appear undefined at point of use; the definitions exist in the glossary but nothing
-routes a reader there.
-- *Layers:*
-  - site (edit-only across the five data pages — the sentinel `site/pages/sectors.md`
-    already exists, so the dispatcher skips; raise by hand and label `approved`) — on
-    each of the five pages, link the first use of each glossary-defined term to its
-    /data-dictionary anchor (adding heading anchors to the glossary render is in scope
-    if per-term anchors don't exist). First use only — don't litter. Guard: each page
-    links /data-dictionary at least once at the first occurrence of a defined term,
-    links resolve (no dead anchors) in `evidence-build`.
-- *Watch:* copy/links only — no glossary content rewrites beyond anchors.
-
-### 10. Site chrome: Evidence default `twitter:site @evidence_dev`, no og:image, chart palette off-brand (P2)
+### 5. Site chrome: Evidence default `twitter:site @evidence_dev`, no og:image, chart palette off-brand (P2)
 <!-- dispatch
 layers:
   site: site/static/og-image.png
 -->
 **Value: L · Effort: L · Spine-fit: H**
+
+*(From the 2026-07-15 site review — a presentation/branding fix rather than a new
+benchmark axis, kept here as a dispatchable single-layer site candidate.)*
 
 Two small credibility leaks when the site is shared or compared to the portfolio:
 social meta still carries Evidence's default `twitter:site` (`@evidence_dev`) with no
@@ -432,6 +316,23 @@ blue-600 `#2563eb` — two different blues on one brand.
 *(Don't re-propose these. If circumstances change, move an item back up with the
 new reason it now fits.)*
 
+- **Homepage information architecture (site review 6).** Shipped: merged in PR #140
+  (2026-07-15). `index.md` reworked into an "NL benchmark spine" tier plus an "EU
+  context & cross-checks" tier surfacing /sectors-eu, /countries-ghg, /namea-bridge and
+  /transport (previously reachable only via the sidebar); /architecture linked from
+  "Why it is auditable"; the misleading "▲ 2024" BigValue comparison slot dropped and
+  the year moved to a caption; the audience line no longer names "software vendors".
+- **NACE-coverage disclosure on /installations (site review 7).** Shipped: merged in
+  PR #140 (2026-07-15). The NACE-null exclusion behind the benchmarked-installation
+  count is now disclosed next to the source statement with a /data-quality coverage
+  link, and the homepage count is captioned "(stationary, NACE-mapped)". No SQL change
+  — the count itself was already correct.
+- **Glossary links on the data pages (site review 9).** Shipped: merged in PR #140
+  (2026-07-15). First-use glossary terms (NACE section, verified emissions,
+  CO₂-equivalent, residence/territorial principle) on /sectors, /installations,
+  /transport, /sectors-eu and /countries-ghg now link the /data-dictionary business
+  glossary (its `#business-glossary` section anchor, since the glossary renders as a
+  searchable table with no per-term anchors).
 - **EU ETS excess emissions penalty — compliance-enforcement axis.** Shipped:
   merged in this PR (2026-07-10). `excess_emissions_penalty_eur` is live on
   `benchmark_installation_emissions`, guarded by `assert_penalty_only_on_shortfall`,
