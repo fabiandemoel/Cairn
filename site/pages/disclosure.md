@@ -33,12 +33,22 @@ around it remains the reporter's responsibility.
 
 A self-contained, auditable bundle a third party can pick up on its own:
 
-- <a href="/downloads/esrs_e1/esrs_e1_disclosure.csv" download>**esrs_e1_disclosure.csv**</a>
-  — the data, one row per installation-year.
-- <a href="/downloads/esrs_e1/esrs_e1_disclosure.meta.json" download>**esrs_e1_disclosure.meta.json**</a>
-  — the audit trail: the EU ETS source pin (release + SHA256), the methodology
-  git commit, the warehouse version, a data dictionary, and a SHA256 of the CSV
-  so you can prove the file was not altered after export.
+<div class="my-4 flex flex-wrap gap-3">
+<a href="/downloads/esrs_e1/esrs_e1_disclosure.csv" download class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white no-underline hover:bg-blue-700">
+<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" /></svg>
+Download CSV
+</a>
+<a href="/downloads/esrs_e1/esrs_e1_disclosure.meta.json" download class="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 no-underline hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" /></svg>
+Audit metadata (JSON)
+</a>
+</div>
+
+- **esrs_e1_disclosure.csv** — the data, one row per installation-year.
+- **esrs_e1_disclosure.meta.json** — the audit trail: the EU ETS source pin
+  (release + SHA256), the methodology git commit, the warehouse version, a data
+  dictionary, and a SHA256 of the CSV so you can prove the file was not altered
+  after export.
 
 The bundle is generated from the same R2-pinned warehouse that produces this
 site (`scripts/export_esrs_e1.py`), so the disclosure always traces back to a
