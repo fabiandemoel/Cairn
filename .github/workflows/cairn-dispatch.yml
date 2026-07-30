@@ -19,8 +19,26 @@ name: Cairn Dispatch
 # Event-driven on purpose: the next layer of a candidate becomes dispatchable
 # at exactly the moment the previous layer merges to main, so `push` is the
 # natural trigger — no daily cron polling, no LLM cost, run time in seconds.
-# Output is GitHub issues only — never code, never a PR. A human triages them
-# and adds the `approved` label to hand one to Cairn Implement.
+# Output is GitHub issues only — never code, never a PR.
+#
+# APPROVAL TIERS: a non-ingestion feat step is AUTO-APPROVED — its BACKLOG.md
+# entry (quoted verbatim into the issue) was already human-reviewed when the
+# replenish PR merged, so re-approving the same text via the label added only
+# latency (observed: proposals sat un-triaged for 15 days while implement runs
+# take ~10 minutes). The issue is created with the `approved` label and this
+# workflow triggers cairn-implement for it directly (an explicit
+# workflow_dispatch, because GITHUB_TOKEN-created issues fire no label
+# events). The human checkpoint moves to where it carries information: the
+# implementation PR's merge. Ingestion steps and data-refresh issues — where
+# new trust enters the system — keep the manual `approved`-label gate. Set the
+# Actions variable DISPATCH_AUTO_APPROVE=false to restore label-gating for
+# everything.
+#
+# When fewer than DISPATCH_REPLENISH_THRESHOLD (default 3) candidates still
+# have undispatched work, this workflow also triggers cairn-replenish directly
+# — the menu refills when it actually runs low instead of on a weekly cron
+# (replenish skips its run while its previous PR is still open, so PRs can't
+# stack).
 
 on:
   schedule:
@@ -38,6 +56,7 @@ on:
 permissions:
   contents: read
   issues: write
+  actions: write # workflow_dispatch of cairn-implement / cairn-replenish
 
 concurrency:
   group: cairn-dispatch
@@ -94,20 +113,29 @@ jobs:
         env:
           SCOPE: ${{ steps.scope.outputs.scope }}
           THRESHOLD: ${{ vars.DISPATCH_BACKLOG_SATURATION || '5' }}
+          AUTO_APPROVE: ${{ vars.DISPATCH_AUTO_APPROVE || 'true' }}
+          REPLENISH_THRESHOLD: ${{ vars.DISPATCH_REPLENISH_THRESHOLD || '3' }}
         run: |
           python3 -m scripts.dispatch \
             --scope "$SCOPE" \
             --open-issues "$RUNNER_TEMP/open_issues.json" \
             --open-prs "$RUNNER_TEMP/open_prs.json" \
             --saturation-threshold "$THRESHOLD" \
+            --auto-approve "$AUTO_APPROVE" \
+            --replenish-threshold "$REPLENISH_THRESHOLD" \
             -o "$RUNNER_TEMP/dispatch.json" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Open the dispatched issues
+      # Auto-approved issues (non-ingestion feat steps) are handed straight to
+      # cairn-implement via an explicit workflow_dispatch: issues created with
+      # GITHUB_TOKEN fire no `labeled` event, so the label alone would sit
+      # inert. Both trigger calls degrade to a warning — the issue then just
+      # waits for a human, exactly the pre-auto-approve behaviour.
+      - name: Open the dispatched issues (and trigger implement/replenish)
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const { issues } = JSON.parse(
+            const { issues, replenish_needed } = JSON.parse(
               fs.readFileSync(`${process.env.RUNNER_TEMP}/dispatch.json`, 'utf8'));
             for (const spec of issues) {
               const { data } = await github.rest.issues.create({
@@ -115,5 +143,30 @@ jobs:
                 title: spec.title, body: spec.body, labels: spec.labels,
               });
               core.info(`Opened #${data.number}: ${spec.title}`);
+              if (spec.auto_approve) {
+                try {
+                  await github.rest.actions.createWorkflowDispatch({
+                    owner: context.repo.owner, repo: context.repo.repo,
+                    workflow_id: 'cairn-implement.yml', ref: 'main',
+                    inputs: { issue_number: String(data.number) },
+                  });
+                  core.info(`Triggered cairn-implement for #${data.number} (pre-authorized)`);
+                } catch (err) {
+                  core.warning(
+                    `Could not trigger cairn-implement for #${data.number}: ${err}. ` +
+                    `The issue carries the approved label — dispatch it manually.`);
+                }
+              }
             }
             if (issues.length === 0) core.info('Nothing to open.');
+            if (replenish_needed) {
+              try {
+                await github.rest.actions.createWorkflowDispatch({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  workflow_id: 'cairn-replenish.yml', ref: 'main',
+                });
+                core.info('Backlog is running low — triggered cairn-replenish.');
+              } catch (err) {
+                core.warning(`Could not trigger cairn-replenish: ${err}`);
+              }
+            }
