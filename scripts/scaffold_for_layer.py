@@ -1,11 +1,13 @@
 """No-LLM: scaffold this issue's layer skeleton, when applicable.
 
 Wires ``scaffold_ingestion.py`` / ``scaffold_staging.py`` into cairn-implement's
-per-issue precompute sequence, alongside ``reference_for_layer.py``. The layer is
-inferred exactly as ``reference_for_layer.infer_layer`` does; only "ingestion" and
-"staging" have a scaffold generator today -- a mart or site change is a judgement
-call (business logic, not boilerplate), so those layers get no scaffold and no
-note (see CLAUDE.md's "Mappings are code, reviewed via PRs").
+per-issue precompute sequence, alongside ``reference_for_layer.py``. The issue's
+layers are inferred exactly as ``reference_for_layer.infer_layers`` does; only
+"ingestion" and "staging" have a scaffold generator today -- a mart or site
+change is a judgement call (business logic, not boilerplate), so those layers
+get no scaffold and no note (see CLAUDE.md's "Mappings are code, reviewed via
+PRs"). A fused step (``staging+mart``, ``staging+mart+site``) gets its staging
+part scaffolded; the other fused layers stay hand-written.
 
 The source/dataset slugs are never guessed from the issue title's prose -- the
 no-LLM dispatcher (``scripts/dispatch.py``) embeds them deterministically, from
@@ -33,7 +35,7 @@ import argparse
 import re
 from pathlib import Path
 
-from scripts.reference_for_layer import infer_layer
+from scripts.reference_for_layer import infer_layers
 from scripts.scaffold_ingestion import scaffold_ingestion
 from scripts.scaffold_staging import scaffold_staging
 
@@ -75,8 +77,13 @@ def build_note(root: Path, title: str | None, labels: list[str], body: str | Non
     Returns "" for any layer without a scaffold generator, so the common case
     (mart/site/export/data-refresh issues) adds nothing to the prompt.
     """
-    layer = infer_layer(title, labels)
-    scaffolder = _SCAFFOLDERS.get(layer)
+    layers = infer_layers(title, labels)
+    # At most one layer of an issue is scaffoldable: ingestion is always its
+    # own single-layer issue, and a fused step (staging+mart, staging+mart+site)
+    # can carry only staging. Scaffold that part; the other fused layers are
+    # judgement calls the agent writes itself.
+    layer = next((la for la in layers if la in _SCAFFOLDERS), None)
+    scaffolder = _SCAFFOLDERS.get(layer) if layer else None
     if scaffolder is None:
         return ""
 
@@ -127,6 +134,13 @@ def build_note(root: Path, title: str | None, labels: list[str], body: str | Non
             "`scripts/check_freshness.py` (a prober, or a human-watched row -- matching "
             "the release-detection pattern you implement). The build stays red until "
             "every register lists the source.\n"
+        )
+    if len(layers) > 1:
+        others = ", ".join(f"`{la}`" for la in layers if la != layer)
+        note += (
+            f"\nOnly the `{layer}` part of this fused issue has a scaffold -- the "
+            f"{others} layer(s) are judgement calls: write them yourself, modelled on "
+            "the reference above.\n"
         )
     return note
 

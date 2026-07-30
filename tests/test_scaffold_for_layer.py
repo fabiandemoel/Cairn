@@ -81,6 +81,22 @@ def test_build_note_ingestion_success_writes_files(tmp_path: Path) -> None:
     assert (tmp_path / "sources" / "rivm" / "manifest.yml").is_file()
 
 
+def test_build_note_scaffolds_staging_part_of_fused_issue(tmp_path: Path) -> None:
+    """A fused staging+mart(+site) issue still gets its staging boilerplate."""
+    staging = tmp_path / "transform" / "models" / "staging"
+    staging.mkdir(parents=True)
+    (staging / "_staging.yml").write_text("version: 2\n\nmodels:\n")
+    (tmp_path / "transform" / "dbt_project.yml").write_text(
+        "name: cairn\n\nvars:\n  raw_dir: x\n\nmodels:\n  cairn:\n    +materialized: view\n"
+    )
+    note = build_note(tmp_path, "feat: RIVM — dbt staging + dbt mart + site", ["feat"], GOOD_BODY)
+    assert "already been written to" in note
+    assert (tmp_path / "transform/models/staging/stg_rivm__emissieregistratie.sql").is_file()
+    # The note is explicit that only staging was scaffolded.
+    assert "Only the `staging` part of this fused issue" in note
+    assert "`mart`" in note and "`site`" in note
+
+
 def test_build_note_staging_success_writes_files(tmp_path: Path) -> None:
     staging = tmp_path / "transform" / "models" / "staging"
     staging.mkdir(parents=True)

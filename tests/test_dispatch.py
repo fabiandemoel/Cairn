@@ -52,6 +52,13 @@ layers:
 -->
 Surface the reconciliation drift.
 
+---
+
+### Grouping note (organisational — not a candidate)
+
+Prose that belongs to no candidate; the stray `---` above once silently hid
+everything below it from the dispatcher.
+
 ### 4. No block yet
 Prose only.
 
@@ -104,6 +111,24 @@ def test_parse_backlog_reads_blocks_holds_and_errors() -> None:
     assert "<!--" not in rivm.entry_md and "Watch:" in rivm.entry_md
 
 
+def test_parse_backlog_survives_stray_rules_and_organisational_headings() -> None:
+    """A `---` rule / unnumbered heading must never hide later candidates.
+
+    Regression guard for the bug PR #144 found in the live file: the parser
+    used to end the "Live candidates" section at the first `---`, silently
+    hiding every candidate after it from the dispatcher for weeks.
+    """
+    cands = parse_backlog(BACKLOG)
+    # "No block yet" sits BELOW a stray `---` and an unnumbered `###` heading
+    # and is still parsed; the unnumbered heading is not a candidate.
+    assert [c.name for c in cands][-1] == "No block yet"
+    assert all("Grouping note" not in c.name for c in cands)
+    # The organisational prose does not leak into any candidate's verbatim
+    # entry (the chunk ends at the rule/heading).
+    cov = next(c for c in cands if c.name == "Coverage observability")
+    assert "Grouping note" not in cov.entry_md and "silently hid" not in cov.entry_md
+
+
 def test_parse_backlog_ignores_rejected_section_and_malformed_blocks() -> None:
     text = BACKLOG.replace("mart+site:", "warehouse+site:")  # unknown layer in a fused key
     cands = parse_backlog(text)
@@ -114,14 +139,15 @@ def test_parse_backlog_ignores_rejected_section_and_malformed_blocks() -> None:
 
 
 def test_fused_step_parser_rejects_bad_shapes() -> None:
-    # A fused key may not include a scaffoldable layer (ingestion/staging keep
-    # their own step so the scaffold + research gate stay per-layer).
-    scaffoldable = BACKLOG.replace(
+    # A fused key may never include ingestion — a new source pin keeps its own
+    # step (research gate, new-source guidance, and the manual approval tier
+    # all key off a single-layer ingestion issue).
+    with_ingestion = BACKLOG.replace(
         "mart+site: transform/models/marts/mart_coverage.sql; site/sources/cairn/coverage.sql",
-        "staging+mart: a.sql; b.sql",
+        "ingestion+staging: a.yml; b.sql",
     )
-    cov = next(c for c in parse_backlog(scaffoldable) if c.name == "Coverage observability")
-    assert cov.parse_error and "scaffoldable" in cov.parse_error
+    cov = next(c for c in parse_backlog(with_ingestion) if c.name == "Coverage observability")
+    assert cov.parse_error and "ingestion must be its own step" in cov.parse_error
 
     # Fused parts must be in dependency order.
     bad_order = BACKLOG.replace("mart+site:", "site+mart:")
@@ -135,6 +161,28 @@ def test_fused_step_parser_rejects_bad_shapes() -> None:
     )
     cov = next(c for c in parse_backlog(mismatch) if c.name == "Coverage observability")
     assert cov.parse_error and "one ';'-separated sentinel" in cov.parse_error
+
+
+def test_fused_step_may_include_staging() -> None:
+    """staging+mart(+site) fuses into one step — one PR round-trip, not three.
+
+    Staging is a scaffolded near-copy; forcing it into its own approve→PR→CI
+    round-trip bought review value only in theory (the human latency between
+    rounds dominated: agent runs take ~10 minutes, merges took days). The
+    scaffold still runs — LayerStep.scaffoldable_part surfaces the staging
+    part of a fused step.
+    """
+    fused = BACKLOG.replace(
+        "mart+site: transform/models/marts/mart_coverage.sql; site/sources/cairn/coverage.sql",
+        "staging+mart+site: a.sql; b.sql; c.sql",
+    )
+    cov = next(c for c in parse_backlog(fused) if c.name == "Coverage observability")
+    assert cov.parse_error is None
+    step = cov.layers[0]
+    assert step.parts == ("staging", "mart", "site")
+    assert step.title == "dbt staging + dbt mart + site"
+    assert step.scaffoldable_part == "staging"
+    assert step.auto_approvable
 
 
 def test_next_missing_step_walks_sentinels(tmp_path: Path) -> None:
@@ -235,6 +283,72 @@ def test_backlog_dispatches_fused_mart_site_as_one_issue(tmp_path: Path) -> None
     assert infer_layers(spec.title, ["proposal"]) == list(step.parts)
 
 
+def test_backlog_auto_approves_non_ingestion_steps_only(tmp_path: Path) -> None:
+    """The approval tiers: ingestion keeps the manual gate, the rest pre-approve.
+
+    A non-ingestion step's spec carries the `approved` label from creation plus
+    auto_approve=True (the workflow then triggers cairn-implement directly);
+    its body says so. An ingestion step — where new trust enters the system —
+    stays a plain `proposal` for a human to label.
+    """
+    cands = parse_backlog(BACKLOG)
+    rivm = cands[1]
+
+    # RIVM's next step is ingestion -> manual gate.
+    spec, _ = backlog_issue_spec([rivm], tmp_path, [], [])
+    assert spec is not None and spec.title.endswith("— ingestion")
+    assert spec.labels == ["proposal"] and spec.auto_approve is False
+    assert "pre-authorized" not in spec.body
+
+    # Coverage's mart+site step -> auto-approved.
+    cov = next(c for c in cands if c.name == "Coverage observability")
+    spec, _ = backlog_issue_spec([cov], tmp_path, [], [])
+    assert spec is not None and spec.title.endswith("— dbt mart + site")
+    assert spec.labels == ["proposal", "approved"] and spec.auto_approve is True
+    assert "pre-authorized" in spec.body
+
+    # The kill switch (DISPATCH_AUTO_APPROVE=false) restores label-gating.
+    spec, _ = backlog_issue_spec([cov], tmp_path, [], [], auto_approve=False)
+    assert spec is not None
+    assert spec.labels == ["proposal"] and spec.auto_approve is False
+    assert "pre-authorized" not in spec.body
+
+
+def test_backlog_fused_staging_issue_scaffolds_and_round_trips(tmp_path: Path) -> None:
+    """A fused staging+mart step still gets Scaffold parameters and the right exemplars."""
+    from scripts.implement_strategy import HAIKU, gate
+    from scripts.reference_for_layer import infer_layers
+
+    fused = BACKLOG.replace(
+        """layers:
+  ingestion: sources/rivm/manifest.yml
+  staging: transform/models/staging/stg_rivm__emissieregistratie.sql
+  mart: transform/models/marts/mart_rivm_cbs_reconciliation.sql""",
+        """layers:
+  ingestion: sources/rivm/manifest.yml
+  staging+mart: staging/stg_rivm__emissieregistratie.sql; marts/mart_rivm.sql""",
+    )
+    rivm = parse_backlog(fused)[1]
+    assert rivm.parse_error is None
+    # Ship the ingestion sentinel so the fused step is next.
+    (tmp_path / "sources/rivm").mkdir(parents=True)
+    (tmp_path / "sources/rivm/manifest.yml").write_text("snapshots: []\n")
+
+    spec, _ = backlog_issue_spec([rivm], tmp_path, [], [])
+    assert spec is not None
+    assert spec.title.endswith("— dbt staging + dbt mart")
+    # The staging part is scaffoldable, so the slug block rides along.
+    assert "Scaffold parameters:" in spec.body
+    assert "- source: rivm" in spec.body and "- dataset: emissieregistratie" in spec.body
+    # Non-ingestion -> pre-approved.
+    assert spec.auto_approve is True
+    # Round-trips through implement's layer inference and strategy routing:
+    # both fused exemplars injected, Haiku orchestrator behind a Sonnet plan.
+    assert infer_layers(spec.title, ["proposal", "approved"]) == ["staging", "mart"]
+    strategy = gate(spec.title, ["proposal", "approved"])
+    assert strategy["model"] == HAIKU and strategy["plan_needed"] == "true"
+
+
 def test_backlog_title_suffix_matches_implements_layer_inference(tmp_path: Path) -> None:
     from scripts.reference_for_layer import infer_layers
 
@@ -289,7 +403,7 @@ def test_backlog_skips_fully_shipped_candidate(tmp_path: Path) -> None:
 def test_run_combines_scopes_and_saturation(tmp_path: Path) -> None:
     (tmp_path / "BACKLOG.md").write_text(BACKLOG, encoding="utf-8")
 
-    specs, summary = run(
+    specs, summary, _ = run(
         tmp_path,
         scope="both",
         open_issues=[],
@@ -301,10 +415,13 @@ def test_run_combines_scopes_and_saturation(tmp_path: Path) -> None:
     assert "data: eurostat new release 2025-01-15" in titles
     assert any(t.startswith("feat: Emissieregistratie") for t in titles)
     assert "Opening 2 issue(s)" in summary
+    # The freshness issue keeps the manual gate; the feat issue (ingestion
+    # layer here) does too, so nothing in this run is auto-approved.
+    assert all(not s.auto_approve for s in specs)
 
     # Saturated queue: backlog dispatch skipped, freshness still opens.
     saturated = [{"title": f"t{i}", "labels": ["proposal"]} for i in range(5)]
-    specs, summary = run(
+    specs, summary, replenish_needed = run(
         tmp_path,
         scope="both",
         open_issues=saturated,
@@ -314,10 +431,11 @@ def test_run_combines_scopes_and_saturation(tmp_path: Path) -> None:
     )
     assert [s.title for s in specs] == ["data: eurostat new release 2025-01-15"]
     assert "saturated" in summary
+    assert replenish_needed is False  # skipped backlog scope never signals
 
     # Approved proposals do not count against the gate.
     approved = [{"title": f"t{i}", "labels": ["proposal", "approved"]} for i in range(5)]
-    specs, _ = run(
+    specs, _, _ = run(
         tmp_path,
         scope="backlog",
         open_issues=approved,
@@ -327,12 +445,34 @@ def test_run_combines_scopes_and_saturation(tmp_path: Path) -> None:
     assert len(specs) == 1 and specs[0].title.startswith("feat:")
 
 
+def test_run_signals_replenish_when_menu_runs_low(tmp_path: Path) -> None:
+    (tmp_path / "BACKLOG.md").write_text(BACKLOG, encoding="utf-8")
+    # The fixture has exactly 2 candidates with undispatched work (RIVM and
+    # Coverage; the EUA one is held, "No block yet" doesn't parse).
+    _, summary, needed = run(
+        tmp_path, scope="backlog", open_issues=[], open_prs=[], saturation_threshold=5
+    )
+    assert needed is True  # 2 < default threshold 3
+    assert "triggering replenish" in summary
+
+    _, summary, needed = run(
+        tmp_path,
+        scope="backlog",
+        open_issues=[],
+        open_prs=[],
+        saturation_threshold=5,
+        replenish_threshold=2,
+    )
+    assert needed is False
+    assert "2 candidate(s) with undispatched work" in summary
+
+
 def test_run_backlog_scope_never_probes_the_network(tmp_path: Path) -> None:
     (tmp_path / "BACKLOG.md").write_text(BACKLOG, encoding="utf-8")
     # No statuses injected: scope="backlog" must not call collect_statuses (which
     # would hit the network from a tmp repo with no pipeline files and fail loudly
     # in the summary as probe-failed rows).
-    specs, summary = run(
+    specs, summary, _ = run(
         tmp_path, scope="backlog", open_issues=[], open_prs=[], saturation_threshold=5
     )
     assert len(specs) == 1 and specs[0].title.startswith("feat:")
@@ -356,3 +496,26 @@ def test_live_backlog_dispatch_blocks_are_valid() -> None:
         assert cand.parse_error is None, f"{cand.name}: {cand.parse_error}"
         ranks = [LAYER_RANK[part] for step in cand.layers for part in step.parts]
         assert ranks == sorted(ranks), f"{cand.name}: layers out of dependency order"
+
+
+def test_live_backlog_every_numbered_heading_is_a_visible_candidate() -> None:
+    """Guard against dispatcher-invisible candidates in the real BACKLOG.md.
+
+    PR #144 found that a stray `---` had silently hidden every candidate after
+    it from the dispatcher for weeks — the file claimed they were dispatchable
+    while parse_backlog never saw them. The parser no longer stops at rules,
+    and this asserts the invariant end-to-end: every numbered `### <n>.`
+    heading anywhere in the file must surface as a parsed candidate (numbered
+    headings are reserved for live candidates; organisational subheadings use
+    `####` or no number).
+    """
+    import re
+
+    root = Path(__file__).resolve().parent.parent
+    text = (root / "BACKLOG.md").read_text(encoding="utf-8")
+    numbered = re.findall(r"^### \d+\.\s*(.+?)\s*$", text, re.M)
+    parsed = [c.name for c in parse_backlog(text)]
+    assert parsed == numbered, (
+        "candidates invisible to the dispatcher (numbered heading not parsed): "
+        f"{sorted(set(numbered) - set(parsed))}"
+    )
