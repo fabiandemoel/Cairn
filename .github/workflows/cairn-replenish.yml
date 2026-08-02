@@ -12,22 +12,49 @@ name: Cairn Replenish
 on:
   schedule:
     - cron: "42 6 * * 4"   # Thursday 06:42 UTC (clear of the Mon reproducibility cron)
-  workflow_dispatch: {}
+  workflow_dispatch: {}    # also triggered by cairn-dispatch when the menu runs low
 
 permissions:
   contents: write
   pull-requests: write
   issues: read
 
+# cancel-in-progress must stay FALSE: cairn-dispatch triggers this workflow on
+# backlog depletion (potentially on consecutive pushes to main), and cancelling
+# an in-flight run would waste its whole Claude spend mid-curation. A queued
+# duplicate instead hits the open-PR guard below and exits in seconds.
 concurrency:
   group: cairn-replenish
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   replenish:
     runs-on: ubuntu-latest
     steps:
+      # A replenish PR that is still open means last run's curation was never
+      # merged — running again would stack a second, conflicting rewrite of
+      # BACKLOG.md on top of it (observed: PRs #141/#142 sat open two weeks and
+      # today's run had to spend its turns superseding them). Skip instead;
+      # the next trigger after the human merges/closes the PR runs normally.
+      - name: Skip while a replenish PR is still open
+        id: guard
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', per_page: 100,
+            });
+            const open = prs.filter((p) => p.head.ref.startsWith('replenish/'));
+            if (open.length) {
+              core.notice(`Skipping: replenish PR #${open[0].number} is still open.`);
+              core.setOutput('skip', 'true');
+            } else {
+              core.setOutput('skip', 'false');
+            }
+
       - uses: actions/checkout@v4
+        if: steps.guard.outputs.skip != 'true'
         with:
           token: ${{ secrets.CAIRN_BOT_TOKEN }}
 
@@ -35,6 +62,7 @@ jobs:
       # this run opens, not an older one.
       - name: Record run start
         id: run_start
+        if: steps.guard.outputs.skip != 'true'
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       # No-LLM: the same orientation map the other two agents get. Curation needs
@@ -44,6 +72,7 @@ jobs:
       # doesn't re-derive it by listing directories.
       - name: Generate repo orientation map
         id: orient
+        if: steps.guard.outputs.skip != 'true'
         run: |
           {
             echo 'map<<ORIENT_EOF'
@@ -53,6 +82,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - id: claude
+        if: steps.guard.outputs.skip != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -141,7 +171,7 @@ jobs:
       # execution_file into a markdown summary + the total cost in USD.
       - name: Summarise run cost
         id: cost
-        if: always()
+        if: always() && steps.guard.outputs.skip != 'true'
         run: |
           python3 scripts/ai_cost_summary.py \
             --execution-file "${{ steps.claude.outputs.execution_file }}" \
@@ -152,7 +182,7 @@ jobs:
       # Attribute the cost to the replenish/<date> PR this run opened, if any
       # (a run that changes nothing opens no PR, so there is no target).
       - name: Attribute run cost
-        if: always()
+        if: always() && steps.guard.outputs.skip != 'true'
         uses: actions/github-script@v7
         env:
           RUN_START: ${{ steps.run_start.outputs.ts }}

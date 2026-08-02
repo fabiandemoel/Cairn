@@ -286,18 +286,37 @@ gate for every code change.
   block (schema in BACKLOG.md's "Dispatch metadata" section, maintained by
   replenish). Dedup against open issues/PRs and the saturation gate (Actions
   variable `DISPATCH_BACKLOG_SATURATION`, default 5 un-approved proposals) live
-  in the same tested script. Output is GitHub issues labelled `proposal` —
-  never code, never a PR. Event-driven on purpose: the next layer becomes
-  dispatchable exactly when the previous one merges, so `push` to main is the
-  trigger and no daily polling (or LLM spend) is needed.
-- **`cairn-implement.yml`** — runs only when a human adds the `approved` label
-  to an issue (or via manual dispatch). Implements that one issue on an
+  in the same tested script. Output is GitHub issues — never code, never a PR.
+  **Approval is tiered**: a non-ingestion feat step is *auto-approved* — its
+  BACKLOG.md entry (quoted verbatim into the issue) was already human-reviewed
+  when the replenish PR merged, so re-approving the same text via the label
+  only added latency (observed: proposals sat un-triaged for 15 days while an
+  implement run takes ~10 minutes). Dispatch creates such issues with the
+  `approved` label and triggers cairn-implement for them directly (an explicit
+  `workflow_dispatch` — GITHUB_TOKEN-created issues fire no label events); the
+  human checkpoint moves to the implementation PR's merge. Ingestion steps and
+  `data-refresh` issues — where new trust enters the system — stay `proposal`
+  for a human to label. Set the Actions variable `DISPATCH_AUTO_APPROVE=false`
+  to restore label-gating for everything. Dispatch also triggers replenish
+  when fewer than `DISPATCH_REPLENISH_THRESHOLD` (default 3) candidates still
+  have undispatched work, so the menu refills on demand rather than by
+  calendar. Event-driven on purpose: the next layer becomes dispatchable
+  exactly when the previous one merges, so `push` to main is the trigger and
+  no daily polling (or LLM spend) is needed.
+- **`cairn-implement.yml`** — runs when an issue gains the `approved` label
+  (added by a human for ingestion/data-refresh issues, at creation by the
+  dispatcher for pre-authorized steps, which then triggers this workflow via
+  manual dispatch). Implements that one issue on an
   `agent/*` branch and opens a PR against main. It must pass the full local CI
   command set before opening the PR, and it never merges. PRs are opened with
   `CAIRN_BOT_TOKEN` (not `GITHUB_TOKEN`) so CI actually fires on them.
-- **`cairn-replenish.yml`** (weekly) — curates BACKLOG.md only, as a docs-only
+- **`cairn-replenish.yml`** (weekly cron + on-demand from dispatch when the
+  menu runs low) — curates BACKLOG.md only, as a docs-only
   PR: new candidates, re-scoring, retiring off-spine ideas to "Considered and
-  rejected". Never merges. On its docs-only PRs, ci.yml's heavy matrix
+  rejected". Never merges. Skips its run while a previous `replenish/*` PR is
+  still open — two open curation PRs just rewrite the same file against each
+  other (observed with PRs #141/#142), so the un-merged PR is the signal to
+  stop, not to stack. On its docs-only PRs, ci.yml's heavy matrix
   self-skips at the *job* level (the `changes` job detects a docs-only diff;
   the skipped jobs still report "skipped", which satisfies required status
   checks — a trigger-level paths-ignore would report nothing and leave the PR
@@ -398,11 +417,13 @@ by turn (the dominant repeated cost in the run logs):
   the run.
 
 The human stays out of the doing for code changes; the manual acts are
-labelling an issue `approved`, manually running `cairn-ingest.yml` when a
-source needs a new pin, and merging a green PR. That merge is the audit
-checkpoint — keep it. BACKLOG.md is the curated menu these agents draw from;
-its "Rules of the game" restate these invariants as admission criteria for new
-sources.
+merging a green PR (every PR — implement never merges), labelling
+ingestion/data-refresh issues `approved` (the only issue tier still
+label-gated), and manually running `cairn-ingest.yml` when a source needs a
+new pin. Human attention is spent where trust enters or leaves the system —
+the PR merge is the audit checkpoint for every change; keep it. BACKLOG.md is
+the curated menu these agents draw from; its "Rules of the game" restate these
+invariants as admission criteria for new sources.
 
 **Cost visibility.** Both agent workflows end with two best-effort steps
 that surface what the run cost (the dispatcher runs no model, so it has no

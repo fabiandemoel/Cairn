@@ -12,11 +12,16 @@ deterministic once their inputs were precomputed, so no LLM runs here at all:
    block (maintained by cairn-replenish, schema documented in BACKLOG.md's
    header) declaring, per step, a *sentinel path* — a new file that step
    creates. Most steps are a single layer, but non-scaffoldable layers can be
-   fused (``mart+site``) so a mart and its thin read-only site page ship as one
-   issue. The next step to dispatch is simply the first step not yet fully built
-   (any sentinel missing); the issue body quotes the candidate's BACKLOG entry
-   verbatim (its scope and "watch" caveats) plus a templated scope section, so
-   cairn-implement still receives an authoritative spec.
+   fused (``mart+site``, ``staging+mart+site``) so layers that ship together
+   need only one PR round-trip. The next step to dispatch is simply the first
+   step not yet fully built (any sentinel missing); the issue body quotes the
+   candidate's BACKLOG entry verbatim (its scope and "watch" caveats) plus a
+   templated scope section, so cairn-implement still receives an authoritative
+   spec. Non-ingestion steps are **auto-approved**: their entry was already
+   human-reviewed when the replenish PR merged, so the issue is labelled
+   ``approved`` at creation and the workflow triggers cairn-implement for it
+   directly — the implementation PR's human merge stays the audit checkpoint.
+   Ingestion steps (new source, new manifest) keep the manual label gate.
 
 Design rules, matching the sibling ``scripts/*.py`` helpers:
 
@@ -55,14 +60,35 @@ LAYER_TITLES: dict[str, str] = {
 LAYER_RANK: dict[str, int] = {name: i for i, name in enumerate(LAYER_TITLES)}
 
 # Layers whose fixed boilerplate cairn-implement can pre-scaffold from the
-# "Scaffold parameters" block (see scripts/scaffold_for_layer.py). These must
-# stay their own step: the scaffold + the (ingestion-only) source-research gate
-# key off a single-layer issue, so they can never be fused into a combined step.
+# "Scaffold parameters" block (see scripts/scaffold_for_layer.py).
 _SCAFFOLDABLE = {"ingestion", "staging"}
 
+# Layers that may never be fused into a combined step. Ingestion keeps its own
+# step because the source-research gate and the new-source guidance in
+# cairn-implement key off a single-layer ingestion issue, and because a new
+# source pin is where a human should look at exactly one thing. Staging *may*
+# fuse (staging+mart, staging+mart+site): it is a scaffolded near-copy, and
+# scaffold_for_layer scaffolds the staging part of a fused issue too.
+_NEVER_FUSED = {"ingestion"}
+
 _DISPATCH_BLOCK_RE = re.compile(r"<!--\s*dispatch\b(.*?)-->", re.S)
-_CANDIDATE_HEAD_RE = re.compile(r"^### (?:\d+\.\s*)?(.+?)\s*$", re.M)
+# A live candidate heading is `### <n>. <name>` — the number is required.
+# Unnumbered `###`/`####` headings inside the section are organisational and
+# invisible to the dispatcher (they end the previous candidate's chunk, see
+# _CHUNK_BOUNDARY_RE, but never become candidates themselves).
+_CANDIDATE_HEAD_RE = re.compile(r"^### (\d+)\.\s*(.+?)\s*$", re.M)
+# Ends a candidate's chunk early: any other heading or a horizontal rule. This
+# keeps prose that belongs to no candidate (a subsection intro, a `---` rule)
+# out of the previous candidate's verbatim-quoted entry — and, crucially, a
+# stray `---` no longer truncates the whole section (which once silently hid
+# every candidate after it from the dispatcher).
+_CHUNK_BOUNDARY_RE = re.compile(r"^(?:#{2,}\s|---\s*$)", re.M)
 _SLUG_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+# Layers whose dispatched issue keeps the manual `approved`-label gate even
+# when auto-approval is on. Ingestion is where new trust enters the system (a
+# new source, a new append-only manifest, live-web research feeding the run).
+_MANUAL_APPROVAL = {"ingestion"}
 
 
 @dataclass(frozen=True)
@@ -93,10 +119,30 @@ class LayerStep:
 
     @property
     def scaffoldable_part(self) -> str | None:
-        """The lone scaffoldable layer if this is a single ingestion/staging step."""
-        if len(self.parts) == 1 and self.parts[0] in _SCAFFOLDABLE:
-            return self.parts[0]
+        """The scaffoldable layer of this step, if any.
+
+        A single ingestion/staging step is its own scaffoldable part; a fused
+        step can carry at most `staging` (ingestion is never fused), and the
+        scaffold then pre-writes the staging boilerplate while the other fused
+        layers are written by hand.
+        """
+        for part in self.parts:
+            if part in _SCAFFOLDABLE:
+                return part
         return None
+
+    @property
+    def auto_approvable(self) -> bool:
+        """Whether this step may skip the human `approved`-label gate.
+
+        The BACKLOG.md entry a dispatched issue quotes verbatim was already
+        human-reviewed when its replenish PR merged, so a second approval of
+        the same text adds latency without information — except where new
+        trust enters the system: an **ingestion** step (new source, new
+        manifest, live-web research) keeps the manual gate. The implementation
+        PR's human merge remains the audit checkpoint for every step.
+        """
+        return not any(part in _MANUAL_APPROVAL for part in self.parts)
 
     def is_built(self, root: Path) -> bool:
         return all((root / sentinel).exists() for sentinel in self.sentinels)
@@ -124,6 +170,11 @@ class IssueSpec:
     title: str
     labels: list[str]
     body: str
+    # True when the workflow should trigger cairn-implement for this issue
+    # immediately after creating it (the issue also carries the `approved`
+    # label from birth). The explicit workflow_dispatch is required because
+    # issues created with GITHUB_TOKEN fire no label events.
+    auto_approve: bool = False
 
 
 def _parse_layer_step(layer_key: str, path_spec: str) -> LayerStep:
@@ -131,8 +182,8 @@ def _parse_layer_step(layer_key: str, path_spec: str) -> LayerStep:
 
     A fused key joins two or more layer names with ``+``; its value carries one
     ``;``-separated sentinel per part. Fused parts must be distinct, listed in
-    dependency order, and free of scaffoldable layers (ingestion/staging keep
-    their own step — see ``_SCAFFOLDABLE``).
+    dependency order, and free of never-fused layers (ingestion keeps its own
+    step — see ``_NEVER_FUSED``; staging may fuse with the layers above it).
     """
     parts = [p.strip().lower() for p in layer_key.split("+")]
     sentinels = [s.strip() for s in path_spec.split(";")]
@@ -151,11 +202,11 @@ def _parse_layer_step(layer_key: str, path_spec: str) -> LayerStep:
             raise ValueError(f"fused step {layer_key!r} repeats a layer")
         if [LAYER_RANK[p] for p in parts] != sorted(LAYER_RANK[p] for p in parts):
             raise ValueError(f"fused step {layer_key!r} lists layers out of dependency order")
-        scaffoldable = [p for p in parts if p in _SCAFFOLDABLE]
-        if scaffoldable:
+        never_fused = [p for p in parts if p in _NEVER_FUSED]
+        if never_fused:
             raise ValueError(
-                f"fused step {layer_key!r} cannot include scaffoldable layer(s) "
-                f"{scaffoldable} — ingestion/staging must be their own step"
+                f"fused step {layer_key!r} cannot include layer(s) "
+                f"{never_fused} — ingestion must be its own step"
             )
     return LayerStep(parts=tuple(parts), sentinels=tuple(sentinels))
 
@@ -201,13 +252,21 @@ def _parse_dispatch_block(text: str) -> dict:
 
 
 def parse_backlog(text: str) -> list[Candidate]:
-    """Extract the "Live candidates" entries, in menu order."""
+    """Extract the "Live candidates" entries, in menu order.
+
+    The section runs from ``## Live candidates`` to the next H2 heading —
+    deliberately **not** to the first ``---`` rule: a stray rule once silently
+    hid every candidate after it from the dispatcher (fixed in PR #144's
+    BACKLOG edit; fixed here structurally). Only numbered ``### <n>.``
+    headings are candidates; other headings and rules merely end the previous
+    candidate's chunk so unrelated prose never rides along in the verbatim
+    quote.
+    """
     live_start = text.find("## Live candidates")
     if live_start < 0:
         return []
     tail = text[live_start:]
-    # The section ends at the next H2 or the `---` rule before it.
-    end = re.search(r"^(?:## (?!Live candidates)|---\s*$)", tail[1:], re.M)
+    end = re.search(r"^## (?!Live candidates)", tail[1:], re.M)
     section = tail[: end.start() + 1] if end else tail
 
     candidates: list[Candidate] = []
@@ -215,9 +274,14 @@ def parse_backlog(text: str) -> list[Candidate]:
     for i, head in enumerate(heads):
         chunk_end = heads[i + 1].start() if i + 1 < len(heads) else len(section)
         chunk = section[head.start() : chunk_end]
+        # Truncate at the first non-candidate heading or `---` rule after the
+        # candidate's own heading line: that content belongs to no candidate.
+        boundary = _CHUNK_BOUNDARY_RE.search(chunk, head.end() - head.start())
+        if boundary:
+            chunk = chunk[: boundary.start()]
         block = _DISPATCH_BLOCK_RE.search(chunk)
         entry_md = _DISPATCH_BLOCK_RE.sub("", chunk).strip()
-        cand = Candidate(name=head.group(1).strip(), entry_md=entry_md)
+        cand = Candidate(name=head.group(2).strip(), entry_md=entry_md)
         if block is None:
             cand.parse_error = "no <!-- dispatch --> block"
             candidates.append(cand)
@@ -309,7 +373,16 @@ def _fmt_steps(steps: list[LayerStep]) -> str:
     return "; ".join(f"{s.key} (`{'`, `'.join(s.sentinels)}`)" for s in steps)
 
 
-def _backlog_issue_body(candidate: Candidate, step: LayerStep) -> str:
+_AUTO_APPROVE_NOTE = (
+    "This step was **pre-authorized**: the BACKLOG.md entry quoted below was "
+    "human-reviewed when its replenish PR merged, so this issue carries the "
+    "`approved` label from creation and implementation starts immediately. The "
+    "implementation PR's human merge remains the audit checkpoint. (Remove the "
+    "label and close the PR to veto.)"
+)
+
+
+def _backlog_issue_body(candidate: Candidate, step: LayerStep, auto_approved: bool) -> str:
     idx = candidate.layers.index(step)
     done = candidate.layers[:idx]
     remaining = candidate.layers[idx + 1 :]
@@ -349,6 +422,8 @@ def _backlog_issue_body(candidate: Candidate, step: LayerStep) -> str:
             "or this layer will be re-dispatched."
         )
 
+    approval_note = f"\n{_AUTO_APPROVE_NOTE}\n" if auto_approved else ""
+
     return f"""## Executive summary
 
 This issue asks for the **{step.title}** {unit} of the backlog candidate \
@@ -358,7 +433,7 @@ small, independently reviewable steps; this is the next step whose artifact does
 exist in the repository yet. It was opened automatically by the no-LLM dispatcher \
 (`cairn-dispatch.yml`); the full candidate description, including its "watch" caveats, \
 is quoted verbatim below.
-
+{approval_note}
 {scaffold}## Scope: this {unit} only
 
 - {scope_bullet}
@@ -376,11 +451,21 @@ def backlog_issue_spec(
     root: Path,
     open_issue_titles: list[str],
     open_pr_titles: list[str],
+    *,
+    auto_approve: bool = True,
 ) -> tuple[IssueSpec | None, list[str]]:
     """The single next-layer issue for the highest dispatchable candidate.
 
     Mirrors the old scout rules: take the top of the menu, one small
     single-layer issue, skip anything already tracked by an open issue or PR.
+
+    With *auto_approve* on (the default; the workflow can switch it off via
+    the ``DISPATCH_AUTO_APPROVE`` Actions variable), a non-ingestion step's
+    issue carries the ``approved`` label from creation and the workflow
+    triggers cairn-implement for it directly — the entry was already
+    human-reviewed when its replenish PR merged, and the implementation PR's
+    merge stays the human checkpoint. Ingestion steps always keep the manual
+    ``approved``-label gate (see ``LayerStep.auto_approvable``).
     """
     notes: list[str] = []
     for cand in candidates:
@@ -407,7 +492,14 @@ def backlog_issue_spec(
             notes.append(f"backlog: skipped {cand.name!r} — an open PR references it")
             continue
         title = f"feat: {cand.name} — {step.title}"
-        spec = IssueSpec(title=title, labels=["proposal"], body=_backlog_issue_body(cand, step))
+        auto = auto_approve and step.auto_approvable
+        labels = ["proposal", "approved"] if auto else ["proposal"]
+        spec = IssueSpec(
+            title=title,
+            labels=labels,
+            body=_backlog_issue_body(cand, step, auto),
+            auto_approve=auto,
+        )
         return spec, notes
     notes.append("backlog: nothing to dispatch")
     return None, notes
@@ -430,11 +522,21 @@ def run(
     open_prs: list[dict],
     saturation_threshold: int,
     statuses: list[SourceStatus] | None = None,
-) -> tuple[list[IssueSpec], str]:
-    """Compute the issues to open plus a human-readable run summary."""
+    auto_approve: bool = True,
+    replenish_threshold: int = 3,
+) -> tuple[list[IssueSpec], str, bool]:
+    """Compute the issues to open, a run summary, and a replenish-needed flag.
+
+    The third return value is True when fewer than *replenish_threshold*
+    candidates still have undispatched work — the workflow then triggers
+    cairn-replenish directly instead of waiting for its weekly cron, so the
+    menu refills when it actually runs low (replenish itself skips the run if
+    its previous PR is still open, so this can't stack PRs).
+    """
     issue_titles = [i.get("title", "") for i in open_issues]
     pr_titles = [p.get("title", "") for p in open_prs]
     specs: list[IssueSpec] = []
+    replenish_needed = False
     lines: list[str] = ["## Cairn dispatch (no-LLM)", ""]
 
     if scope in ("both", "freshness"):
@@ -465,18 +567,29 @@ def run(
                 if backlog_path.is_file()
                 else []
             )
-            spec, notes = backlog_issue_spec(candidates, root, issue_titles, pr_titles)
+            spec, notes = backlog_issue_spec(
+                candidates, root, issue_titles, pr_titles, auto_approve=auto_approve
+            )
             lines += [f"- {n}" for n in notes]
             if spec is not None:
                 specs.append(spec)
+            remaining = sum(
+                1 for c in candidates if c.dispatchable and next_missing_step(c, root) is not None
+            )
+            replenish_needed = remaining < replenish_threshold
+            lines.append(
+                f"- backlog: {remaining} candidate(s) with undispatched work "
+                f"(replenish threshold {replenish_threshold}"
+                f"{' — triggering replenish' if replenish_needed else ''})"
+            )
 
     lines.append("")
     if specs:
         lines.append(f"**Opening {len(specs)} issue(s):**")
-        lines += [f"- {s.title}" for s in specs]
+        lines += [f"- {s.title}" + (" *(auto-approved)*" if s.auto_approve else "") for s in specs]
     else:
         lines.append("**No issues to open.**")
-    return specs, "\n".join(lines) + "\n"
+    return specs, "\n".join(lines) + "\n", replenish_needed
 
 
 def main() -> None:
@@ -503,19 +616,46 @@ def main() -> None:
         help="Skip backlog dispatch when this many un-approved proposal issues are open.",
     )
     parser.add_argument(
+        "--auto-approve",
+        choices=["true", "false"],
+        default="true",
+        help="Label non-ingestion feat issues `approved` at creation and have the "
+        "workflow trigger cairn-implement for them directly (default: true).",
+    )
+    parser.add_argument(
+        "--replenish-threshold",
+        type=int,
+        default=3,
+        help="Signal replenish_needed when fewer candidates than this still have "
+        "undispatched work.",
+    )
+    parser.add_argument(
         "-o", "--output", type=Path, help="Write the issues-to-open JSON here (default: stdout)."
     )
     args = parser.parse_args()
 
-    specs, summary = run(
+    specs, summary, replenish_needed = run(
         args.root.resolve(),
         scope=args.scope,
         open_issues=_load_json(args.open_issues),
         open_prs=_load_json(args.open_prs),
         saturation_threshold=args.saturation_threshold,
+        auto_approve=args.auto_approve == "true",
+        replenish_threshold=args.replenish_threshold,
     )
     payload = json.dumps(
-        {"issues": [{"title": s.title, "labels": s.labels, "body": s.body} for s in specs]},
+        {
+            "issues": [
+                {
+                    "title": s.title,
+                    "labels": s.labels,
+                    "body": s.body,
+                    "auto_approve": s.auto_approve,
+                }
+                for s in specs
+            ],
+            "replenish_needed": replenish_needed,
+        },
         indent=2,
     )
     if args.output:

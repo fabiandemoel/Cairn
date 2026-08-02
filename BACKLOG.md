@@ -12,10 +12,17 @@ dumping ground. Agents read it; a human merges every change to it.
   a `data-refresh` issue per stale source, and the backlog dispatcher opens one
   issue for the top candidate's next not-yet-built layer, driven by the
   `<!-- dispatch -->` blocks. The issue body quotes the candidate's entry
-  **verbatim** — no LLM rewrites or reinterprets it on the way.
-- **Implement** (LLM) does the work for an issue you've labelled `approved`, on
-  a branch, as a PR. The existing CI (dbt build, tests, `benchmark-diff`,
-  `evidence-build`) is the gate.
+  **verbatim** — no LLM rewrites or reinterprets it on the way. When the menu
+  runs low, dispatch also triggers replenish directly instead of waiting for
+  its weekly cron.
+- **Implement** (LLM) does the work for an approved issue, on a branch, as a
+  PR. The existing CI (dbt build, tests, `benchmark-diff`, `evidence-build`)
+  is the gate. Approval is **tiered**: a non-ingestion step is pre-authorized
+  by your merge of the replenish PR that curated its entry — dispatch labels
+  it `approved` at creation and triggers implement for it directly, and your
+  merge of the implementation PR stays the audit checkpoint. An **ingestion**
+  step (new source, new manifest) and every `data-refresh` issue keep the
+  manual `approved`-label gate.
 
 Because no LLM sits between this file and the implement agent anymore, each
 candidate entry **is** the spec the implementer receives. Write entries so a
@@ -50,20 +57,23 @@ layers:
   them as already merged). If an implement PR names the artifact differently,
   it must update the block in the same PR, or the step will be re-dispatched.
 - **Fused step (one issue, several layers).** Join two or more layer names with
-  `+` (e.g. `mart+site`) to dispatch them as a **single** issue/PR, with one
-  `;`-separated sentinel per part (in the same order as the joined names). The
-  fused step is only "done" once **every** sentinel exists, so the one issue
-  delivers all its layers. Use this for a `mart+site` pair: the site page is a
-  thin read-only query over the mart, can't be built before it, and a separate
-  approve→PR→CI round-trip buys little review value. Constraints the parser
-  enforces: the fused names must be **distinct**, in **dependency order**, and
-  **not scaffoldable** — `ingestion`/`staging` keep their own step because the
-  scaffold and the (ingestion-only) source-research gate key off a single-layer
-  issue. So fuse `mart+site` (and `mart+site+export` if ever), never anything
-  touching ingestion/staging. Only fuse layers that are **both still pending**;
-  once a layer has shipped, leave it as its own recorded sentinel rather than
-  retroactively fusing a done layer with a pending one (that would re-surface
-  the shipped layer in the new issue's scope).
+  `+` (e.g. `mart+site`, `staging+mart+site`) to dispatch them as a **single**
+  issue/PR, with one `;`-separated sentinel per part (in the same order as the
+  joined names). The fused step is only "done" once **every** sentinel exists,
+  so the one issue delivers all its layers. Prefer fusing every layer that
+  ships together anyway: each separate step costs a full PR round-trip whose
+  human-latency gap dominates the agent's ~10-minute run, and the review
+  artifacts (CI, the benchmark diff, Copilot review) work the same on the
+  fused PR. Constraints the parser enforces: the fused names must be
+  **distinct**, in **dependency order**, and must **never include
+  `ingestion`** — a new source pin keeps its own step (and its manual
+  approval) because the source-research gate, the new-source guidance, and the
+  reviewer's attention all key off a single-layer ingestion issue. `staging`
+  **may** fuse (`staging+mart`, `staging+mart+site`): its scaffold still runs
+  on the fused issue's staging part. Only fuse layers that are **all still
+  pending**; once a layer has shipped, leave it as its own recorded sentinel
+  rather than retroactively fusing a done layer with a pending one (that would
+  re-surface the shipped layer in the new issue's scope).
 - Sentinel paths must match what actually ships, including the repo's naming
   conventions (for a new source, the paths the scaffold derives from the
   slugs). A stale sentinel makes the dispatcher re-open a done step — check
@@ -78,6 +88,14 @@ layers:
   dispatcher — issue #95 / PR #103 shipped a blocked scaffold exactly that way.
 - A candidate without a block is skipped with a note in the dispatch run
   summary — add the block when the candidate is ready to be worked.
+- **Heading discipline.** A live candidate is exactly a numbered `### <n>.`
+  heading; the parser sees nothing else. Organisational subheadings inside the
+  section use `####` (or an unnumbered heading), and a `---` rule no longer
+  ends the section — it only ends the previous candidate's quoted entry. CI
+  guards this (`tests/test_dispatch.py`): every numbered heading in the file
+  must surface as a parsed candidate, so a formatting slip that would hide
+  candidates from the dispatcher fails the build instead of silently starving
+  the loop (that happened once: a stray `---` hid four candidates for weeks).
 
 ## Entry format (the entry is the spec)
 

@@ -1,9 +1,13 @@
 name: Cairn Implement
 
-# Runs only when YOU label an issue `approved` (or via manual dispatch with an
-# issue number). It implements that one issue on a branch and opens a PR against
-# main. It does NOT merge. Your existing CI (lint, test, dbt-build, evidence-build,
-# benchmark-diff) is the gate; you review the benchmark diff and merge.
+# Runs when an issue gains the `approved` label, or via manual dispatch with an
+# issue number. Two paths lead here: a human labels an ingestion/data-refresh
+# issue by hand, or cairn-dispatch pre-authorizes a non-ingestion feat step
+# (its BACKLOG.md entry was human-reviewed at the replenish PR's merge) and
+# triggers this workflow directly. Either way it implements that one issue on a
+# branch and opens a PR against main. It does NOT merge. Your existing CI
+# (lint, test, dbt-build, evidence-build, benchmark-diff) is the gate; you
+# review the benchmark diff and merge — that merge is the audit checkpoint.
 #
 # IMPORTANT â€” token: the PR must be opened with a PAT / GitHub-App token
 # (secrets.CAIRN_BOT_TOKEN), NOT the default GITHUB_TOKEN. GitHub deliberately does
