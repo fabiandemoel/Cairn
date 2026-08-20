@@ -161,45 +161,71 @@ pinned-snapshot, read/relabel model.
   typed pass-through. The hold is positioning, not missing plumbing — lift it
   only when the € overlay becomes the active priority.
 
-### 2. Eurostat GGE CRF-sector cross-country benchmark — IPCC sectoral cross-check
+### 2. Emissieregistratie ↔ CBS reconciliation — surface the already-computed cross-check
 <!-- dispatch
 layers:
-  mart+site: transform/models/marts/mart_gge_sector_totals.sql; site/sources/cairn/gge_sector_totals.sql
+  site: site/sources/cairn/emissieregistratie_reconciliation.sql
 -->
 **Value: M · Effort: L · Spine-fit: H**
 
-`stg_eurostat__gge` already stages every CRF-sector row (`src_crf` beyond
-`TOTXMEMO`) for every EU/EEA country and year — `mart_gge_national_totals`'s
-own model doc says the sector-level rows are "kept in the staging layer but
-are not surfaced here". Surfacing them is a genuinely new axis: a
-cross-country GHG benchmark by **IPCC/UNFCCC CRF top-level category**
-(Energy, Industrial processes and product use, Agriculture, Waste, LULUCF),
-independent of the NACE-based `benchmark_country_sector_emissions` (Eurostat
-AEA) — two different classification systems answering the same "which
-sector emits how much, across which countries" question from two
-independent EU statistical sources, at zero new-ingestion cost (the source
-is already pinned).
+`mart_emissieregistratie_cbs_reconciliation` (shipped 2026-07-08) cross-checks
+RIVM's UNFCCC CRF national total against CBS 85669NED's national total,
+guarded by `assert_emissieregistratie_nl_total_within_cbs` — but unlike the
+coverage, freshness, and field-completeness marts (all surfaced on
+`/data-quality`), it has **no site query at all**. The read-only site's whole
+point is to expose what the warehouse already computes; a fully-tested
+cross-check that's invisible on the read-only layer is a presentation gap,
+not a data gap.
+- *Layers:*
+  - site — a new `site/sources/cairn/emissieregistratie_reconciliation.sql`
+    query over `mart_emissieregistratie_cbs_reconciliation` (year, both
+    totals, `relative_deviation`), and a new section on `/data-quality`
+    alongside the existing coverage/freshness/completeness sections,
+    presenting it the same way — a plain table or small chart, with the
+    mart's own documented caveat (CBS revises more often than the annual
+    UNFCCC cycle, so a multi-percent gap is expected, not a fault) carried
+    into the page copy. Guard: `evidence-build` green.
+- *Watch:* site-only — no mart or manifest changes, no new tolerance logic
+  (the 10% test already exists). The mart's CI fixture is a minimal excerpt,
+  so the reconciliation test passing in CI doesn't itself confirm the fuller
+  snapshot's numbers — a pre-existing, accepted quirk, not something to "fix"
+  here.
+
+### 3. Eurostat GGE gas composition — cross-country GHG-by-gas breakdown
+<!-- dispatch
+layers:
+  mart+site: transform/models/marts/mart_gge_gas_composition.sql; site/sources/cairn/gge_gas_composition.sql
+-->
+**Value: M · Effort: L · Spine-fit: H**
+
+`stg_eurostat__gge` stages every `airpol` code the pinned env_air_gge
+snapshot carries, not just the `GHG` aggregate `mart_gge_national_totals`
+reads. Eurostat's AIRPOL codelist splits that aggregate into CO2-equivalent
+gas codes (`CO2`, `CH4_CO2E`, `N2O_CO2E`, `HFC_CO2E`, `PFC_CO2E`, `SF6_CO2E`,
+`NF3_CO2E`) alongside `GHG` itself. Surfacing that split is a genuinely new
+axis — a gas-composition benchmark at EU cross-country scale, independent of
+Cairn's two existing gas-composition marts (`mart_sector_gas_composition`,
+`mart_namea_gas_composition`), both NL-only and CBS-sourced. Zero
+new-ingestion cost — the source is already pinned.
 - *Layers:*
   - mart+site (fused) — a new mart reading `stg_eurostat__gge` filtered to
-    the dataset's top-level CRF codes (confirm the exact `src_crf` code list
-    against the pinned parquet before hardcoding a `where src_crf in (...)`
-    list; exclude `TOTXMEMO` itself, which `mart_gge_national_totals` already
-    owns), grain country × CRF sector × year, `airpol = 'GHG'`,
-    `unit = 'MIO_T'`, NULL `obs_value` cells excluded (never zero-filled).
-    Guard with a coverage test in the spirit of
-    `assert_national_total_reconciles`: the sum of the surfaced CRF sectors
-    reconciles against `mart_gge_national_totals`'s own total per
-    country-year within a stated tolerance (LULUCF and memo items are
-    legitimately excluded from `TOTXMEMO`, so the test must account for that
-    gap, not force an exact match). Site query + a new section on the country
-    GHG page (`countries-ghg.md`) alongside the existing national totals.
-- *Watch:* CRF sectors are an IPCC/UNFCCC classification, not NACE — per
-  `mart_gge_national_totals`'s own documented limitation, do not attempt a
-  CRF-to-NACE crosswalk here or join it to `benchmark_country_sector_emissions`
-  as if they were the same taxonomy. Read/relabel only: filter and rename,
-  never recompute a sector total from finer rows.
+    `src_crf = 'TOTXMEMO'`, `unit = 'MIO_T'`, `airpol` restricted to the
+    CO2-equivalent gas codes (confirm the exact code list against the pinned
+    parquet's actually-populated `airpol` values before hardcoding a
+    `where airpol in (...)` — Eurostat's codelist documents them summing to
+    `GHG`, but verify against the real snapshot, not every code Eurostat
+    defines), grain country × gas × year, NULL `obs_value` cells excluded
+    (never zero-filled). Site query + a new section on the country GHG page
+    (`countries-ghg.md`), alongside the existing national totals and the
+    CRF-sector section.
+- *Watch:* the `airpol` gas codes are Eurostat's own CO2-equivalent
+  aggregates (e.g. `CH4_CO2E` already folds CH4 into CO2-eq) — read/relabel
+  only, never re-derive or apply a GWP conversion. Never cross-walk this to
+  CBS's or NAMEA's gas breakdown as if they were the same measurement; treat
+  it as an independent Eurostat-sourced view, the same caveat already applied
+  to `mart_gge_sector_totals` vs NACE.
 
-### 3. RIVM/UNFCCC CRF sectoral tables — IPCC energy-sector breakdown
+### 4. RIVM/UNFCCC CRF sectoral tables — IPCC energy-sector breakdown
 <!-- dispatch
 source: emissieregistratie_energy
 dataset: crf_table1a
@@ -249,24 +275,71 @@ granularity.
   every category row, exclude the units sub-header row in staging, never
   invent a missing category.
 
+### 5. EEA EU ETS main-activity cross-country benchmark
+<!-- dispatch
+layers:
+  mart+site: transform/models/marts/mart_eea_activity_totals.sql; site/sources/cairn/eea_activity_totals.sql
+-->
+**Value: M · Effort: M · Spine-fit: H**
+
+`ingestion/eea_ets_pipeline.py`'s own module docstring describes the pinned
+EEA Union Registry bulk as emissions/allowances/surrendered units by
+**country × main activity × year** — every EU/EEA country, not just NL.
+Cairn today reads this source for one purpose: the NL stationary aggregate
+(`main_activity_code = '20-99'`) that `assert_euets_coverage_within_eea`
+cross-checks against. The same pinned file's cross-country and per-activity
+dimensions are otherwise unused. Surfacing them is a new axis: verified EU
+ETS emissions by activity type, across every EU/EEA country, from the EU's
+own official registry aggregate — a third classification system alongside
+NACE (`benchmark_country_sector_emissions`) and IPCC/CRF
+(`mart_gge_sector_totals`), and the only one native to the ETS itself. Zero
+new-ingestion cost.
+- *Layers:*
+  - mart+site (fused) — a new mart reading `stg_eea__ets` filtered to
+    `citl_information = '2. Verified emissions'` (the category the coverage
+    test already uses). First confirm, against the real pinned parquet,
+    whether `main_activity_code` carries individual per-activity codes beyond
+    the `20-99` aggregate, and what the `size` dimension partitions (unused
+    anywhere in the transform layer today) — don't assume either from this
+    description. If finer activity codes exist, grain country × activity ×
+    year; if only `20-99` is populated, grain country × year (still new: a
+    cross-country verified-emissions time series has never been surfaced
+    beyond the NL cross-check). The EEA zip's "Translation of activity codes"
+    workbook is deliberately not ingested (raw faithfulness keeps only the
+    `ETS_Database` sheet) — if activity codes need labels, don't add that
+    workbook as a second ingestion source; check for overlap with
+    euets.info's already-pinned `dim_activity_type` labels first (used in
+    `stg_euets__installations`). NULL values excluded, never zero-filled.
+    Site query + a new section on the country GHG page (`countries-ghg.md`)
+    or the EU sector page (`sectors-eu.md`) — pick whichever reads more
+    naturally once the actual code granularity is known.
+- *Watch:* this is the EEA **aggregate**, not installation-level data
+  (CLAUDE.md's standing gotcha) — never join it row-for-row to
+  `benchmark_installation_emissions` or treat it as a second installation
+  pin. Main-activity codes are an EU ETS Annex I classification, not NACE and
+  not CRF — never cross-walk to either. Read/relabel only.
+
 ---
 
 ### Site-review correctness & polish (2026-07-15 external review)
 
-The six entries below come from an external review of the live site + repo. Unlike
-the expansion candidates above, they are correctness / disclosure / presentation
-fixes (plus one manual euets refresh), one PR each — they add **no** new benchmark
-axis, so they sit outside the value ordering the expansion candidates follow and are
-kept in the review's P1→P2 order. Dispatch reality: the no-LLM dispatcher opens at
-most one issue per run for the *top* candidate's next not-yet-built layer, and only
-a **new-file** sentinel triggers it — so entry 5 (new methodology source query) and
-entry 10 (new og:image asset) are genuinely dispatchable, while the edit-only entries
-(6, 7, 9) and the manual euets refresh (8) carry an existing-file sentinel the
-dispatcher treats as already-present and skips. Work those (and any of these you want
-sooner than the queue reaches them) by raising the GitHub issue by hand and labelling
-it `approved` — the supported manual implement path.
+Three entries remain below from the 2026-07-15 external review of the live site +
+repo (down from six — the three P1 items covering homepage IA, NACE-coverage
+disclosure, and glossary links shipped together in PR #140 and have been retired to
+"Considered and rejected"). Unlike the expansion candidates above, these are
+correctness / disclosure / presentation fixes (plus one manual euets refresh), one PR
+each — they add **no** new benchmark axis, so they sit outside the value ordering the
+expansion candidates follow and are kept in the review's P1→P2 order. Dispatch
+reality: `scripts/dispatch.py`'s `parse_backlog` stops scanning at the first bare
+`---` line (or the next `## ` heading) after `## Live candidates` — the `---`
+directly above this heading is that boundary, so **none** of the entries below are
+ever read by `parse_backlog` or auto-dispatched by `cairn-dispatch.yml`, regardless of
+their sentinel paths. They still carry `<!-- dispatch -->` blocks for documentation
+and in case this section is ever promoted above the rule. Work every one of them by
+raising the GitHub issue by hand and labelling it `approved` — the supported manual
+implement path.
 
-### 5. Methodology Sources table documents only 3 of 8 pinned sources (P1)
+### 6. Methodology Sources table documents only 3 of 8 pinned sources (P1)
 <!-- dispatch
 layers:
   site: site/sources/cairn/methodology_sources.sql
@@ -297,64 +370,7 @@ provenance doc lagging the data is the worst place to drift.
   is intentionally left undocumented, rescope the homepage "every figure" claim
   instead of leaving it false.
 
-### 6. Homepage narrates "two benchmarks" but the site ships five pages; three have zero inbound links (P1)
-<!-- dispatch
-layers:
-  site: site/pages/index.md
--->
-**Value: M · Effort: L · Spine-fit: H**
-
-`index.md` still narrates "The two benchmarks" (/sectors, /installations). Published
-but absent from the homepage: /architecture, /countries-ghg, /namea-bridge,
-/sectors-eu, /transport — and /countries-ghg, /namea-bridge and /transport have **zero
-inbound links from any page**, reachable only via the auto-generated sidebar. Phase 4
-grew the data; the front door didn't.
-- *Layers:*
-  - site (edit-only — the `site/pages/index.md` sentinel already exists, so the
-    dispatcher skips it; raise the issue by hand and label `approved`) — rework "The
-    two benchmarks" to present the NL spine (sectors + installations) first and the
-    EU/cross-check pages (sectors-eu, countries-ghg, namea-bridge, transport) as a
-    second tier of one-line cards in the existing card style; link /architecture from
-    the "Why it is auditable" section. Fix the two `<BigValue>` blocks whose
-    comparison slot renders "▲ 2024" (reads as "emissions up"): move the year into the
-    title/caption and reserve ▲/▼ for real deltas (or drop the comparison slot). Drop
-    "software vendors" from the audience line (a public API is on the rejected list)
-    or point them explicitly at the disclosure CSV bundle + the GitHub repo. Guard:
-    every published page reachable from the homepage with contextual copy, no BigValue
-    using the comparison slot for a non-delta, `evidence-build` green.
-- *Watch:* site copy only — do **not** add any rejected feature (public API, lineage
-  graph, confidence badges) while rewording. The 297 coverage caption is out of scope
-  here (entry 7 owns it); keep this index.md diff disjoint from entry 7's.
-
-### 7. "297 installations benchmarked" silently excludes NACE-unmapped installations; caveat lives on the wrong page (P1)
-<!-- dispatch
-layers:
-  site: site/pages/installations.md
--->
-**Value: M · Effort: L · Spine-fit: H**
-
-`benchmark_installation_emissions.sql` filters `stg.nace_section is not null` (plus
-stationary-only and `verified_emissions_t_co2eq is not null`). The NL stationary ETS
-population is ~330, so roughly a tenth of installations are absent from the 297.
-`installations.md` discloses the aircraft/maritime exclusion but **not** the NACE one;
-only /data-quality surfaces it, via `assert_euets_coverage_within_eea`. An auditor
-landing on /installations — the page that displays the number — cannot see the
-exclusion.
-- *Layers:*
-  - site (edit-only — `site/pages/installations.md`/`index.md` sentinels exist, so
-    the dispatcher skips; raise by hand and label `approved`) — `installations.md`:
-    extend the source paragraph with 1–2 sentences that installations without a NACE
-    section in the pinned euets.info snapshot are excluded (they have no peer group),
-    linking the /data-quality coverage section for the live captured-share count.
-    `index.md`: adjust the 297 BigValue caption/title so "benchmarked" reads as a
-    subset (e.g. "NL ETS installations benchmarked (stationary, NACE-mapped)"). Guard:
-    exclusion disclosed on /installations with a working /data-quality link, homepage
-    caption signals subset-ness, `evidence-build` green.
-- *Watch:* disclosure only — do **not** "fix" coverage by imputing NACE sections; the
-  mapping stays reviewed-seed read/relabel (no recomputation). No SQL changes — the
-  count is correct. Keep the index.md diff disjoint from entry 6.
-
-### 8. euets pin is release 2024-10 (latest year 2023); 2024 verified emissions are long published (P2, data-refresh route)
+### 7. euets pin is release 2024-10 (latest year 2023); 2024 verified emissions are long published (P2, data-refresh route)
 <!-- dispatch
 layers:
   ingestion: sources/euets/manifest.yml
@@ -381,29 +397,7 @@ now ~1.5 compliance years behind what an auditor can pull from the official sour
   byte-identical. This entry is the manual trigger, **not** a change to the never-probe
   policy. /installations and /transport should show latest year 2024 afterwards.
 
-### 9. Data pages never link the glossary; NACE/verified-emissions jargon undefined at point of use (P2)
-<!-- dispatch
-layers:
-  site: site/pages/sectors.md
--->
-**Value: L · Effort: L · Spine-fit: H**
-
-Zero links to /data-dictionary from /sectors, /installations, /transport, /sectors-eu,
-/countries-ghg. Terms carrying real methodological weight — NACE section, verified
-emissions, carbon leakage exposure, residence vs territorial principle, CO₂-eq —
-appear undefined at point of use; the definitions exist in the glossary but nothing
-routes a reader there.
-- *Layers:*
-  - site (edit-only across the five data pages — the sentinel `site/pages/sectors.md`
-    already exists, so the dispatcher skips; raise by hand and label `approved`) — on
-    each of the five pages, link the first use of each glossary-defined term to its
-    /data-dictionary anchor (adding heading anchors to the glossary render is in scope
-    if per-term anchors don't exist). First use only — don't litter. Guard: each page
-    links /data-dictionary at least once at the first occurrence of a defined term,
-    links resolve (no dead anchors) in `evidence-build`.
-- *Watch:* copy/links only — no glossary content rewrites beyond anchors.
-
-### 10. Site chrome: Evidence default `twitter:site @evidence_dev`, no og:image, chart palette off-brand (P2)
+### 8. Site chrome: Evidence default `twitter:site @evidence_dev`, no og:image, chart palette off-brand (P2)
 <!-- dispatch
 layers:
   site: site/static/og-image.png
@@ -432,6 +426,25 @@ blue-600 `#2563eb` — two different blues on one brand.
 *(Don't re-propose these. If circumstances change, move an item back up with the
 new reason it now fits.)*
 
+- **Eurostat GGE CRF-sector cross-country benchmark — IPCC sectoral cross-check.**
+  Shipped: `mart_gge_sector_totals` and its `gge_sector_totals.sql` source query
+  are live, surfacing GHG by top-level CRF sector and country on the country
+  GHG page (`countries-ghg.md`).
+- **Homepage IA — link every published page, fix misleading BigValue deltas.**
+  Shipped: merged in PR #140 (2026-07-15). `index.md` now presents the NL
+  benchmark spine first and an "EU context & cross-checks" tier for
+  `/sectors-eu`, `/countries-ghg`, `/namea-bridge`, `/transport`; `/architecture`
+  is linked from "Why it is auditable"; the misleading `▲ 2024` comparison slot
+  and the "software vendors" audience line are gone.
+- **NACE-coverage disclosure on `/installations`.** Shipped: merged in PR #140
+  (2026-07-15). The source paragraph now discloses that installations without a
+  NACE section in the pinned euets.info snapshot are excluded from the
+  benchmark, linking `/data-quality`; the homepage's installation count caption
+  reads "(stationary, NACE-mapped)" to signal it is a subset.
+- **Glossary links from the five data pages.** Shipped: merged in PR #140
+  (2026-07-15). `/sectors`, `/installations`, `/transport`, `/sectors-eu`, and
+  `/countries-ghg` now link the first use of each glossary-defined term to
+  `/data-dictionary#business-glossary`.
 - **EU ETS excess emissions penalty — compliance-enforcement axis.** Shipped:
   merged in this PR (2026-07-10). `excess_emissions_penalty_eur` is live on
   `benchmark_installation_emissions`, guarded by `assert_penalty_only_on_shortfall`,
