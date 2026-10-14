@@ -83,20 +83,20 @@ from cairn.data_provenance
 
 <section class="not-prose mt-6 grid grid-cols-2 lg:grid-cols-4 gap-px overflow-hidden rounded-2xl border border-stone-200 dark:border-stone-800 bg-stone-200 dark:bg-stone-800">
 <div class="cairn-stat bg-white dark:bg-stone-950 p-5">
-<div class="text-xs font-medium uppercase tracking-wider text-stone-500">NL emissions · CBS <Value data={sector_headline} column=latest_year fmt='0'/></div>
-<div class="mt-2 font-serif text-3xl text-stone-900 dark:text-stone-50"><Value data={sector_headline} column=national_total_mt fmt='#,##0.0'/><div class="mt-1 text-xs text-stone-500">Mt CO₂-eq</div></div>
+<div class="text-xs font-medium uppercase tracking-wider text-stone-500">NL emissions · CBS {#if sector_headline?.length}<Value data={sector_headline} column=latest_year fmt='0'/>{:else}—{/if}</div>
+<div class="mt-2 font-serif text-3xl text-stone-900 dark:text-stone-50">{#if sector_headline?.length}<Value data={sector_headline} column=national_total_mt fmt='#,##0.0'/>{:else}—{/if}<div class="mt-1 text-xs text-stone-500">Mt CO₂-eq</div></div>
 </div>
 <div class="cairn-stat bg-white dark:bg-stone-950 p-5">
-<div class="text-xs font-medium uppercase tracking-wider text-stone-500">ETS installations · <Value data={installation_headline} column=latest_year fmt='0'/></div>
-<div class="mt-2 font-serif text-3xl text-stone-900 dark:text-stone-50"><Value data={installation_headline} column=installations fmt='#,##0'/><div class="mt-1 text-xs text-stone-500">benchmarked</div></div>
+<div class="text-xs font-medium uppercase tracking-wider text-stone-500">ETS installations · {#if installation_headline?.length}<Value data={installation_headline} column=latest_year fmt='0'/>{:else}—{/if}</div>
+<div class="mt-2 font-serif text-3xl text-stone-900 dark:text-stone-50">{#if installation_headline?.length}<Value data={installation_headline} column=installations fmt='#,##0'/>{:else}—{/if}<div class="mt-1 text-xs text-stone-500">benchmarked</div></div>
 </div>
 <div class="cairn-stat bg-white dark:bg-stone-950 p-5">
 <div class="text-xs font-medium uppercase tracking-wider text-stone-500">EU comparison · Eurostat</div>
-<div class="mt-2 font-serif text-3xl text-stone-900 dark:text-stone-50"><Value data={country_headline} column=countries fmt='#,##0'/><div class="mt-1 text-xs text-stone-500">countries</div></div>
+<div class="mt-2 font-serif text-3xl text-stone-900 dark:text-stone-50">{#if country_headline?.length}<Value data={country_headline} column=countries fmt='#,##0'/>{:else}—{/if}<div class="mt-1 text-xs text-stone-500">countries</div></div>
 </div>
 <div class="cairn-stat bg-white dark:bg-stone-950 p-5">
 <div class="text-xs font-medium uppercase tracking-wider text-stone-500">Official datasets</div>
-<div class="mt-2 font-serif text-3xl text-stone-900 dark:text-stone-50"><Value data={provenance_headline} column=pinned fmt='#,##0'/><span class="text-stone-400">/</span><Value data={provenance_headline} column=datasets fmt='#,##0'/><div class="mt-1 text-xs text-stone-500">pinned</div></div>
+<div class="mt-2 font-serif text-3xl text-stone-900 dark:text-stone-50">{#if provenance_headline?.length}<Value data={provenance_headline} column=pinned fmt='#,##0'/>{:else}—{/if}<span class="text-stone-400">/</span>{#if provenance_headline?.length}<Value data={provenance_headline} column=datasets fmt='#,##0'/>{:else}—{/if}<div class="mt-1 text-xs text-stone-500">pinned</div></div>
 </div>
 </section>
 
