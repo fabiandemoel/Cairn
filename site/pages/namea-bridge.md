@@ -92,7 +92,7 @@ where year = '${inputs.year.value}'
 order by nace_section, gas_label
 ```
 
-{#if namea_gas_mix.error || namea_gas_mix.length > 0}
+{#if namea_gas_mix.length > 0}
 
 <BarChart
     data={namea_gas_mix}
