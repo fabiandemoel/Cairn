@@ -8,10 +8,13 @@
 --
 -- TOTXMEMO ("Total excluding memo items") remains owned by
 -- mart_gge_national_totals. LULUCF (CRF4) is a main CRF sector and IS included in
--- TOTXMEMO, so the five top-level sectors CRF1-CRF5 sum to the national total up
--- to a small "indirect CO2" (CRF_INDCO2) residual that TOTXMEMO carries but no
--- top-level sector does (< 1% of the national total; asserted at 1.5% by
--- assert_gge_sector_totals_reconcile_to_national_total). CRF4 can be negative --
+-- TOTXMEMO. TOTXMEMO also carries "indirect CO2" (CRF_INDCO2) and "other"
+-- (CRF6), which no top-level sector does and this mart does not surface; with
+-- those two, CRF1-CRF5 sum exactly to the national total (asserted to within
+-- 0.001 Mt by assert_gge_sector_totals_reconcile_to_national_total). Indirect
+-- CO2 is usually < 1% of the total but not always (~3% for NO in the early
+-- 2000s, and dominant where LULUCF nets the total to near zero, e.g. LV 1998).
+-- CRF4 can be negative --
 -- LULUCF is a net carbon sink in some countries (e.g. FR) and a net source in
 -- others (e.g. NL, DE) -- so sector rows may carry either sign.
 

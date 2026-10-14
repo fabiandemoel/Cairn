@@ -141,12 +141,13 @@ Checklist:
    (new `release`, new `sha256`).
 3. Update `eurostat_gge_raw_dir` in `transform/dbt_project.yml` and the matching
    path in `scripts/verify_reproducibility.py`. Refresh the CI fixture under
-   `tests/fixtures/eurostat/env_air_gge/<release>/` if the schema or coverage
-   changed (keep NL, DE, FR × TOTXMEMO + CRF1-CRF5 at minimum so the staging
+   `tests/fixtures/eurostat_gge/<release>/` if the schema or coverage
+   changed (keep NL, DE, FR × TOTXMEMO + CRF1-CRF5 + CRF_INDCO2 + CRF6 at
+   minimum so the staging
    tests, the CBS cross-check, and the `mart_gge_sector_totals` sector-total
    reconciliation all still exercise the right rows — the sector reconciliation
-   needs every top-level CRF sector present, with real values that sum to
-   TOTXMEMO up to the small indirect-CO2 residual; never synthesise them).
+   needs every top-level CRF sector plus indirect CO2 and CRF6 present, with
+   real values that sum to TOTXMEMO; never synthesise them).
 4. **Verify the cross-check test.** `assert_gge_nl_total_within_cbs` must still
    pass at its 10% tolerance (set wide to accommodate UNFCCC submission lag vs.
    CBS revision cycles — the observed gap for recently-revised years can reach ~7%).
