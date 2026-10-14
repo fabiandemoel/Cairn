@@ -227,8 +227,20 @@ order by i.installation_emissions_t_co2eq desc
 ## Compliance enforcement
 
 ```sql compliance_penalties
-select *
-from cairn.compliance_penalties
+-- Filtered here rather than in a dedicated source: penalties are rare, and on
+-- the real NL snapshot there are none -- an empty Evidence source writes an
+-- unreadable parquet and breaks the whole build.
+select
+    installation_name,
+    nace_section,
+    year,
+    installation_emissions_t_co2eq,
+    surrendered_allowances_t_co2eq,
+    excess_emissions_penalty_eur
+from cairn.installation_emissions
+where excess_emissions_penalty_eur is not null
+    and excess_emissions_penalty_eur != 0
+order by excess_emissions_penalty_eur desc
 ```
 
 Installation-years where EUTL recorded an excess emissions penalty (EUR
@@ -236,7 +248,9 @@ Installation-years where EUTL recorded an excess emissions penalty (EUR
 fell short of verified emissions. This is the *enforcement* complement to the
 shortfall figures above — read straight from the pinned snapshot; Cairn never
 estimates or infers a penalty itself. Penalties are rare: most installations
-comply, so an empty table here is correct, not a bug.
+comply, so finding none here is correct, not a bug.
+
+{#if compliance_penalties.length > 0}
 
 <DataTable data={compliance_penalties} rows=15 rowShading={true}>
     <Column id=installation_name title="Installation" />
@@ -246,3 +260,11 @@ comply, so an empty table here is correct, not a bug.
     <Column id=surrendered_allowances_t_co2eq title="Surrendered allowances (t CO₂-eq)" fmt='#,##0' />
     <Column id=excess_emissions_penalty_eur title="Penalty (EUR)" fmt='#,##0' />
 </DataTable>
+
+{:else}
+
+<Alert status="info">
+No excess emissions penalty is recorded for any benchmarked installation-year in the pinned euets.info snapshot.
+</Alert>
+
+{/if}

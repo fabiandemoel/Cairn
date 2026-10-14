@@ -18,5 +18,6 @@ select
     sector_mean_emissions_t_co2eq,
     sector_median_emissions_t_co2eq,
     emissions_vs_sector_mean,
-    emissions_vs_allocated
+    emissions_vs_allocated,
+    excess_emissions_penalty_eur
 from benchmark_installation_emissions
