@@ -854,17 +854,20 @@ models:
         from finer rows. LULUCF (CRF4) is a main CRF sector included in TOTXMEMO,
         so the reconciliation test (assert_gge_sector_totals_reconcile_to_national_total)
         sums all five top-level sectors (LULUCF included) and compares them to
-        mart_gge_national_totals; the residual is the small "indirect CO2"
-        (CRF_INDCO2) component that TOTXMEMO carries but no top-level CRF sector
-        does (< 1%, asserted at 1.5%).
+        mart_gge_national_totals together with the two TOTXMEMO components no
+        top-level CRF sector carries -- "indirect CO2" (CRF_INDCO2) and "other"
+        (CRF6), read from staging -- asserting the identity to within 0.001 Mt.
       known_limitations: >
         (1) CRF is an IPCC/UNFCCC classification, not NACE -- do not cross-walk
         this mart to benchmark_country_sector_emissions as if the taxonomies
         matched. (2) env_air_gge lags the current year by 1-2 years (UNFCCC
         submission timeline). (3) LULUCF (CRF4) can be negative -- it is a net
         carbon sink in some countries and a net source in others -- so sector
-        rows may carry either sign, and the five sectors sum to TOTXMEMO only up
-        to the small indirect-CO2 residual described in the methodology.
+        rows may carry either sign. (4) The five sectors alone do not sum to
+        TOTXMEMO: indirect CO2 (CRF_INDCO2) and CRF6 are not in this mart.
+        Indirect CO2 is usually < 1% of the total but reaches ~3% for some
+        country-years and dominates where LULUCF nets the total to near zero
+        (e.g. LV 1998).
       references:
         source_table: https://ec.europa.eu/eurostat/databrowser/view/env_air_gge
         unfccc_inventories: https://unfccc.int/ghg-inventories-annex-i-parties/2025

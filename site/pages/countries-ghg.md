@@ -97,8 +97,10 @@ IPCC/UNFCCC classification, **not** NACE — do not compare it one-to-one with t
 **Reading the CRF sectors.** The national-total `TOTXMEMO` row is "Total
 excluding memo items" — it drops international aviation / shipping bunkers and
 biomass-CO₂ (the memo items), but it *includes* LULUCF. The five top-level CRF
-sectors therefore sum to approximately the national total (the small remaining
-gap is "indirect CO₂", which `TOTXMEMO` carries but no top-level sector does).
+sectors therefore sum to approximately the national total. The remaining gap is
+"indirect CO₂" (plus a rare "other" CRF6 row), which `TOTXMEMO` carries but no
+top-level sector does — usually under 1%, but up to ~3% for some country-years,
+and dominant where LULUCF nets the total to near zero.
 Note that **LULUCF (CRF4) can be negative** — it is a net carbon sink in some
 countries (e.g. FR) and a net source in others (e.g. NL, DE).
 
