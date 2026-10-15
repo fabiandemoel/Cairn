@@ -39,7 +39,9 @@ npm run dev       # http://localhost:3000
 ```
 
 To build the static production site: `npm run build` → output in `site/build/`.
-`npm run build:strict` fails on any query error (what CI runs).
+CI runs `npm run sources:strict` (fails on a broken source query), then
+`npm run build:strict` and fails on any `Error in …` line in its log —
+`build:strict` itself exits 0 on a broken *page* query, so check the log.
 
 ## Notes
 

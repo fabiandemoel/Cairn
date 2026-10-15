@@ -92,6 +92,8 @@ where year = '${inputs.year.value}'
 order by nace_section, gas_label
 ```
 
+{#if namea_gas_mix.length > 0}
+
 <BarChart
     data={namea_gas_mix}
     x=nace_section
@@ -108,3 +110,11 @@ order by nace_section, gas_label
     <Column id=emissions_mt title="Emissions (Mt)" fmt='#,##0.0' />
     <Column id=gas_share title="Share of sector total" fmt='0.0%' contentType=colorscale />
 </DataTable>
+
+{:else}
+
+<Alert status="info">
+CBS NAMEA (83300NED) has no gas breakdown for {inputs.year.value} — pick another year.
+</Alert>
+
+{/if}

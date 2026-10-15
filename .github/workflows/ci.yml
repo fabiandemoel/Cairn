@@ -110,8 +110,10 @@ jobs:
         run: uv run dbt build --project-dir transform
 
   evidence-build:
-    # Smoke-test the Evidence site: build the dbt warehouse from fixtures, then
-    # build the site strictly (fails on any query error). Static output only.
+    # Smoke-test the Evidence site: build the dbt warehouse from fixtures, load
+    # every source query into the site's data cache, then build the site
+    # strictly and fail on any page-level query or component error.
+    # Static output only.
     needs: changes
     # !cancelled() lets this run even though `changes` is skipped on push;
     # `!= 'false'` (not `== 'true'`) fails safe: if the filter job ever breaks
@@ -142,9 +144,26 @@ jobs:
       - name: Install site dependencies
         working-directory: site
         run: npm ci
-      - name: Build site (strict)
+      - name: Load site sources (strict)
+        # Runs every site/sources/cairn/*.sql against the fixture warehouse and
+        # fails on a source query error. Without this step the site builds with
+        # no data at all and no query is ever exercised.
         working-directory: site
-        run: npm run build:strict
+        run: npm run sources:strict
+      - name: Build site (strict)
+        # Evidence's build:strict only fails when a component throws during
+        # prerender; a page query that errors (e.g. a renamed mart column) is
+        # logged as "Error in Query!" and the build still exits 0. Fail on any
+        # "Error in ..." line so query drift and empty-dataset chart errors are
+        # caught here rather than on the deployed site.
+        working-directory: site
+        run: |
+          set -o pipefail
+          npm run build:strict 2>&1 | tee build.log
+          if grep -n "Error in " build.log; then
+            echo "::error::Evidence reported page query/component errors (see lines above)"
+            exit 1
+          fi
 
   benchmark-diff:
     needs: changes

@@ -207,8 +207,17 @@ transforms. It reads `cairn.duckdb` (built by dbt at the repo root) via the
 - A new column or mart only shows up after you add it to a `sources/cairn/*.sql`
   query (or a page query) — the site does not auto-discover mart columns.
 - If a mart's columns/grain change, update the matching source query and any
-  page that references the renamed column; `npm run build:strict` fails on a bad
-  query, so CI catches a drift.
+  page that references the renamed column. CI's `evidence-build` catches the
+  drift: `npm run sources:strict` fails on a broken source query, and the build
+  step fails on any `Error in …` line in the `build:strict` log. Note that
+  `build:strict` *alone* exits 0 on a broken page query (it only fails when a
+  component throws), so check the log locally too.
+- **Never put a filter that can legitimately return zero rows in a
+  `sources/cairn/*.sql` query.** Evidence writes an unreadable parquet for an
+  empty source, and that aborts the whole site build (this broke the Pages
+  deploy via the old `compliance_penalties` source). Filter in the page query
+  instead, and guard the component with `{#if q.length > 0} … {:else}` + an
+  info note — see the penalties table on `installations.md`.
 - Don't move business logic into the site. Benchmarks are computed in dbt and
   tested there; the site only shapes and displays. New numbers belong in a mart.
 - **The version badge on the homepage** (`Cairn v…` on `index.md`) is kept in
@@ -444,7 +453,9 @@ doesn't exist.
   - `uv run ruff check . && uv run ruff format --check .`
   - `uv run sqlfluff lint transform/models transform/tests`
   - **Evidence site:** after a dbt build, `cd site && npm ci && npm run
-    build:strict` (CI's `evidence-build` job). `npm run dev` for a live preview.
+    sources:strict && npm run build:strict 2>&1 | tee build.log; ! grep "Error
+    in " build.log` (what CI's `evidence-build` job checks). `npm run dev` for
+    a live preview.
 - **Dependencies (Python):** stay within dlt, dbt-core, dbt-duckdb, duckdb,
   pydantic, boto3, pyyaml (+ dev: pytest, ruff, sqlfluff). Ask before adding
   more. (The EEA xlsx is read via DuckDB's autoloaded `excel` extension — a
