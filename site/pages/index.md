@@ -2,6 +2,8 @@
 title: Cairn
 description: An auditable, queryable benchmark over official EU/NL climate data — every figure traces back to a pinned official source.
 hide_title: true
+og:
+  image: https://cairn.fabiandemoel.nl/og-image.png
 ---
 
 ```sql sector_headline
