@@ -6,10 +6,10 @@ pinned source. It answers, per sector: "how do your emissions compare to the
 sector average?", and supports ESRS E1-6 reporting as one application of that
 auditability. 
 
-[![Live site](https://img.shields.io/badge/live%20site-cairn.fabiandemoel.net-2563eb?logo=githubpages&logoColor=white)](https://cairn.fabiandemoel.net/)
+[![Live site](https://img.shields.io/badge/live%20site-cairn.fabiandemoel.nl-2563eb?logo=githubpages&logoColor=white)](https://cairn.fabiandemoel.nl/)
 [![Version](https://img.shields.io/badge/version-v1.1.0%20%C2%B7%20Phase%204-45a1bf)](https://github.com/fabiandemoel/Cairn)
 
-**Live site:** <https://cairn.fabiandemoel.net/>
+**Live site:** <https://cairn.fabiandemoel.nl/>
 
 > **Status**: Phases 1–4 complete; automated maintenance running. Phase 1
 > delivered CBS `85669NED` end-to-end (sector averages, the *denominator*). Phase 2
@@ -242,7 +242,7 @@ files) alongside definitions of the cross-cutting concepts (from
 
 ### Live deployment (GitHub Pages)
 
-The site is live at **<https://cairn.fabiandemoel.net/>** (a version badge
+The site is live at **<https://cairn.fabiandemoel.nl/>** (a version badge
 sits at the top of the homepage), served from GitHub Pages on a custom subdomain.
 
 The [`pages.yml`](.github/workflows/pages.yml) workflow publishes the site to
@@ -255,7 +255,7 @@ the `R2_*` secrets are absent or any source is unpinned, so the site is never
 published from incomplete or unverified data.
 
 The site is served at the **root** of the custom subdomain
-`cairn.fabiandemoel.net` (no base path), pinned by
+`cairn.fabiandemoel.nl` (no base path), pinned by
 [`site/static/CNAME`](site/static/CNAME) — Evidence copies it into the build, so
 each Actions deploy reapplies the custom domain. DNS: a `CNAME` record for
 `cairn` → `fabiandemoel.github.io`.
